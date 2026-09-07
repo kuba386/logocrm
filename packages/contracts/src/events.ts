@@ -80,6 +80,45 @@ export const invitationCreatedSchema = z.object({
 })
 export type InvitationCreated = z.infer<typeof invitationCreatedSchema>
 
+export const payerCreatedSchema = z.object({
+  type: z.literal('payer.created'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    payer_id: z.string().uuid(),
+    full_name: z.string().min(1),
+  }),
+})
+export type PayerCreated = z.infer<typeof payerCreatedSchema>
+
+export const studentCreatedSchema = z.object({
+  type: z.literal('student.created'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    payer_id: z.string().uuid(),
+    primary_teacher_id: z.string().uuid().nullable().default(null),
+  }),
+})
+export type StudentCreated = z.infer<typeof studentCreatedSchema>
+
+export const studentArchivedSchema = z.object({
+  type: z.literal('student.archived'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+export type StudentArchived = z.infer<typeof studentArchivedSchema>
+
+export const studentRestoredSchema = z.object({
+  type: z.literal('student.restored'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+export type StudentRestored = z.infer<typeof studentRestoredSchema>
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -87,6 +126,10 @@ export const appEventSchema = z.discriminatedUnion('type', [
   membershipRevokedSchema,
   membershipRoleChangedSchema,
   invitationCreatedSchema,
+  payerCreatedSchema,
+  studentCreatedSchema,
+  studentArchivedSchema,
+  studentRestoredSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -100,6 +143,10 @@ export const appEventTypes = [
   'membership.revoked',
   'membership.role_changed',
   'invitation.created',
+  'payer.created',
+  'student.created',
+  'student.archived',
+  'student.restored',
 ] as const
 export type AppEventType = (typeof appEventTypes)[number]
 

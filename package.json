@@ -16,7 +16,9 @@
     "db:stop": "pnpm --filter @logocrm/db stop",
     "db:reset": "pnpm --filter @logocrm/db reset",
     "db:test": "pnpm --filter @logocrm/db test:db",
-    "db:types": "pnpm --filter @logocrm/db gen:types"
+    "db:types": "pnpm --filter @logocrm/db gen:types",
+    "db:link": "pnpm --filter @logocrm/db exec supabase link --project-ref",
+    "db:push": "pnpm --filter @logocrm/db exec supabase db push"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

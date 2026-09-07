@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { noCenterRedirectPath } from '@/lib/access'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { CenterList, type CenterOption } from './center-list'
@@ -39,7 +40,7 @@ export default async function SelectCenterPage() {
     .filter((center): center is CenterOption => center !== null)
 
   if (centers.length === 0) {
-    redirect('/onboarding')
+    redirect(await noCenterRedirectPath(supabase))
   }
 
   return (

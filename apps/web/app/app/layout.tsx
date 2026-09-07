@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/login/actions'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { roleLabel } from '@/lib/roles'
+import { noCenterRedirectPath } from '@/lib/access'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -24,7 +25,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!centerId) {
     const { data: memberships } = await supabase.from('memberships').select('center_id').limit(1)
-    redirect(memberships && memberships.length > 0 ? '/select-center' : '/onboarding')
+    redirect(
+      memberships && memberships.length > 0
+        ? '/select-center'
+        : await noCenterRedirectPath(supabase),
+    )
   }
 
   // Роль читаем из БД, а не из JWT: членство могли отозвать, пока токен жив.
@@ -59,16 +64,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             </Link>
 
-            {isAdmin ? (
-              <nav className="hidden gap-1 sm:flex">
-                <Link
-                  href="/app/settings/staff"
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  Сотрудники
-                </Link>
-              </nav>
-            ) : null}
+            <nav className="hidden gap-1 sm:flex">
+              <Link href="/app/students" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                Ученики
+              </Link>
+              {isAdmin ? (
+                <>
+                  <Link href="/app/payers" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                    Плательщики
+                  </Link>
+                  <Link
+                    href="/app/settings/staff"
+                    className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                  >
+                    Сотрудники
+                  </Link>
+                </>
+              ) : null}
+            </nav>
           </div>
 
           <div className="flex items-center gap-2">
