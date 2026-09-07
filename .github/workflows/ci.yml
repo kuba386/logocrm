@@ -60,21 +60,37 @@ jobs:
         working-directory: packages/db
         run: supabase test db
 
-      # Комментарии (строки, начинающиеся с //) снимаются с обеих сторон:
-      # в коммит мы добавляем шапку с инструкцией, а генератор её не пишет,
-      # и без нормализации проверка ругалась бы всегда — такой сигнал
-      # перестают читать.
+      # Локальный стек — единственный источник канонических типов: он собран
+      # из тех же миграций, что поедут в prod.
+      #
+      # Сравниваем без комментариев и пустых строк: в коммит добавлена шапка
+      # с инструкцией, которой генератор не пишет. Разные генераторы (CLI из
+      # миграций против MCP из облака) дают ещё и косметические отличия —
+      # блок __InternalSupabase и расстановку скобок в дженериках. Поэтому
+      # канонический файл всегда кладётся артефактом: расхождение чинится
+      # заменой файла из артефакта, а не ручной правкой.
+      - name: Сгенерировать канонические типы
+        working-directory: packages/db
+        run: supabase gen types typescript --local --schema public > /tmp/database.types.ts
+
       - name: Проверка, что типы совпадают с миграциями
         working-directory: packages/db
         run: |
-          supabase gen types typescript --local --schema public > /tmp/generated.types.ts
-          grep -v '^//' /tmp/generated.types.ts > /tmp/a.ts
-          grep -v '^//' src/database.types.ts   > /tmp/b.ts
-          if ! diff -q /tmp/a.ts /tmp/b.ts > /dev/null; then
-            echo "::warning::src/database.types.ts отличается от схемы — выполните pnpm db:types"
+          norm() { grep -v '^//' "$1" | grep -v '^[[:space:]]*$'; }
+          if ! diff -q <(norm /tmp/database.types.ts) <(norm src/database.types.ts) > /dev/null; then
+            echo "::warning::src/database.types.ts отличается от схемы — возьмите файл из артефакта database-types"
             echo "Расхождение:"
-            diff /tmp/a.ts /tmp/b.ts | head -40 || true
+            diff <(norm /tmp/database.types.ts) <(norm src/database.types.ts) | head -60 || true
+          else
+            echo "Типы совпадают со схемой."
           fi
+
+      - name: Выложить канонические типы артефактом
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-types
+          path: /tmp/database.types.ts
+          retention-days: 7
 
       - name: Остановка Supabase
         if: always()
