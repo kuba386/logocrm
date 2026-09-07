@@ -180,5 +180,5 @@ perform public.emit_event(
 
 - [docs/Architecture.md](docs/Architecture.md) — как устроена система
 - [docs/Database.md](docs/Database.md) — схема и конвенции таблиц
-- [docs/Decisions/](docs/Decisions/) — ADR: монорепа, RLS, outbox
+- [docs/Decisions/](docs/Decisions/) — ADR: монорепа, RLS, outbox, среды и подтверждение email
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)
