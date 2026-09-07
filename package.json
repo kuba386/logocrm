@@ -1,0 +1,25 @@
+{
+  "name": "logocrm",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @logocrm/web dev",
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "db:start": "pnpm --filter @logocrm/db start",
+    "db:stop": "pnpm --filter @logocrm/db stop",
+    "db:reset": "pnpm --filter @logocrm/db reset",
+    "db:test": "pnpm --filter @logocrm/db test:db",
+    "db:types": "pnpm --filter @logocrm/db gen:types"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

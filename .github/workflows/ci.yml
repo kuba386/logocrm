@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Приложение (lint, typecheck, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Установка зависимостей
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit-тесты (vitest)
+        run: pnpm test
+
+  db:
+    name: База данных (миграции + pgTAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Запуск локального Supabase
+        working-directory: packages/db
+        run: supabase start
+
+      - name: Применение миграций с нуля
+        working-directory: packages/db
+        run: supabase db reset
+
+      - name: pgTAP-тесты
+        working-directory: packages/db
+        run: supabase test db
+
+      - name: Проверка, что типы совпадают с миграциями
+        working-directory: packages/db
+        run: |
+          supabase gen types typescript --local --schema public > /tmp/database.types.ts
+          if ! diff -q /tmp/database.types.ts src/database.types.ts > /dev/null; then
+            echo "::warning::src/database.types.ts отличается от схемы — выполните pnpm db:types"
+          fi
+
+      - name: Остановка Supabase
+        if: always()
+        working-directory: packages/db
+        run: supabase stop --no-backup

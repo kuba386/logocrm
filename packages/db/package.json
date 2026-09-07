@@ -1,0 +1,24 @@
+{
+  "name": "@logocrm/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "supabase start",
+    "stop": "supabase stop",
+    "reset": "supabase db reset",
+    "test:db": "supabase test db",
+    "new": "supabase migration new",
+    "gen:types": "supabase gen types typescript --local --schema public > src/database.types.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "supabase": "^2.116.0",
+    "typescript": "^5.6.3"
+  }
+}
