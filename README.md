@@ -178,9 +178,38 @@ perform public.emit_event(
 Имя события — `сущность.действие` в прошедшем времени. Доставка at-least-once:
 обработчики обязаны быть идемпотентными ([ADR-003](docs/Decisions/ADR-003-events-outbox.md)).
 
+## Как катятся миграции
+
+Схема меняется **только файлами** в `packages/db/supabase/migrations` и только
+через CI:
+
+```
+PR → CI (app + db с pgTAP) → merge в main → CI на main → deploy-staging → db push
+```
+
+`deploy-staging.yml` привязан к успешному завершению CI (`workflow_run`), а не
+к push. Это не дисциплина, а зависимость между workflow: деплой физически не
+может опередить pgTAP.
+
+Prod (этап 8) автоматического деплоя не получит — туда руками и осознанно.
+
+### Что нужно настроить один раз
+
+В Settings → Secrets and variables → Actions → **Environments → staging**:
+
+| Секрет | Где взять |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Account → Access Tokens → Generate new token |
+| `SUPABASE_DB_PASSWORD` | Settings → Database → пароль проекта (или Reset) |
+
+Ref проекта не секрет и зашит в workflow.
+
 ## Документация
 
 - [docs/Architecture.md](docs/Architecture.md) — как устроена система
 - [docs/Database.md](docs/Database.md) — схема и конвенции таблиц
 - [docs/Decisions/](docs/Decisions/) — ADR: монорепа, RLS, outbox, среды, колоночная приватность
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- [docs/Roadmap/stages.md](docs/Roadmap/stages.md) — план этапов
+- [docs/Backlog.md](docs/Backlog.md) — пожелания от логопедов
+- [reports/](reports/) — отчёт по каждому этапу
