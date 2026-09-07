@@ -36,7 +36,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const [{ data: center }, { count: centersCount }] = await Promise.all([
     supabase.from('centers').select('name, plan').eq('id', centerId).maybeSingle(),
-    supabase.from('memberships').select('center_id', { count: 'exact', head: true }),
+    // Только свои членства: владельцу по RLS видны и чужие строки его центра,
+    // из-за чего счётчик показывал «Сменить центр» при единственном центре.
+    supabase
+      .from('memberships')
+      .select('center_id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
   ])
 
   const isAdmin = role === 'owner' || role === 'admin'

@@ -80,7 +80,7 @@ function RevokeButton({ member }: { member: StaffMember }) {
               Отключить
             </Button>
           </form>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             Отмена
           </Button>
         </div>
