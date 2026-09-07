@@ -60,12 +60,20 @@ jobs:
         working-directory: packages/db
         run: supabase test db
 
+      # Комментарии (строки, начинающиеся с //) снимаются с обеих сторон:
+      # в коммит мы добавляем шапку с инструкцией, а генератор её не пишет,
+      # и без нормализации проверка ругалась бы всегда — такой сигнал
+      # перестают читать.
       - name: Проверка, что типы совпадают с миграциями
         working-directory: packages/db
         run: |
-          supabase gen types typescript --local --schema public > /tmp/database.types.ts
-          if ! diff -q /tmp/database.types.ts src/database.types.ts > /dev/null; then
+          supabase gen types typescript --local --schema public > /tmp/generated.types.ts
+          grep -v '^//' /tmp/generated.types.ts > /tmp/a.ts
+          grep -v '^//' src/database.types.ts   > /tmp/b.ts
+          if ! diff -q /tmp/a.ts /tmp/b.ts > /dev/null; then
             echo "::warning::src/database.types.ts отличается от схемы — выполните pnpm db:types"
+            echo "Расхождение:"
+            diff /tmp/a.ts /tmp/b.ts | head -40 || true
           fi
 
       - name: Остановка Supabase
