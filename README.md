@@ -84,6 +84,8 @@ pnpm dev
 | `pnpm db:reset`   | прогнать миграции с нуля и применить seed                |
 | `pnpm db:test`    | pgTAP-тесты                                              |
 | `pnpm db:types`   | перегенерировать `packages/db/src/database.types.ts`     |
+| `pnpm db:link <ref>` | связать репозиторий с облачным проектом               |
+| `pnpm db:push`    | накатить новые миграции в облако                         |
 
 ## Как добавить миграцию
 
@@ -180,5 +182,5 @@ perform public.emit_event(
 
 - [docs/Architecture.md](docs/Architecture.md) — как устроена система
 - [docs/Database.md](docs/Database.md) — схема и конвенции таблиц
-- [docs/Decisions/](docs/Decisions/) — ADR: монорепа, RLS, outbox, среды и подтверждение email
+- [docs/Decisions/](docs/Decisions/) — ADR: монорепа, RLS, outbox, среды, колоночная приватность
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)

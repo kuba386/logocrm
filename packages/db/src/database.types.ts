@@ -179,6 +179,134 @@ export type Database = {
           },
         ]
       }
+      payers: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          notes: string | null
+          phone: string
+          phone_alt: string | null
+          relation: string | null
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          notes?: string | null
+          phone: string
+          phone_alt?: string | null
+          relation?: string | null
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          notes?: string | null
+          phone?: string
+          phone_alt?: string | null
+          relation?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          birth_date: string | null
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          full_name: string
+          gender: string | null
+          id: string
+          notes: string | null
+          payer_id: string
+          primary_teacher_id: string | null
+          source: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          birth_date?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          full_name: string
+          gender?: string | null
+          id?: string
+          notes?: string | null
+          payer_id: string
+          primary_teacher_id?: string | null
+          source?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          birth_date?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          full_name?: string
+          gender?: string | null
+          id?: string
+          notes?: string | null
+          payer_id?: string
+          primary_teacher_id?: string | null
+          source?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "students_primary_teacher_id_fkey"
+            columns: ["primary_teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       centers: {
         Row: {
           created_at: string
@@ -310,6 +438,36 @@ export type Database = {
         }
         Relationships: []
       }
+      students_teacher_view: {
+        Row: {
+          age_years: number | null
+          birth_date: string | null
+          center_id: string | null
+          full_name: string | null
+          gender: string | null
+          id: string | null
+          notes: string | null
+          payer_full_name: string | null
+          primary_teacher_id: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
+      payers_with_stats: {
+        Row: {
+          center_id: string | null
+          children_count: number | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string | null
+          notes: string | null
+          phone: string | null
+          phone_alt: string | null
+          relation: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       create_center: {
@@ -347,6 +505,37 @@ export type Database = {
       }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       user_email: { Args: { p_user_id: string }; Returns: string }
+      normalize_kg_phone: { Args: { p_phone: string }; Returns: string }
+      age_years: { Args: { p_birth_date: string }; Returns: number }
+      payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      was_access_revoked: { Args: never; Returns: boolean }
+      archive_student: { Args: { p_id: string }; Returns: undefined }
+      restore_student: { Args: { p_id: string }; Returns: undefined }
+      find_payer_by_phone: {
+        Args: { p_phone: string }
+        Returns: {
+          children_count: number
+          full_name: string
+          id: string
+          phone: string
+          relation: string
+        }[]
+      }
+      create_student_with_payer: {
+        Args: {
+          p_birth_date?: string
+          p_full_name: string
+          p_gender?: string
+          p_notes?: string
+          p_payer_full_name?: string
+          p_payer_id?: string
+          p_payer_phone?: string
+          p_payer_relation?: string
+          p_primary_teacher_id?: string
+          p_source?: string
+        }
+        Returns: { payer_id: string; student_id: string }[]
+      }
     }
     Enums: {
       [_ in never]: never

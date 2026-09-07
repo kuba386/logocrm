@@ -5,6 +5,28 @@
 
 ## [Unreleased]
 
+### Этап 2 — ученики и плательщики
+
+- `0005_students.sql`: таблицы `payers` и `students`; витрины
+  `students_teacher_view` и `payers_with_stats`; функции `normalize_kg_phone`,
+  `age_years`, `payer_display_name`, `find_payer_by_phone`,
+  `create_student_with_payer`, `archive_student`, `restore_student`,
+  `was_access_revoked`.
+- Колоночная приватность: телефоны родителей вынесены в `payers`, специалисту
+  таблица закрыта RLS, а в его витрине контактных колонок нет физически —
+  [ADR-005](Decisions/ADR-005-column-privacy.md).
+- Уникальный индекс на нормализованный телефон плательщика внутри центра.
+- `@logocrm/core`: `phone.ts` (`normalizeKgPhone`, `formatKgPhone`,
+  `whatsappNumber`) и `age.ts` (`ageYears`, `ageParts`, `ageLabel` со склонением).
+- `apps/web`: `/app/students` (список с ролевым набором колонок), карточка
+  ученика, `/app/payers` и карточка плательщика, диалог добавления ученика в два
+  шага с поиском плательщика по телефону, экран `/access-revoked`.
+- Корневые скрипты `pnpm db:link` и `pnpm db:push`.
+
+Найдено на прогоне: витрина специалиста с `join payers` отдавала ноль строк —
+`security_invoker` выполняет соединение правами вызывающего, а `payers` ему
+закрыта. Заменено на `payer_display_name()`.
+
 ### Этап 1 — сотрудники и приглашения
 
 - `0004_staff.sql`: таблицы `teachers` и `invitations`; функции

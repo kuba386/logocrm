@@ -5,6 +5,7 @@ import { supabaseEnv } from '@/lib/env'
 
 const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite']
 
+
 /**
  * Обновляет сессию на каждом запросе и уводит неавторизованных на /login.
  * Между createServerClient и getUser() не должно быть никакой логики —
