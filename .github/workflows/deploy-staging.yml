@@ -44,12 +44,20 @@ jobs:
             exit 1
           fi
 
+          # Ref вытаскиваем только из структурных позиций — из имени
+          # пользователя до двоеточия и из хоста после собаки. Поле пароля
+          # лежит между ними и под шаблон не попадает, так что напечатать
+          # кусок секрета эта строка не может.
+          DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
+            | grep -oE '(postgres\.[a-z]{20}:|@db\.[a-z]{20}\.supabase\.co)' \
+            | grep -oE '[a-z]{20}' | head -1)
+
           case "$SUPABASE_DB_URL" in
             *"$EXPECTED_REF"*)
               echo "Проект $EXPECTED_REF — верный, продолжаем."
               ;;
             *)
-              echo "::error::Строка подключения ведёт не в проект $EXPECTED_REF. Миграции не применяются."
+              echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются. Секрет лежит в Environments → staging; значение оттуда перекрывает Repository secrets."
               exit 1
               ;;
           esac
