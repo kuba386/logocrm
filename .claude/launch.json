@@ -4,8 +4,16 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@logocrm/web", "dev", "--port", "3000"],
-      "port": 3000
+      "runtimeArgs": [
+        "--filter",
+        "@logocrm/web",
+        "dev",
+        "--port",
+        "3000"
+      ],
+      "port": 3000,
+      "autoPort": false,
+      "url": "http://127.0.0.1:3000"
     }
   ]
 }
