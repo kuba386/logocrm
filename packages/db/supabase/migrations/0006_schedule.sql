@@ -333,27 +333,6 @@ create trigger group_students_sync_participants
   after insert or update or delete on public.group_students
   for each row execute function public.group_students_participants_trigger();
 
-alter table public.lesson_participants enable row level security;
-
--- Только чтение и только тем, кто видит само занятие. Политик на запись нет
--- ни у кого: строки кладут триггеры (security definer, владелец таблицы —
--- postgres, RLS его не касается). Прямой insert рассинхронил бы состав, и
--- констрейнт продолжил бы работать, но врать — это хуже, чем его отсутствие.
-drop policy if exists lesson_participants_read on public.lesson_participants;
-create policy lesson_participants_read on public.lesson_participants
-  for select to authenticated
-  using (
-    center_id = public.current_center()
-    and (
-      public.my_role() in ('owner', 'admin')
-      or (public.my_role() = 'teacher' and public.teacher_of_lesson(lesson_id))
-      or (public.my_role() = 'parent' and public.parent_of_student(student_id))
-    )
-  );
-
-
--- 6. RLS на lessons -----------------------------------------------------------
-
 -- Политики трёх таблиц ссылаются друг на друга: students → lessons →
 -- lesson_participants → students. Postgres на таком замыкается в
 -- «infinite recursion detected in policy». Разрываем круг тем же приёмом,
@@ -423,6 +402,27 @@ as $$
   );
 $$;
 
+
+alter table public.lesson_participants enable row level security;
+
+-- Только чтение и только тем, кто видит само занятие. Политик на запись нет
+-- ни у кого: строки кладут триггеры (security definer, владелец таблицы —
+-- postgres, RLS его не касается). Прямой insert рассинхронил бы состав, и
+-- констрейнт продолжил бы работать, но врать — это хуже, чем его отсутствие.
+drop policy if exists lesson_participants_read on public.lesson_participants;
+create policy lesson_participants_read on public.lesson_participants
+  for select to authenticated
+  using (
+    center_id = public.current_center()
+    and (
+      public.my_role() in ('owner', 'admin')
+      or (public.my_role() = 'teacher' and public.teacher_of_lesson(lesson_id))
+      or (public.my_role() = 'parent' and public.parent_of_student(student_id))
+    )
+  );
+
+
+-- 6. RLS на lessons -----------------------------------------------------------
 
 -- Урок видят оба специалиста: и основной, и заменяющий. Поэтому здесь две
 -- колонки, а не effective_teacher_id — иначе основной терял бы свой урок
