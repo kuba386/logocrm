@@ -12,3 +12,6 @@ coverage/
 next-env.d.ts
 packages/db/supabase/.branches/
 packages/db/supabase/.temp/
+
+# Персональные настройки Claude Code (.claude/settings.json — командный)
+.claude/settings.local.json
