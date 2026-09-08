@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(16);
+select plan(22);
 
 -- Фикстуры --------------------------------------------------------------------
 
@@ -255,7 +255,67 @@ select is(
 reset role;
 
 
--- 16. Часовой пояс серии ------------------------------------------------------
+-- 16. Предпросмотр не отдаёт расписание центра специалисту --------------------
+
+-- Предпросмотр возвращает имена чужих учеников и то, чем занят слот. Гранта у
+-- специалиста нет, но проверка продублирована внутри функции — этот тест
+-- поймает, если будущая миграция выдаст грант по неосторожности.
+
+select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-cccc-cccc-cccc-cccccccccccc');
+set local role authenticated;
+
+select throws_ok(
+  $q$ select * from public.create_lesson_series_preview(
+        jsonb_build_object('teacher_id','aaaaaaaa-0000-0000-0000-000000000001',
+          'student_id','eeeeeeee-0000-0000-0000-000000000001',
+          'first_date','2026-11-02','until','2026-11-02','time','10:00','weekdays','[1]'::jsonb)) $q$,
+  '42501', null, 'Специалист не может открыть предпросмотр серии'
+);
+
+reset role;
+
+
+-- 17–21. Календарь серии: те же случаи, что в Vitest --------------------------
+
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-cccc-cccc-cccc-cccccccccccc');
+set local role authenticated;
+
+select results_eq(
+  $q$ select day from public.series_dates(jsonb_build_object(
+        'first_date','2026-10-05','until','2026-10-19','time','10:00',
+        'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek')) $q$,
+  $q$ values ('2026-10-05'::date), ('2026-10-12'::date), ('2026-10-19'::date) $q$,
+  'Случай 1: обычная неделя — три понедельника'
+);
+
+select is(
+  (select count(*)::int from public.series_dates(jsonb_build_object(
+     'first_date','2026-10-05','until','2026-10-12','time','10:00',
+     'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek'))),
+  2,
+  'Случай 2: until ровно на нужный день недели — включается'
+);
+
+select throws_ok(
+  $q$ select * from public.series_dates(jsonb_build_object(
+        'first_date','2026-10-05','until','2026-10-19','time','10:00',
+        'weekdays','[3,3]'::jsonb,'timezone','Asia/Bishkek')) $q$,
+  '22023', 'День недели указан дважды',
+  'Случай 3: повтор дня недели — ошибка, а не два занятия'
+);
+
+select is(
+  (select starts_at from public.series_dates(jsonb_build_object(
+     'first_date','2026-10-05','until','2026-10-05','time','10:00',
+     'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek')) limit 1),
+  '2026-10-05 04:00:00+00'::timestamptz,
+  'Случай 4: Asia/Bishkek 10:00 — это 04:00 UTC'
+);
+
+reset role;
+
+
+-- Случай 5: то же локальное время в другом поясе ------------------------------
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-cccc-cccc-cccc-cccccccccccc');
 set local role authenticated;
@@ -267,7 +327,7 @@ select isnt(
   (select starts_at from public.series_dates(
      jsonb_build_object('first_date','2026-11-02','until','2026-11-02','time','10:00',
                         'weekdays','[1]'::jsonb,'timezone','Europe/Moscow')) limit 1),
-  'Одно локальное время в разных поясах даёт разные моменты UTC'
+  'Случай 5: одно локальное время в разных поясах даёт разные моменты UTC'
 );
 
 reset role;

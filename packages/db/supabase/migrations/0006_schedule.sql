@@ -459,6 +459,13 @@ declare
   v_conflicts jsonb := '[]'::jsonb;
   v_row       record;
 begin
+  -- Функция отдаёт имена чужих учеников и то, чем занят слот. Гранта у
+  -- authenticated нет, но проверку дублируем внутри: иначе один неосторожный
+  -- grant в будущей миграции откроет специалисту всё расписание центра.
+  if public.my_role() not in ('owner', 'admin') then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
   -- Специалист (с учётом замены).
   for v_row in
     select l.id, l.starts_at, l.ends_at
@@ -544,6 +551,21 @@ declare
   v_duration int;
   v_cursor   date;
 begin
+  if v_weekdays is null or array_length(v_weekdays, 1) is null then
+    raise exception 'Укажите хотя бы один день недели' using errcode = '22004';
+  end if;
+
+  if exists (select 1 from unnest(v_weekdays) d where d < 1 or d > 7) then
+    raise exception 'День недели вне диапазона 1–7 (понедельник — воскресенье)'
+      using errcode = '22023';
+  end if;
+
+  -- Повтор дня в списке — признак ошибки в интерфейсе. Молча схлопывать
+  -- нельзя: админ будет думать, что заказал два занятия в среду.
+  if (select count(*) from unnest(v_weekdays)) <> (select count(distinct d) from unnest(v_weekdays) d) then
+    raise exception 'День недели указан дважды' using errcode = '22023';
+  end if;
+
   select s.duration_min into v_duration
     from public.services s
    where s.id = nullif(p ->> 'service_id', '')::uuid and s.center_id = v_center;
@@ -632,21 +654,50 @@ begin
     end if;
   end loop;
 
+  -- Серия против самой себя: одинаковые дни недели, пересекающиеся слоты
+  -- внутри одного вызова. Сейчас на день приходится одно занятие, но правило
+  -- должно пережить появление нескольких занятий в день — проверяем явно.
+  if exists (
+    select 1
+      from public.series_dates(p) a
+      join public.series_dates(p) b
+        on a.day < b.day
+       and tstzrange(a.starts_at, a.ends_at) && tstzrange(b.starts_at, b.ends_at)
+  ) then
+    raise exception 'Занятия внутри самой серии пересекаются' using errcode = '23P01';
+  end if;
+
   if jsonb_array_length(v_problems) > 0 then
     raise exception 'Часть занятий пересекается с существующими — серия не создана'
       using errcode = '23P01', detail = v_problems::text;
   end if;
 
   for v_row in select * from public.series_dates(p) loop
-    insert into public.lessons (
-      center_id, service_id, teacher_id, room_id, group_id, student_id,
-      starts_at, ends_at, series_id, notes
-    )
-    values (
-      v_center, nullif(p ->> 'service_id', '')::uuid, v_teacher, v_room,
-      v_group, v_student, v_row.starts_at, v_row.ends_at, v_series, nullif(p ->> 'notes', '')
-    )
-    returning id into v_id;
+    begin
+      insert into public.lessons (
+        center_id, service_id, teacher_id, room_id, group_id, student_id,
+        starts_at, ends_at, series_id, notes
+      )
+      values (
+        v_center, nullif(p ->> 'service_id', '')::uuid, v_teacher, v_room,
+        v_group, v_student, v_row.starts_at, v_row.ends_at, v_series, nullif(p ->> 'notes', '')
+      )
+      returning id into v_id;
+
+    exception when exclusion_violation then
+      -- Слот заняли между предпросмотром и вставкой. Констрейнт защитил
+      -- данные, но клиенту нужен тот же формат ошибки, что и на обычном
+      -- пути — иначе он не сможет показать, что именно случилось.
+      raise exception 'Слот заняли, пока заполнялась форма — серия не создана'
+        using errcode = '23P01',
+              detail = jsonb_build_array(jsonb_build_object(
+                'day', v_row.day,
+                'starts_at', v_row.starts_at,
+                'conflicts', public.lesson_slot_conflicts(
+                  v_center, v_teacher, v_room, v_group, v_student,
+                  v_row.starts_at, v_row.ends_at)
+              ))::text;
+    end;
 
     perform public.emit_event('lesson.created',
       jsonb_build_object('center_id', v_center, 'lesson_id', v_id,
