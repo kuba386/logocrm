@@ -346,23 +346,83 @@ create policy lesson_participants_read on public.lesson_participants
     center_id = public.current_center()
     and (
       public.my_role() in ('owner', 'admin')
-      or exists (
-        select 1 from public.lessons l
-         where l.id = lesson_participants.lesson_id
-           and public.my_role() = 'teacher'
-           and (l.teacher_id = public.my_teacher_id() or l.substitute_teacher_id = public.my_teacher_id())
-      )
-      or exists (
-        select 1 from public.students s
-         where s.id = lesson_participants.student_id
-           and public.my_role() = 'parent'
-           and s.payer_id = public.my_payer_id()
-      )
+      or (public.my_role() = 'teacher' and public.teacher_of_lesson(lesson_id))
+      or (public.my_role() = 'parent' and public.parent_of_student(student_id))
     )
   );
 
 
 -- 6. RLS на lessons -----------------------------------------------------------
+
+-- Политики трёх таблиц ссылаются друг на друга: students → lessons →
+-- lesson_participants → students. Postgres на таком замыкается в
+-- «infinite recursion detected in policy». Разрываем круг тем же приёмом,
+-- что и с memberships на этапе 0 (ADR-002): проверка уезжает в
+-- security definer-функцию, которая читает таблицы в обход RLS.
+create or replace function public.teacher_of_lesson(p_lesson_id uuid)
+  returns boolean
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  select exists (
+    select 1 from public.lessons l
+     where l.id = p_lesson_id
+       and l.deleted_at is null
+       and (l.teacher_id = public.my_teacher_id() or l.substitute_teacher_id = public.my_teacher_id())
+  );
+$$;
+
+create or replace function public.parent_of_lesson(p_lesson_id uuid)
+  returns boolean
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.lesson_participants lp
+      join public.students s on s.id = lp.student_id
+     where lp.lesson_id = p_lesson_id
+       and s.payer_id = public.my_payer_id()
+       and s.deleted_at is null
+  );
+$$;
+
+create or replace function public.parent_of_student(p_student_id uuid)
+  returns boolean
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  select exists (
+    select 1 from public.students s
+     where s.id = p_student_id
+       and s.payer_id = public.my_payer_id()
+       and s.deleted_at is null
+  );
+$$;
+
+create or replace function public.teacher_teaches_student(p_student_id uuid)
+  returns boolean
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.lesson_participants lp
+      join public.lessons l on l.id = lp.lesson_id
+     where lp.student_id = p_student_id
+       and l.deleted_at is null
+       and (l.teacher_id = public.my_teacher_id() or l.substitute_teacher_id = public.my_teacher_id())
+  );
+$$;
+
 
 -- Урок видят оба специалиста: и основной, и заменяющий. Поэтому здесь две
 -- колонки, а не effective_teacher_id — иначе основной терял бы свой урок
@@ -387,13 +447,7 @@ create policy lessons_parent_read on public.lessons
     center_id = public.current_center()
     and public.my_role() = 'parent'
     and deleted_at is null
-    and exists (
-      select 1 from public.lesson_participants lp
-      join public.students s on s.id = lp.student_id
-      where lp.lesson_id = lessons.id
-        and s.payer_id = public.my_payer_id()
-        and s.deleted_at is null
-    )
+    and public.parent_of_lesson(id)
   );
 
 -- Специалист видит и тех учеников, с кем у него есть занятия, а не только
@@ -407,13 +461,7 @@ create policy students_teacher_read_own on public.students
     and deleted_at is null
     and (
       primary_teacher_id = public.my_teacher_id()
-      or exists (
-        select 1 from public.lessons l
-        join public.lesson_participants lp on lp.lesson_id = l.id
-        where lp.student_id = students.id
-          and l.deleted_at is null
-          and (l.teacher_id = public.my_teacher_id() or l.substitute_teacher_id = public.my_teacher_id())
-      )
+      or public.teacher_teaches_student(id)
     )
   );
 
@@ -631,6 +679,7 @@ declare
   v_teacher  uuid := (p ->> 'teacher_id')::uuid;
   v_room     uuid := nullif(p ->> 'room_id', '')::uuid;
   v_problems jsonb := '[]'::jsonb;
+  v_late     jsonb;
   v_row      record;
   v_id       uuid;
 begin
@@ -688,14 +737,24 @@ begin
       -- Слот заняли между предпросмотром и вставкой. Констрейнт защитил
       -- данные, но клиенту нужен тот же формат ошибки, что и на обычном
       -- пути — иначе он не сможет показать, что именно случилось.
+      v_late := public.lesson_slot_conflicts(
+        v_center, v_teacher, v_room, v_group, v_student,
+        v_row.starts_at, v_row.ends_at);
+
+      if jsonb_array_length(v_late) = 0 then
+        -- Конкурент успел откатиться, пока мы пересчитывали. Показать нечего,
+        -- и повторять за админа не надо: пусть нажмёт сам, увидев актуальный
+        -- предпросмотр. Автоповтор внутри функции опаснее лишнего клика.
+        raise exception 'Слот был занят на момент сохранения, попробуйте ещё раз'
+          using errcode = '23P01';
+      end if;
+
       raise exception 'Слот заняли, пока заполнялась форма — серия не создана'
         using errcode = '23P01',
               detail = jsonb_build_array(jsonb_build_object(
                 'day', v_row.day,
                 'starts_at', v_row.starts_at,
-                'conflicts', public.lesson_slot_conflicts(
-                  v_center, v_teacher, v_room, v_group, v_student,
-                  v_row.starts_at, v_row.ends_at)
+                'conflicts', v_late
               ))::text;
     end;
 
@@ -925,6 +984,84 @@ end;
 $$;
 
 
+-- Перенос занятия. Отдельная функция, а не прямой update из actions:
+-- триггер состава отработает в обоих случаях, но ошибка о накладке должна
+-- приходить в том же формате, что и от создания серии — иначе в интерфейсе
+-- появится второй путь обработки конфликта.
+create or replace function public.reschedule_lesson(
+  p_lesson_id uuid,
+  p_starts_at timestamptz,
+  p_ends_at   timestamptz
+)
+  returns void
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_center    uuid := public.current_center();
+  v_lesson    public.lessons;
+  v_conflicts jsonb;
+begin
+  if public.my_role() not in ('owner', 'admin') then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
+  if p_ends_at <= p_starts_at then
+    raise exception 'Занятие должно заканчиваться позже, чем начинается' using errcode = '22023';
+  end if;
+
+  select * into v_lesson
+    from public.lessons
+   where id = p_lesson_id and center_id = v_center and deleted_at is null;
+
+  if not found then
+    raise exception 'Занятие не найдено' using errcode = '42704';
+  end if;
+
+  if v_lesson.status <> 'planned' then
+    raise exception 'Перенести можно только запланированное занятие' using errcode = '22023';
+  end if;
+
+  -- Само занятие из проверки исключаем, иначе оно конфликтует с собой.
+  v_conflicts := public.lesson_slot_conflicts(
+    v_center, v_lesson.effective_teacher_id, v_lesson.room_id,
+    v_lesson.group_id, v_lesson.student_id, p_starts_at, p_ends_at, p_lesson_id);
+
+  if jsonb_array_length(v_conflicts) > 0 then
+    raise exception 'Новое время пересекается с другими занятиями'
+      using errcode = '23P01',
+            detail = jsonb_build_array(jsonb_build_object(
+              'day', p_starts_at::date, 'starts_at', p_starts_at, 'conflicts', v_conflicts))::text;
+  end if;
+
+  begin
+    update public.lessons
+       set starts_at = p_starts_at, ends_at = p_ends_at
+     where id = p_lesson_id;
+  exception when exclusion_violation then
+    v_conflicts := public.lesson_slot_conflicts(
+      v_center, v_lesson.effective_teacher_id, v_lesson.room_id,
+      v_lesson.group_id, v_lesson.student_id, p_starts_at, p_ends_at, p_lesson_id);
+
+    if jsonb_array_length(v_conflicts) = 0 then
+      raise exception 'Слот был занят на момент сохранения, попробуйте ещё раз'
+        using errcode = '23P01';
+    end if;
+
+    raise exception 'Новое время пересекается с другими занятиями'
+      using errcode = '23P01',
+            detail = jsonb_build_array(jsonb_build_object(
+              'day', p_starts_at::date, 'starts_at', p_starts_at, 'conflicts', v_conflicts))::text;
+  end;
+
+  perform public.emit_event('lesson.rescheduled',
+    jsonb_build_object('center_id', v_center, 'lesson_id', p_lesson_id,
+                       'from', v_lesson.starts_at, 'to', p_starts_at), v_center);
+end;
+$$;
+
+
 -- Права -----------------------------------------------------------------------
 
 grant select, insert, update on public.rooms, public.services, public.groups,
@@ -935,6 +1072,10 @@ grant select on public.lesson_participants to authenticated;
 
 revoke execute on function
   public.rebuild_lesson_participants(uuid),
+  public.teacher_of_lesson(uuid),
+  public.parent_of_lesson(uuid),
+  public.parent_of_student(uuid),
+  public.teacher_teaches_student(uuid),
   public.center_timezone(uuid),
   public.lesson_slot_conflicts(uuid, uuid, uuid, uuid, uuid, timestamptz, timestamptz, uuid),
   public.series_dates(jsonb),
@@ -945,10 +1086,15 @@ revoke execute on function
   public.substitute_teacher(uuid, uuid),
   public.teacher_vacation(uuid, date, date),
   public.teacher_vacation_preview(uuid, date, date),
-  public.mark_lesson_status(uuid, text, text)
+  public.mark_lesson_status(uuid, text, text),
+  public.reschedule_lesson(uuid, timestamptz, timestamptz)
   from public, anon;
 
 grant execute on function
+  public.teacher_of_lesson(uuid),
+  public.parent_of_lesson(uuid),
+  public.parent_of_student(uuid),
+  public.teacher_teaches_student(uuid),
   public.center_timezone(uuid),
   public.series_dates(jsonb),
   public.create_lesson_series_preview(jsonb),
@@ -958,5 +1104,6 @@ grant execute on function
   public.substitute_teacher(uuid, uuid),
   public.teacher_vacation(uuid, date, date),
   public.teacher_vacation_preview(uuid, date, date),
-  public.mark_lesson_status(uuid, text, text)
+  public.mark_lesson_status(uuid, text, text),
+  public.reschedule_lesson(uuid, timestamptz, timestamptz)
   to authenticated;
