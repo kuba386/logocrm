@@ -5,6 +5,28 @@
 
 ## [Unreleased]
 
+### Этап 3 — расписание
+
+- `0006_schedule.sql`: `rooms`, `services`, `groups`, `group_students`,
+  `lessons` с `effective_teacher_id` и двумя EXCLUDE, `lesson_participants`
+  с триггерами и EXCLUDE по ребёнку; функции серий, отмены, замены, переноса,
+  отпуска и смены статуса.
+- Накладки ловит база: специалист (включая замену), кабинет, ребёнок —
+  в том числе пара «групповое + индивидуальное», которую `EXCLUDE` на
+  `lessons` не видел вовсе. [ADR-006](Decisions/ADR-006-lesson-participants.md).
+- `@logocrm/core/schedule`: `generateSeriesDates`, `overlaps`,
+  `findSelfOverlap`, работа с часовым поясом через `Intl` без новых
+  зависимостей.
+- `apps/web`: `/app/schedule` (неделя, фильтры, диалог с предпросмотром
+  занятости, панель занятия), `/app/settings/services`, `/app/settings/rooms`,
+  `/app/groups`, отпуск в карточке сотрудника.
+- `lib/errors.ts` — единственное место разбора ошибок Postgres.
+
+Найдено в CI: политики `students`, `lessons` и `lesson_participants`
+замкнулись в круг и дали `infinite recursion detected in policy`. Ломался
+и этап 2 — специалист переставал видеть учеников. Разорвано
+`security definer`-функциями, правило записано в ADR-006.
+
 ### Этап 2 — ученики и плательщики
 
 - `0005_students.sql`: таблицы `payers` и `students`; витрины

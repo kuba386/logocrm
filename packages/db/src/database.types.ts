@@ -3,6 +3,11 @@
 //   pnpm db:types
 // Файл коммитится в репозиторий — на него опирается typecheck в CI.
 //
+// Блоки этапа 3 (rooms, services, groups, group_students, lessons,
+// lesson_participants и функции расписания) дописаны вручную: 0006 ещё не
+// применена ни к одной живой базе. После мержа и deploy-staging возьмите
+// канонический файл из артефакта database-types и замените целиком.
+//
 // Канонический вариант производит CLI из миграций (джоб «База данных» в CI
 // выкладывает его артефактом database-types). Генератор из облака даёт тот же
 // набор таблиц, но иначе форматирует дженерики и добавляет __InternalSupabase —
@@ -223,6 +228,258 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rooms: {
+        Row: {
+          capacity: number
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          capacity?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          capacity?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      services: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          default_price_tiyin: number | null
+          deleted_at: string | null
+          duration_min: number
+          id: string
+          is_active: boolean
+          kind: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          default_price_tiyin?: number | null
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          default_price_tiyin?: number | null
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      groups: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          max_students: number | null
+          name: string
+          room_id: string | null
+          service_id: string | null
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_students?: number | null
+          name: string
+          room_id?: string | null
+          service_id?: string | null
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_students?: number | null
+          name?: string
+          room_id?: string | null
+          service_id?: string | null
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      group_students: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          group_id: string
+          id: string
+          joined_at: string
+          left_at: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          group_id: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          group_id?: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lessons: {
+        Row: {
+          cancel_reason: string | null
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          effective_teacher_id: string | null
+          ends_at: string
+          group_id: string | null
+          id: string
+          notes: string | null
+          room_id: string | null
+          series_id: string | null
+          service_id: string | null
+          starts_at: string
+          status: string
+          student_id: string | null
+          substitute_teacher_id: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          ends_at: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          series_id?: string | null
+          service_id?: string | null
+          starts_at: string
+          status?: string
+          student_id?: string | null
+          substitute_teacher_id?: string | null
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          ends_at?: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          series_id?: string | null
+          service_id?: string | null
+          starts_at?: string
+          status?: string
+          student_id?: string | null
+          substitute_teacher_id?: string | null
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lesson_participants: {
+        Row: {
+          center_id: string
+          deleted_at: string | null
+          ends_at: string
+          lesson_id: string
+          starts_at: string
+          status: string
+          student_id: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
       }
       payers: {
         Row: {
@@ -658,6 +915,48 @@ export type Database = {
       switch_center: { Args: { p_center_id: string }; Returns: undefined }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
+      teacher_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
+      parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
+      parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
+      teacher_teaches_student: { Args: { p_student_id: string }; Returns: boolean }
+      center_timezone: { Args: { p_center_id?: string }; Returns: string }
+      series_dates: {
+        Args: { p: Json }
+        Returns: { day: string; starts_at: string; ends_at: string }[]
+      }
+      create_lesson_series_preview: {
+        Args: { p: Json }
+        Returns: { day: string; starts_at: string; ends_at: string; conflicts: Json }[]
+      }
+      create_lesson_series: {
+        Args: { p: Json }
+        Returns: { lesson_id: string; starts_at: string }[]
+      }
+      cancel_lesson: { Args: { p_id: string; p_reason?: string }; Returns: undefined }
+      cancel_series_from: {
+        Args: { p_series_id: string; p_from: string; p_reason?: string }
+        Returns: number
+      }
+      substitute_teacher: {
+        Args: { p_lesson_id: string; p_new_teacher_id: string }
+        Returns: undefined
+      }
+      teacher_vacation: {
+        Args: { p_teacher_id: string; p_from: string; p_to: string }
+        Returns: number
+      }
+      teacher_vacation_preview: {
+        Args: { p_teacher_id: string; p_from: string; p_to: string }
+        Returns: { lesson_id: string; starts_at: string; as_substitute: boolean }[]
+      }
+      mark_lesson_status: {
+        Args: { p_lesson_id: string; p_status: string; p_notes?: string }
+        Returns: undefined
+      }
+      reschedule_lesson: {
+        Args: { p_lesson_id: string; p_starts_at: string; p_ends_at: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
