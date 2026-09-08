@@ -1,0 +1,62 @@
+import { type Locator, type Page, expect } from '@playwright/test'
+
+/**
+ * Находит <select> по одному из его вариантов.
+ *
+ * Селект ученика в разметке без связанного <label> — по имени его не взять.
+ * Поиск по варианту заодно устойчив к переименованию подписи: тест
+ * привязан к данным, а не к оформлению.
+ */
+export function selectWithOption(page: Page, optionText: string): Locator {
+  return page.locator('select', {
+    has: page.locator('option', { hasText: optionText }),
+  }).first()
+}
+
+/** Открывает неделю, в которую попадает дата (YYYY-MM-DD). */
+export async function openWeek(page: Page, isoDate: string) {
+  await page.goto(`/app/schedule?week=${isoDate}`)
+  await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
+}
+
+export type LessonForm = {
+  service: string
+  student: string
+  room?: string
+  firstDay: string
+  until?: string
+  time: string
+  /** Подписи кнопок дней недели: Пн, Вт, Ср… */
+  weekdays: string[]
+}
+
+/** Открывает и заполняет диалог создания. Отправку делает сам тест. */
+export async function fillLessonDialog(page: Page, form: LessonForm) {
+  await page.getByRole('button', { name: 'Добавить занятие' }).click()
+
+  await selectWithOption(page, form.service).selectOption({ label: form.service })
+  await selectWithOption(page, form.student).selectOption({ label: form.student })
+
+  if (form.room) {
+    await selectWithOption(page, form.room).selectOption({ label: form.room })
+  }
+
+  await page.getByLabel('Первый день').fill(form.firstDay)
+  if (form.until) await page.getByLabel('Повторять до').fill(form.until)
+  await page.getByLabel('Время').fill(form.time)
+
+  for (const day of form.weekdays) {
+    await page.getByRole('button', { name: day, exact: true }).click()
+  }
+}
+
+/** Карточка занятия в недельной сетке. */
+export function lessonCard(page: Page, time: string, student: string): Locator {
+  return page.locator('button', { hasText: time }).filter({ hasText: student }).first()
+}
+
+/** Сколько занятий показано на текущей неделе — из подписи над сеткой. */
+export async function lessonsThisWeek(page: Page): Promise<number> {
+  const text = await page.getByText(/Занятий на неделе: \d+/).innerText()
+  return Number(text.match(/(\d+)/)![1])
+}

@@ -96,3 +96,78 @@ jobs:
         if: always()
         working-directory: packages/db
         run: supabase stop --no-backup
+
+  e2e:
+    name: Приёмка (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Установка зависимостей
+        run: pnpm install --frozen-lockfile
+
+      - name: Запуск локального Supabase
+        working-directory: packages/db
+        run: supabase start
+
+      # Схема собирается из миграций с нуля — тот же путь, что поедет в prod.
+      - name: Применение миграций
+        working-directory: packages/db
+        run: supabase db reset
+
+      # Фикстура отдельно от seed.sql: seed намеренно оставляет центр
+      # несозданным, чтобы проверять онбординг, а приёмке нужен готовый центр.
+      - name: Фикстура для приёмки
+        working-directory: packages/db
+        run: |
+          DB_URL=$(supabase status --output json | node -e \
+            'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).DB_URL))')
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/fixtures/e2e.sql
+
+      # Ключи локального стека фиксированные и публичные — это не секреты.
+      - name: Переменные окружения приложения
+        working-directory: packages/db
+        run: |
+          node -e '
+            const { execSync } = require("child_process");
+            const s = JSON.parse(execSync("supabase status --output json").toString());
+            const lines = [
+              `NEXT_PUBLIC_SUPABASE_URL=${s.API_URL}`,
+              `NEXT_PUBLIC_SUPABASE_ANON_KEY=${s.ANON_KEY}`,
+              "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000",
+            ];
+            require("fs").writeFileSync(`${process.env.GITHUB_WORKSPACE}/apps/web/.env.local`, lines.join("\n") + "\n");
+          '
+
+      - name: Сборка приложения
+        run: pnpm --filter @logocrm/web build
+
+      - name: Установка браузера
+        run: pnpm --filter @logocrm/web exec playwright install --with-deps chromium
+
+      - name: Приёмочные сценарии
+        run: pnpm --filter @logocrm/web e2e
+
+      - name: Отчёт Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
+      - name: Остановка Supabase
+        if: always()
+        working-directory: packages/db
+        run: supabase stop --no-backup
