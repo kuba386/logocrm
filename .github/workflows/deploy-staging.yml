@@ -26,6 +26,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Секрет даёт доступ к одной базе, и ошибиться проектом легко: в том же
+      # аккаунте Supabase рядом живёт старый logoped-crm с боевыми данными
+      # детей. Строка подключения туда уже уезжала однажды, и от применения
+      # миграций LogoCRM поверх боевой базы спасло только то, что прямой хост
+      # отвечает по IPv6, а раннер ходит по IPv4. Полагаться на это нельзя.
+      #
+      # Сама строка нигде не печатается: сравнение идёт через case, ref
+      # проекта секретом не является — он и так лежит в репозитории.
+      - name: Строка подключения ведёт в staging LogoCRM
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          EXPECTED_REF: hiwstqrnxrlfuanvfggq
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Секрет SUPABASE_DB_URL пуст или недоступен. Он должен лежать в Environments → staging."
+            exit 1
+          fi
+
+          case "$SUPABASE_DB_URL" in
+            *"$EXPECTED_REF"*)
+              echo "Проект $EXPECTED_REF — верный, продолжаем."
+              ;;
+            *)
+              echo "::error::Строка подключения ведёт не в проект $EXPECTED_REF. Миграции не применяются."
+              exit 1
+              ;;
+          esac
+
+          case "$SUPABASE_DB_URL" in
+            *db.*.supabase.co*)
+              echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — используйте Session pooler на порту 5432."
+              ;;
+          esac
+
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
