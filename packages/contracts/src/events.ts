@@ -119,6 +119,52 @@ export const studentRestoredSchema = z.object({
 })
 export type StudentRestored = z.infer<typeof studentRestoredSchema>
 
+const lessonRef = z.object({
+  center_id: z.string().uuid(),
+  lesson_id: z.string().uuid(),
+})
+
+export const lessonCreatedSchema = z.object({
+  type: z.literal('lesson.created'),
+  payload: lessonRef.extend({
+    series_id: z.string().uuid().nullable().default(null),
+    starts_at: z.string(),
+  }),
+})
+
+export const lessonCancelledSchema = z.object({
+  type: z.literal('lesson.cancelled'),
+  // Отменить можно и одно занятие, и хвост серии — отсюда необязательные поля.
+  payload: z.object({
+    center_id: z.string().uuid(),
+    lesson_id: z.string().uuid().optional(),
+    series_id: z.string().uuid().optional(),
+    reason: z.string().nullable().default(null),
+    count: z.number().int().optional(),
+  }),
+})
+
+export const lessonSubstitutedSchema = z.object({
+  type: z.literal('lesson.substituted'),
+  payload: lessonRef.extend({ teacher_id: z.string().uuid() }),
+})
+
+export const lessonRescheduledSchema = z.object({
+  type: z.literal('lesson.rescheduled'),
+  payload: lessonRef.extend({ from: z.string(), to: z.string() }),
+})
+
+export const teacherVacationSchema = z.object({
+  type: z.literal('teacher.vacation'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    from: z.string(),
+    to: z.string(),
+    cancelled: z.number().int(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -130,6 +176,11 @@ export const appEventSchema = z.discriminatedUnion('type', [
   studentCreatedSchema,
   studentArchivedSchema,
   studentRestoredSchema,
+  lessonCreatedSchema,
+  lessonCancelledSchema,
+  lessonSubstitutedSchema,
+  lessonRescheduledSchema,
+  teacherVacationSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -147,6 +198,11 @@ export const appEventTypes = [
   'student.created',
   'student.archived',
   'student.restored',
+  'lesson.created',
+  'lesson.cancelled',
+  'lesson.substituted',
+  'lesson.rescheduled',
+  'teacher.vacation',
 ] as const
 export type AppEventType = (typeof appEventTypes)[number]
 

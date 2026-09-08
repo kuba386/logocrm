@@ -3,30 +3,23 @@ name: Deploy staging
 # Катит миграции в staging после того, как CI на main отработал успешно.
 #
 # Привязка к workflow_run, а не к push — намеренно: так деплой физически
-# не может опередить pgTAP. Правило «ни одного применения схемы без зелёного
-# db-джоба» держится не дисциплиной, а зависимостью между workflow.
+# не может опередить pgTAP. Правило «схема только через зелёный db-джоб»
+# держится зависимостью между workflow, а не дисциплиной.
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
-  # Ручной запуск на случай, если деплой упал и нужно повторить.
   workflow_dispatch:
 
 concurrency:
   group: deploy-staging
   cancel-in-progress: false
 
-env:
-  # Ref публичен (он в адресе проекта), секретов тут нет.
-  SUPABASE_PROJECT_REF: hiwstqrnxrlfuanvfggq
-
 jobs:
   migrate:
     name: Миграции в staging
     runs-on: ubuntu-latest
-    # Для push-события workflow_run не запускается, если CI провалился;
-    # при ручном запуске условие пропускаем.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     environment: staging
 
@@ -37,30 +30,25 @@ jobs:
         with:
           version: 2.116.0
 
-      - name: Связать проект
-        working-directory: packages/db
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
-
+      # Работаем по строке подключения, без supabase link.
+      #
+      # Так нужен один секрет вместо двух, и это доступ к одной базе, а не
+      # токен ко всему аккаунту Supabase — таким можно удалить любой проект
+      # организации, включая боевой logoped-crm.
       - name: Что будет применено
         working-directory: packages/db
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
       - name: Применить миграции
         working-directory: packages/db
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
       - name: Состояние после применения
         working-directory: packages/db
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

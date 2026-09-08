@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { centerTimeZone } from '@/lib/timezone'
 import { siteUrl } from '@/lib/env'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { InviteDialog, type TeacherOption } from './invite-dialog'
@@ -47,6 +48,7 @@ export default async function StaffPage() {
       fullName: row.full_name,
       isActive: row.is_active ?? true,
       joinedAt: row.joined_at,
+      teacherId: row.teacher_id,
     }))
 
   const invitations: PendingInvitation[] = (pending ?? [])
@@ -60,6 +62,14 @@ export default async function StaffPage() {
       url: `${siteUrl()}/invite/${row.token}`,
       expiresAt: row.expires_at as string,
     }))
+
+  const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
+  const { data: center } = await supabase
+    .from('centers')
+    .select('settings')
+    .eq('id', centerId ?? '')
+    .maybeSingle()
+  const timeZone = centerTimeZone(center?.settings)
 
   const teacherOptions: TeacherOption[] = (teachers ?? []).map((teacher) => ({
     id: teacher.id,
@@ -84,7 +94,12 @@ export default async function StaffPage() {
           <CardDescription>Роль можно поменять прямо в таблице.</CardDescription>
         </CardHeader>
         <CardContent>
-          <StaffTable members={members} actorRole={role} currentUserId={user.id} />
+          <StaffTable
+            members={members}
+            actorRole={role}
+            currentUserId={user.id}
+            timeZone={timeZone}
+          />
         </CardContent>
       </Card>
 

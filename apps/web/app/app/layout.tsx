@@ -65,6 +65,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
 
             <nav className="hidden gap-1 sm:flex">
+              <Link href="/app/schedule" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                Расписание
+              </Link>
               <Link href="/app/students" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                 Ученики
               </Link>
@@ -72,6 +75,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <>
                   <Link href="/app/payers" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                     Плательщики
+                  </Link>
+                  <Link href="/app/groups" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                    Группы
                   </Link>
                   <Link
                     href="/app/settings/staff"

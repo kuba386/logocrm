@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { assignableRoles, roleLabel } from '@/lib/roles'
+import { VacationDialog } from './vacation-dialog'
 
 const initialState: StaffState = {}
 
@@ -18,6 +19,7 @@ export type StaffMember = {
   fullName: string | null
   isActive: boolean
   joinedAt: string | null
+  teacherId: string | null
 }
 
 function RoleSelect({ member, actorRole }: { member: StaffMember; actorRole: string }) {
@@ -93,10 +95,12 @@ export function StaffTable({
   members,
   actorRole,
   currentUserId,
+  timeZone,
 }: {
   members: StaffMember[]
   actorRole: string
   currentUserId: string
+  timeZone: string
 }) {
   if (members.length === 0) {
     return <p className="text-sm text-muted-foreground">В центре пока только вы.</p>
@@ -136,7 +140,16 @@ export function StaffTable({
               </span>
             </TableCell>
             <TableCell className="text-right">
-              {member.userId === currentUserId ? null : <RevokeButton member={member} />}
+              <div className="flex flex-wrap justify-end gap-2">
+                {member.teacherId ? (
+                  <VacationDialog
+                    teacherId={member.teacherId}
+                    teacherName={member.fullName ?? 'специалист'}
+                    timeZone={timeZone}
+                  />
+                ) : null}
+                {member.userId === currentUserId ? null : <RevokeButton member={member} />}
+              </div>
             </TableCell>
           </TableRow>
         ))}

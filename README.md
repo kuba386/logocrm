@@ -195,14 +195,16 @@ Prod (этап 8) автоматического деплоя не получи�
 
 ### Что нужно настроить один раз
 
-В Settings → Secrets and variables → Actions → **Environments → staging**:
+В Settings → Environments → **staging** нужен один секрет:
 
 | Секрет | Где взять |
 |---|---|
-| `SUPABASE_ACCESS_TOKEN` | Account → Access Tokens → Generate new token |
-| `SUPABASE_DB_PASSWORD` | Settings → Database → пароль проекта (или Reset) |
+| `SUPABASE_DB_URL` | Project Settings → Database → Connection string → URI, пароль подставить вместо `[YOUR-PASSWORD]` |
 
-Ref проекта не секрет и зашит в workflow.
+Токен аккаунта не нужен: `supabase db push --db-url` обходится без `link`.
+Это сознательный выбор — токен Supabase даёт власть над всей организацией,
+включая боевой проект `logoped-crm`, а строка подключения ограничена одной
+базой.
 
 ## Документация
 
