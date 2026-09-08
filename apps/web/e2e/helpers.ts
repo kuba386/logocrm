@@ -32,6 +32,11 @@ export type LessonForm = {
 
 /** Открывает и заполняет диалог создания. Отправку делает сам тест. */
 export async function fillLessonDialog(page: Page, form: LessonForm) {
+  // Кнопки дней недели — переключатели, а форма переживает закрытие диалога.
+  // Без перезагрузки второй вызов подряд СНИМАЕТ уже выбранный день вместо
+  // того, чтобы выбрать его, и тест падает с «Выберите хотя бы один день
+  // недели» — по причине, не имеющей отношения к проверяемому поведению.
+  await page.reload()
   await page.getByRole('button', { name: 'Добавить занятие' }).click()
 
   await selectWithOption(page, form.service).selectOption({ label: form.service })
