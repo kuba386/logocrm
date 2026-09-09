@@ -14,6 +14,10 @@ import { actAndAwait, lessonCard, lessonsThisWeek, openWeek } from './helpers'
 // Границы прав на уровне SQL проверяет pgTAP: он ходит от роли authenticated
 // и бьёт по функциям напрямую. Здесь — путь через интерфейс.
 
+// serial — ради повтора в CI: Playwright тогда перезапускает файл с начала,
+// а не отдельный тест посреди накопленного состояния.
+test.describe.configure({ mode: 'serial' })
+
 const TEACHER_WEEK = '2027-03-08'
 
 test('5. Специалист не может создавать занятия и не видит чужих учеников', async ({ page }) => {

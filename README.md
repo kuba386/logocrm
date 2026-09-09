@@ -55,7 +55,8 @@ cd packages/db && supabase start
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Заполните `NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_ANON_KEY`, затем:
+Заполните `NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+(для старых проектов — `NEXT_PUBLIC_SUPABASE_ANON_KEY`, читаются оба), затем:
 
 ```bash
 pnpm db:reset
@@ -184,12 +185,21 @@ perform public.emit_event(
 через CI:
 
 ```
-PR → CI (app + db с pgTAP) → merge в main → CI на main → deploy-staging → db push
+PR → CI (app + db с pgTAP + e2e) → merge в main → CI на main → джоб «Схема» → db push
 ```
 
-`deploy-staging.yml` привязан к успешному завершению CI (`workflow_run`), а не
-к push. Это не дисциплина, а зависимость между workflow: деплой физически не
-может опередить pgTAP.
+Джоб «Схема» в `ci.yml` вызывает `deploy-staging.yml` с `needs: [db, app]`.
+Это не дисциплина, а зависимость между джобами: деплой физически не может
+опередить ни pgTAP, ни Vitest-зеркала SQL-логики. Приёмка Playwright в гейт
+деплоя не входит — она про интерфейс, а не про схему, — но обязательна для
+мержа через required status checks на `main`.
+
+Checkout в джобе деплоя берёт тот же коммит, что проверял pgTAP. Прежняя
+связка через `workflow_run` брала верхушку `main`, и между зелёным прогоном и
+деплоем мог проскочить непроверенный пуш.
+
+Ручной запуск `Deploy staging` возможен только с `main`: с ветки он обошёл бы
+pgTAP.
 
 Prod (этап 8) автоматического деплоя не получит — туда руками и осознанно.
 
@@ -199,12 +209,22 @@ Prod (этап 8) автоматического деплоя не получи�
 
 | Секрет | Где взять |
 |---|---|
-| `SUPABASE_DB_URL` | Project Settings → Database → Connection string → URI, пароль подставить вместо `[YOUR-PASSWORD]` |
+| `SUPABASE_DB_PASSWORD` | Project Settings → Database → Database password (Reset, если не сохранён). Только пароль, без строки |
+
+Строку подключения собирает сам workflow: ref проекта, имя пользователя
+пулера и хост зашиты в `deploy-staging.yml`, пароль кодируется. Так не бывает
+четырёх ошибок, на которых деплой уже спотыкался: чужой проект, имя
+пользователя без ref, Direct connection вместо пулера, непроцентованный
+пароль.
+
+`SUPABASE_DB_URL` остался запасным путём. Если пользоваться им — только
+Session pooler (`aws-0-ap-south-1.pooler.supabase.com:5432`), не Direct
+connection: тот отвечает по IPv6, а раннеры GitHub ходят по IPv4. Workflow
+проверит, что строка ведёт в нужный проект.
 
 Токен аккаунта не нужен: `supabase db push --db-url` обходится без `link`.
 Это сознательный выбор — токен Supabase даёт власть над всей организацией,
-включая боевой проект `logoped-crm`, а строка подключения ограничена одной
-базой.
+включая боевой проект `logoped-crm`, а пароль ограничен одной базой.
 
 ## Документация
 

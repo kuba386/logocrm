@@ -15,6 +15,11 @@ on:
   workflow_call:
   workflow_dispatch:
 
+# GITHUB_TOKEN только на чтение: ни один шаг не пишет в репозиторий, а дефолт
+# на репозитории может быть write.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-staging
   cancel-in-progress: false
@@ -123,6 +128,7 @@ jobs:
         run: supabase db push --dry-run --db-url "$DB_URL"
 
       - name: Применить миграции
+        id: push
         working-directory: packages/db
         run: supabase db push --db-url "$DB_URL"
 
@@ -134,7 +140,9 @@ jobs:
         working-directory: packages/db
         run: supabase migration list --db-url "$DB_URL"
 
+      # Только при отказе самого push: если упала сборка строки или dry-run,
+      # эта подсказка увела бы не туда.
       - name: Если история миграций разошлась
-        if: failure()
+        if: failure() && steps.push.outcome == 'failure'
         run: |
           echo "::error::История миграций в staging разошлась с файлами в репозитории. Смотрите таблицу шага «Состояние после применения»: версия в колонке Remote без пары в Local — её применяли руками не из этой ветки. Чинится не правкой базы, а тем, чтобы файл миграции оказался в main."

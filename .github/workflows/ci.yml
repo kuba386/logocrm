@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# GITHUB_TOKEN только на чтение: ни один шаг не пишет в репозиторий, а дефолт
+# на репозитории может быть write.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   # На ветках гасим устаревшие прогоны — это экономит минуты раннера.
