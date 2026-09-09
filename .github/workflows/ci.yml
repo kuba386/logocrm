@@ -7,7 +7,11 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # На ветках гасим устаревшие прогоны — это экономит минуты раннера.
+  # На main нельзя: там в том же прогоне живёт джоб деплоя, и отмена убила бы
+  # `supabase db push` посреди применения миграций. Второй пуш подряд оставил
+  # бы историю миграций в состоянии, которое потом чинится руками.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   app:
@@ -96,6 +100,19 @@ jobs:
         if: always()
         working-directory: packages/db
         run: supabase stop --no-backup
+
+  # Деплой зависит от db и ни от чего больше: pgTAP проверяет схему и права,
+  # и пока он не зелёный, миграция до базы не доходит. Приёмка (e2e ниже) в
+  # зависимости не входит намеренно — она про интерфейс, а не про схему.
+  #
+  # Только push в main: на pull_request джоб не запускается вовсе, иначе
+  # ветка катила бы миграции в общий staging.
+  deploy-staging:
+    name: Миграции в staging
+    needs: [db]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-staging.yml
+    secrets: inherit
 
   e2e:
     name: Приёмка (Playwright)

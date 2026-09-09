@@ -1,15 +1,18 @@
 name: Deploy staging
 
-# Катит миграции в staging после того, как CI на main отработал успешно.
+# Катит миграции в staging. Вызывается из CI джобом с `needs: [db]` — то
+# есть деплой физически не может опередить pgTAP. Правило «схема только
+# через зелёный db-джоб» держится зависимостью между джобами, а не
+# дисциплиной.
 #
-# Привязка к workflow_run, а не к push — намеренно: так деплой физически
-# не может опередить pgTAP. Правило «схема только через зелёный db-джоб»
-# держится зависимостью между workflow, а не дисциплиной.
+# Раньше связка шла через workflow_run по успеху ВСЕГО workflow CI. После
+# появления приёмочных тестов это означало бы, что красный Playwright
+# останавливает выкладку корректной схемы. pgTAP проверяет схему и права,
+# Playwright — интерфейс: сломанный интерфейс не повод не катить проверенную
+# миграцию. Приёмка при этом остаётся обязательной для мержа, так что до
+# main такой код всё равно не доходит.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -20,7 +23,6 @@ jobs:
   migrate:
     name: Миграции в staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     environment: staging
 
     steps:
