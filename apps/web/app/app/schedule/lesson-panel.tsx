@@ -182,7 +182,13 @@ export function LessonPanel({
                       живут на одной странице, а дубль id ломает связь label
                       с полем — getByLabel и скринридер уходят в чужой селект. */}
                   <Label htmlFor="substituteTeacherId">Кто проведёт вместо</Label>
-                  <Select id="substituteTeacherId" name="teacherId" required>
+                  <Select id="substituteTeacherId" name="teacherId" required defaultValue="">
+                    {/* Пустой пункт обязателен. Без него браузер выбирает
+                        первый вариант — первого специалиста по алфавиту, — и
+                        один клик по «Назначить» ставит заменяющим человека,
+                        которого администратор не выбирал. Действие проверяет
+                        пустое значение и отвечает «Выберите специалиста». */}
+                    <option value="">Выберите специалиста</option>
                     {teachers.map((teacher) => (
                       <option key={teacher.id} value={teacher.id}>
                         {teacher.fullName}
