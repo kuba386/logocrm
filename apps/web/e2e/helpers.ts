@@ -82,11 +82,35 @@ export async function lessonsThisWeek(page: Page): Promise<number> {
  */
 export async function submitLessonDialog(page: Page, expectedNotice: string | RegExp) {
   await page.getByRole('button', { name: 'Создать' }).click()
-  await expect(page.getByRole('status')).toContainText(expectedNotice, { timeout: 20_000 })
+  await expectServerReply(page, expectedNotice)
+}
+
+/**
+ * Ждёт ответа сервера и падает внятно, если он оказался отказом.
+ *
+ * Без этого отказ выглядел как двадцать секунд ожидания уведомления и
+ * «element(s) not found» — по такому сообщению не видно, что сервер вообще
+ * ответил, и чем именно.
+ */
+async function expectServerReply(page: Page, expectedNotice: string | RegExp) {
+  const notice = page.getByRole('status')
+  // hasText с \S отсекает служебный пустой <div role="alert"> Next.js
+  // (__next-route-announcer__), который всегда есть в DOM.
+  const error = page.getByRole('alert').filter({ hasText: /\S/ })
+
+  await expect(notice.or(error).first()).toBeVisible({ timeout: 20_000 })
+
+  if (await error.first().isVisible()) {
+    throw new Error(
+      `Сервер отказал вместо ожидаемого «${expectedNotice}»: ${await error.first().innerText()}`,
+    )
+  }
+
+  await expect(notice).toContainText(expectedNotice)
 }
 
 /** Нажимает кнопку действия и ждёт уведомления сервера — та же причина. */
 export async function actAndAwait(page: Page, button: string | RegExp, expectedNotice: string | RegExp) {
   await page.getByRole('button', { name: button }).click()
-  await expect(page.getByRole('status')).toContainText(expectedNotice, { timeout: 20_000 })
+  await expectServerReply(page, expectedNotice)
 }

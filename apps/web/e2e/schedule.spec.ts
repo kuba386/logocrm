@@ -61,7 +61,12 @@ test('1. Накладку не пускают оба слоя: интерфей�
   })
   await page.getByRole('button', { name: 'Создать' }).click()
 
-  await expect(page.getByRole('alert')).toContainText(/специалист уже занят/i)
+  // Фильтр по тексту обязателен: у Next.js есть свой пустой
+  // <div role="alert" id="__next-route-announcer__">, и голый getByRole
+  // упирается в strict mode с двумя элементами.
+  await expect(
+    page.getByRole('alert').filter({ hasText: /пересекается|специалист уже занят/i }),
+  ).toContainText(/специалист уже занят/i)
 
   await openWeek(page, MONDAY)
   expect(await lessonsThisWeek(page)).toBe(1)
