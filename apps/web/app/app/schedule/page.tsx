@@ -63,12 +63,13 @@ export default async function SchedulePage({
       supabase.from('teachers').select('id, full_name').is('deleted_at', null).eq('is_active', true).order('full_name'),
       supabase.from('rooms').select('id, name').is('deleted_at', null).eq('is_active', true).order('name'),
       supabase.from('services').select('id, name, duration_min, kind').is('deleted_at', null).eq('is_active', true).order('name'),
-      canManage
-        ? supabase.from('students').select('id, full_name').is('deleted_at', null).order('full_name')
-        : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
-      canManage
-        ? supabase.from('groups').select('id, name').is('deleted_at', null).eq('is_active', true).order('name')
-        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      // Ученики и группы нужны всем ролям — из них собирается заголовок
+      // карточки. Раньше запрос шёл только для owner/admin, и специалист
+      // видел «11:00 Занятие» без имени ребёнка. Границы держит RLS:
+      // students_teacher_read_own отдаёт специалисту только его учеников,
+      // students_parent_read_own — родителю только его детей.
+      supabase.from('students').select('id, full_name').is('deleted_at', null).order('full_name'),
+      supabase.from('groups').select('id, name').is('deleted_at', null).eq('is_active', true).order('name'),
     ])
 
   const teacherNames = new Map((teachers ?? []).map((t) => [t.id, t.full_name]))

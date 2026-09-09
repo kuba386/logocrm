@@ -24,7 +24,12 @@ for (const role of ROLES) {
     // Ждём именно ухода с /login: успешный вход перекидывает внутрь /app.
     // Проверка «нет сообщения об ошибке» здесь не годится — она проходит и
     // на странице, которая просто ещё не ответила.
-    await expect(page).toHaveURL(/\/app(\/|$)/, { timeout: 20_000 })
+    //
+    // Путь заякорен сразу после хоста. Незаякоренная регулярка совпадала и
+    // с /login?next=/app — туда middleware возвращает при несохранившейся
+    // сессии, и setup «проходил», записывая пустой storageState. Падение
+    // тогда уезжало в другие тесты с невнятным «heading не найден».
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/app(\/|$)/, { timeout: 20_000 })
 
     await page.context().storageState({ path: `e2e/.auth/${role.name}.json` })
   })

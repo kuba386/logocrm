@@ -178,8 +178,11 @@ export function LessonPanel({
               <form action={substituteAction} className="space-y-3">
                 <input type="hidden" name="lessonId" value={lesson.id} />
                 <div className="space-y-1">
-                  <Label htmlFor="teacherId">Кто проведёт вместо</Label>
-                  <Select id="teacherId" name="teacherId" required>
+                  {/* id отличается от teacherId в диалоге создания: оба
+                      живут на одной странице, а дубль id ломает связь label
+                      с полем — getByLabel и скринридер уходят в чужой селект. */}
+                  <Label htmlFor="substituteTeacherId">Кто проведёт вместо</Label>
+                  <Select id="substituteTeacherId" name="teacherId" required>
                     {teachers.map((teacher) => (
                       <option key={teacher.id} value={teacher.id}>
                         {teacher.fullName}

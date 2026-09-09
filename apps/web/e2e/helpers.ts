@@ -21,6 +21,9 @@ export async function openWeek(page: Page, isoDate: string) {
 
 export type LessonForm = {
   service: string
+  /** Специалист выбирается всегда явно: диалог по умолчанию берёт первого
+   *  по алфавиту, и в фикстуре это Айгуль, а не Нургуль. */
+  teacher: string
   student: string
   room?: string
   firstDay: string
@@ -40,6 +43,7 @@ export async function fillLessonDialog(page: Page, form: LessonForm) {
   await page.getByRole('button', { name: 'Добавить занятие' }).click()
 
   await selectWithOption(page, form.service).selectOption({ label: form.service })
+  await page.getByLabel('Специалист', { exact: true }).selectOption({ label: form.teacher })
   await selectWithOption(page, form.student).selectOption({ label: form.student })
 
   if (form.room) {
@@ -64,4 +68,25 @@ export function lessonCard(page: Page, time: string, student: string): Locator {
 export async function lessonsThisWeek(page: Page): Promise<number> {
   const text = await page.getByText(/Занятий на неделе: \d+/).innerText()
   return Number(text.match(/(\d+)/)![1])
+}
+
+/**
+ * Отправляет диалог создания и ждёт ответа сервера.
+ *
+ * Ждать закрытия диалога нельзя: после успеха он остаётся открытым и лишь
+ * показывает уведомление. И уходить со страницы сразу после click() тоже
+ * нельзя — server action ещё выполняется, переход прервал бы запрос, а тест
+ * упал бы позже на счётчике занятий, где причина уже не видна.
+ *
+ * Уведомление — единственный признак, что сервер ответил успехом.
+ */
+export async function submitLessonDialog(page: Page, expectedNotice: string | RegExp) {
+  await page.getByRole('button', { name: 'Создать' }).click()
+  await expect(page.getByRole('status')).toContainText(expectedNotice, { timeout: 20_000 })
+}
+
+/** Нажимает кнопку действия и ждёт уведомления сервера — та же причина. */
+export async function actAndAwait(page: Page, button: string | RegExp, expectedNotice: string | RegExp) {
+  await page.getByRole('button', { name: button }).click()
+  await expect(page.getByRole('status')).toContainText(expectedNotice, { timeout: 20_000 })
 }

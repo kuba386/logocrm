@@ -33,6 +33,11 @@ export default defineConfig({
 
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+
+    // В CI — Chromium из комплекта Playwright. На машине разработки его нет:
+    // Playwright не собирает Chromium под macOS 13. Там задаётся
+    // E2E_CHANNEL=chrome, и тесты идут в системном Google Chrome.
+    ...(process.env.E2E_CHANNEL ? { channel: process.env.E2E_CHANNEL } : {}),
   },
 
   projects: [

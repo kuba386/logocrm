@@ -128,27 +128,47 @@ jobs:
 
       # Фикстура отдельно от seed.sql: seed намеренно оставляет центр
       # несозданным, чтобы проверять онбординг, а приёмке нужен готовый центр.
-      - name: Фикстура для приёмки
+      # Имена ключей в выводе status между версиями CLI не гарантированы,
+      # поэтому берём первый подошедший из нескольких написаний и падаем с
+      # понятным текстом, если не нашли ни одного. Молчаливо пустая
+      # переменная привела бы к падению на сборке, где причина уже не видна.
+      - name: Переменные локального стека
         working-directory: packages/db
         run: |
-          DB_URL=$(supabase status --output json | node -e \
-            'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).DB_URL))')
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/fixtures/e2e.sql
+          supabase status --output json > /tmp/supabase-status.json
+          node -e '
+            const s = JSON.parse(require("fs").readFileSync("/tmp/supabase-status.json", "utf8"))
+            const pick = (names) => {
+              for (const n of names) if (s[n]) return s[n]
+              throw new Error(
+                `не найден ни один из ключей ${names.join(", ")}; доступны: ${Object.keys(s).join(", ")}`,
+              )
+            }
+            const out = {
+              E2E_DB_URL: pick(["DB_URL", "DB_URL_POSTGRES", "DbUrl"]),
+              NEXT_PUBLIC_SUPABASE_URL: pick(["API_URL", "ApiUrl"]),
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: pick(["ANON_KEY", "PUBLISHABLE_KEY", "AnonKey"]),
+            }
+            require("fs").appendFileSync(
+              process.env.GITHUB_ENV,
+              Object.entries(out).map(([k, v]) => `${k}=${v}`).join("\n") + "\n",
+            )
+          '
+
+      # Фикстура отдельно от seed.sql: seed намеренно оставляет центр
+      # несозданным, чтобы проверять онбординг, а приёмке нужен готовый центр.
+      - name: Фикстура для приёмки
+        working-directory: packages/db
+        run: psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -f supabase/fixtures/e2e.sql
 
       # Ключи локального стека фиксированные и публичные — это не секреты.
       - name: Переменные окружения приложения
-        working-directory: packages/db
         run: |
-          node -e '
-            const { execSync } = require("child_process");
-            const s = JSON.parse(execSync("supabase status --output json").toString());
-            const lines = [
-              `NEXT_PUBLIC_SUPABASE_URL=${s.API_URL}`,
-              `NEXT_PUBLIC_SUPABASE_ANON_KEY=${s.ANON_KEY}`,
-              "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000",
-            ];
-            require("fs").writeFileSync(`${process.env.GITHUB_WORKSPACE}/apps/web/.env.local`, lines.join("\n") + "\n");
-          '
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"
+          } > apps/web/.env.local
 
       - name: Сборка приложения
         run: pnpm --filter @logocrm/web build

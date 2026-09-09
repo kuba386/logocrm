@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { MONDAY, MONTH_END, ROOM, SERVICES, STUDENTS, TEACHERS, WEDNESDAY } from './fixtures'
-import { fillLessonDialog, lessonCard, lessonsThisWeek, openWeek } from './helpers'
+import { actAndAwait, fillLessonDialog, lessonCard, lessonsThisWeek, openWeek, submitLessonDialog } from './helpers'
 
 // Пункты 1–4 чек-листа приёмки этапа 3 (docs/Roadmap/stages.md).
 //
@@ -17,14 +17,16 @@ test('1. Накладку не пускают оба слоя: интерфей�
 
   await fillLessonDialog(page, {
     service: SERVICES.individual,
+    teacher: TEACHERS.nurgul,
     student: STUDENTS.ailin,
     room: ROOM,
     firstDay: MONDAY,
     time: '10:00',
     weekdays: ['Пн'],
   })
-  await page.getByRole('button', { name: 'Создать' }).click()
+  await submitLessonDialog(page, 'Занятие создано')
 
+  await openWeek(page, MONDAY)
   await expect(lessonCard(page, '10:00', STUDENTS.ailin)).toBeVisible()
   expect(await lessonsThisWeek(page)).toBe(1)
 
@@ -35,6 +37,7 @@ test('1. Накладку не пускают оба слоя: интерфей�
   // именно поймано — занятость специалиста или занятость комнаты.
   await fillLessonDialog(page, {
     service: SERVICES.individual,
+    teacher: TEACHERS.nurgul,
     student: STUDENTS.daniyar,
     firstDay: MONDAY,
     time: '10:30',
@@ -50,6 +53,7 @@ test('1. Накладку не пускают оба слоя: интерфей�
   // предпросмотр сбрасывается и кнопка снова активна.
   await fillLessonDialog(page, {
     service: SERVICES.individual,
+    teacher: TEACHERS.nurgul,
     student: STUDENTS.daniyar,
     firstDay: MONDAY,
     time: '10:30',
@@ -68,13 +72,14 @@ test('2. Серия создаётся целиком, отменяется с �
 
   await fillLessonDialog(page, {
     service: SERVICES.individual,
+    teacher: TEACHERS.nurgul,
     student: STUDENTS.ailin,
     firstDay: WEDNESDAY,
     until: MONTH_END,
     time: '11:00',
     weekdays: ['Ср', 'Пт'],
   })
-  await page.getByRole('button', { name: 'Создать' }).click()
+  await submitLessonDialog(page, 'Создано занятий: 9')
 
   // Первая неделя: понедельничное занятие из теста 1 плюс среда и пятница.
   await openWeek(page, MONDAY)
@@ -87,7 +92,7 @@ test('2. Серия создаётся целиком, отменяется с �
   await lessonCard(page, '11:00', STUDENTS.ailin).click()
   await page.getByRole('button', { name: 'Отменить', exact: true }).click()
   await page.getByPlaceholder('Причина отмены серии').fill('Переезд семьи')
-  await page.getByRole('button', { name: 'Отменить серию с этого дня' }).click()
+  await actAndAwait(page, 'Отменить серию с этого дня', 'Отменено занятий: 5')
 
   await openWeek(page, '2027-03-15')
   await lessonCard(page, '11:00', STUDENTS.ailin).click()
@@ -108,10 +113,13 @@ test('3. Замена специалиста передаёт занятие д�
   await page.getByRole('button', { name: 'Заменить специалиста' }).click()
 
   await page.getByLabel('Кто проведёт вместо').selectOption({ label: TEACHERS.aigul })
-  await page.getByRole('button', { name: 'Назначить' }).click()
+  await actAndAwait(page, 'Назначить', 'Замена назначена')
 
+  // Проверяем карточку, а не первый попавшийся текст на странице: getByText
+  // нашёл бы <option> с тем же именем в фильтре. Пометка «(замена)» отличает
+  // замену от простой переустановки специалиста.
   await openWeek(page, MONDAY)
-  await expect(page.getByText(TEACHERS.aigul).first()).toBeVisible()
+  await expect(lessonCard(page, '10:00', STUDENTS.ailin)).toContainText(`${TEACHERS.aigul} (замена)`)
 })
 
 test('4. Отпуск отменяет занятия и показывает предпросмотр', async ({ page }) => {
@@ -121,15 +129,15 @@ test('4. Отпуск отменяет занятия и показывает п
   // у владельца и администратора карточки специалиста нет.
   await page.getByRole('button', { name: 'Отпуск' }).first().click()
 
-  await page.getByLabel('С').fill(MONDAY)
-  await page.getByLabel('По').fill('2027-03-07')
+  await page.getByLabel('С', { exact: true }).fill(MONDAY)
+  await page.getByLabel('По', { exact: true }).fill('2027-03-07')
 
   // Предпросмотр обязателен по спеке: администратор видит список до того,
   // как что-то отменится.
   await page.getByRole('button', { name: 'Показать, что отменится' }).click()
   await expect(page.getByText(/Будет отменено занятий: 3/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Оформить отпуск' }).click()
+  await actAndAwait(page, 'Оформить отпуск', 'Отменено занятий: 3')
 
   // Занятие с заменой тоже отменяется: отпускник остаётся в нём основным
   // специалистом, и teacher_vacation смотрит на обе колонки.

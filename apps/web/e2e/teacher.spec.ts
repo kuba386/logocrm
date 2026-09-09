@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { STUDENTS } from './fixtures'
-import { lessonCard, openWeek } from './helpers'
+import { actAndAwait, lessonCard, lessonsThisWeek, openWeek } from './helpers'
 
 // Пункт 5 чек-листа: специалист видит только своё, отмечает занятие
 // проведённым, создавать не может.
@@ -21,18 +21,24 @@ test('5. Специалист не может создавать занятия 
 
   await expect(page.getByRole('button', { name: 'Добавить занятие' })).toHaveCount(0)
 
-  // Занятие ведёт второй специалист — в расписании Нургуль его быть не должно.
-  await expect(page.getByText(STUDENTS.foreign)).toHaveCount(0)
-
-  // Своё при этом видно: иначе тест прошёл бы и при полностью закрытом доступе.
+  // Своё видно, и с именем ребёнка: иначе тест прошёл бы и при полностью
+  // закрытом доступе, а без имени специалист не знает, к кому идёт.
   await expect(lessonCard(page, '11:00', STUDENTS.ailin)).toBeVisible()
+
+  // Занятие чужого ребёнка (09:00 у второго специалиста) в расписании
+  // Нургуль отсутствует как карточка. Проверка по имени здесь не годится:
+  // имя чужого ребёнка скрыто политикой students и не появилось бы на
+  // карточке, даже если бы политика lessons пропустила само занятие.
+  await expect(page.locator('button', { hasText: '09:00' })).toHaveCount(0)
+  expect(await lessonsThisWeek(page)).toBe(2)
 })
 
 test('5б. Специалист отмечает занятие проведённым', async ({ page }) => {
   await openWeek(page, TEACHER_WEEK)
 
   await lessonCard(page, '11:00', STUDENTS.ailin).click()
-  await page.getByRole('button', { name: 'Провёл' }).click()
-
-  await expect(page.getByText('Проведено')).toBeVisible()
+  // Ждём уведомление сервера, а не появление слова «Проведено» где угодно:
+  // это же слово есть в подписи статуса, и ассерт мог бы сработать на
+  // ещё не обновившейся панели.
+  await actAndAwait(page, 'Провёл', 'Занятие проведено')
 })
