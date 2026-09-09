@@ -136,7 +136,9 @@ jobs:
       # файлах» нужна больше всего. Без неё в логе остаётся только сырой
       # текст CLI.
       - name: Состояние после применения
-        if: always()
+        # Но не тогда, когда строка так и не собралась: без DB_URL этот шаг
+        # лишь добавил бы вторую ошибку поверх первой.
+        if: always() && env.DB_URL != ''
         working-directory: packages/db
         run: supabase migration list --db-url "$DB_URL"
 
