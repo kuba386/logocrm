@@ -28,47 +28,78 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Секрет даёт доступ к одной базе, и ошибиться проектом легко: в том же
-      # аккаунте Supabase рядом живёт старый logoped-crm с боевыми данными
-      # детей. Строка подключения туда уже уезжала однажды, и от применения
-      # миграций LogoCRM поверх боевой базы спасло только то, что прямой хост
-      # отвечает по IPv6, а раннер ходит по IPv4. Полагаться на это нельзя.
+      # Строку подключения собирает workflow, а секретом остаётся только
+      # пароль. Так исчезают все четыре ошибки, на которых этот деплой уже
+      # спотыкался: чужой проект, имя пользователя без ref, Direct connection
+      # вместо пулера и непроцентованный пароль. Ref и хост — не секреты, они
+      # и так лежат в репозитории.
       #
-      # Сама строка нигде не печатается: сравнение идёт через case, ref
-      # проекта секретом не является — он и так лежит в репозитории.
-      - name: Строка подключения ведёт в staging LogoCRM
+      # SUPABASE_DB_URL поддерживается как запасной путь: если он задан, берём
+      # его, но проверяем, что он ведёт в нужный проект. В том же аккаунте
+      # Supabase рядом живёт старый logoped-crm с боевыми данными детей, и
+      # строка туда уже уезжала однажды — от применения миграций LogoCRM
+      # поверх боевой базы спасло лишь то, что прямой хост отвечает по IPv6,
+      # а раннер ходит по IPv4. Полагаться на это нельзя.
+      - name: Собрать строку подключения
         env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           EXPECTED_REF: hiwstqrnxrlfuanvfggq
+          POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::Секрет SUPABASE_DB_URL пуст или недоступен. Он должен лежать в Environments → staging."
+          set -u
+
+          if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+            # Пароль кодируется целиком: спецсимволы из генератора Supabase
+            # иначе рвут URL по '@' или '#', и до сервера уезжает мусор.
+            ENCODED=$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+
+            # Если переменная не доехала до подпроцесса, encodeURIComponent
+            # вернёт строку "undefined", и мы бы молча пошли подключаться с
+            # ней вместо пароля. Ошибка была бы 28P01 — неотличимо от
+            # «владелец ввёл не тот пароль».
+            if [ -z "$ENCODED" ] || [ "$ENCODED" = "undefined" ]; then
+              echo "::error::Пароль не доехал до шага сборки строки. Проверьте, что секрет называется SUPABASE_DB_PASSWORD и лежит в Environments → staging."
+              exit 1
+            fi
+
+            URL="postgresql://postgres.${EXPECTED_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
+            # Закодированный пароль не совпадает с секретом посимвольно, и
+            # автоматическая маскировка его бы не поймала.
+            echo "::add-mask::$ENCODED"
+            echo "::add-mask::$URL"
+            echo "Строка собрана из пароля: проект $EXPECTED_REF, Session pooler."
+
+          elif [ -n "${SUPABASE_DB_URL:-}" ]; then
+            # Ref вытаскиваем только из структурных позиций — из имени
+            # пользователя до двоеточия и из хоста после собаки. Поле пароля
+            # лежит между ними и под шаблон не попадает, так что напечатать
+            # кусок секрета эта строка не может.
+            DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
+              | grep -oE '(postgres\.[a-z]{20}:|@db\.[a-z]{20}\.supabase\.co)' \
+              | grep -oE '[a-z]{20}' | head -1)
+
+            case "$SUPABASE_DB_URL" in
+              *"$EXPECTED_REF"*)
+                echo "Взята готовая строка: проект $EXPECTED_REF — верный." ;;
+              *)
+                echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются."
+                exit 1 ;;
+            esac
+
+            case "$SUPABASE_DB_URL" in
+              *db.*.supabase.co*)
+                echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — нужен Session pooler на порту 5432." ;;
+            esac
+
+            URL="$SUPABASE_DB_URL"
+
+          else
+            echo "::error::Нет ни SUPABASE_DB_PASSWORD, ни SUPABASE_DB_URL. Достаточно первого: положите пароль базы в Environments → staging, строку соберёт сам workflow."
             exit 1
           fi
 
-          # Ref вытаскиваем только из структурных позиций — из имени
-          # пользователя до двоеточия и из хоста после собаки. Поле пароля
-          # лежит между ними и под шаблон не попадает, так что напечатать
-          # кусок секрета эта строка не может.
-          DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
-            | grep -oE '(postgres\.[a-z]{20}:|@db\.[a-z]{20}\.supabase\.co)' \
-            | grep -oE '[a-z]{20}' | head -1)
-
-          case "$SUPABASE_DB_URL" in
-            *"$EXPECTED_REF"*)
-              echo "Проект $EXPECTED_REF — верный, продолжаем."
-              ;;
-            *)
-              echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются. Секрет лежит в Environments → staging; значение оттуда перекрывает Repository secrets."
-              exit 1
-              ;;
-          esac
-
-          case "$SUPABASE_DB_URL" in
-            *db.*.supabase.co*)
-              echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — используйте Session pooler на порту 5432."
-              ;;
-          esac
+          echo "DB_URL=$URL" >> "$GITHUB_ENV"
 
       - uses: supabase/setup-cli@v1
         with:
@@ -76,23 +107,17 @@ jobs:
 
       # Работаем по строке подключения, без supabase link.
       #
-      # Так нужен один секрет вместо двух, и это доступ к одной базе, а не
-      # токен ко всему аккаунту Supabase — таким можно удалить любой проект
-      # организации, включая боевой logoped-crm.
+      # Так это доступ к одной базе, а не токен ко всему аккаунту Supabase —
+      # таким можно удалить любой проект организации, включая боевой
+      # logoped-crm. DB_URL собран предыдущим шагом и замаскирован в логах.
       - name: Что будет применено
         working-directory: packages/db
-        run: supabase migration list --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase migration list --db-url "$DB_URL"
 
       - name: Применить миграции
         working-directory: packages/db
-        run: supabase db push --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase db push --db-url "$DB_URL"
 
       - name: Состояние после применения
         working-directory: packages/db
-        run: supabase migration list --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase migration list --db-url "$DB_URL"
