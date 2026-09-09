@@ -1,9 +1,9 @@
 name: Deploy staging
 
-# Катит миграции в staging. Вызывается из CI джобом с `needs: [db]` — то
-# есть деплой физически не может опередить pgTAP. Правило «схема только
-# через зелёный db-джоб» держится зависимостью между джобами, а не
-# дисциплиной.
+# Катит миграции в staging. Вызывается из CI джобом с `needs: [db, app]` —
+# то есть деплой физически не может опередить ни pgTAP, ни Vitest-зеркала
+# SQL-логики. Правило «схема только через зелёный db-джоб» держится
+# зависимостью между джобами, а не дисциплиной.
 #
 # Раньше связка шла через workflow_run по успеху ВСЕГО workflow CI. После
 # появления приёмочных тестов это означало бы, что красный Playwright
@@ -23,10 +23,22 @@ jobs:
   migrate:
     name: Миграции в staging
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: staging
+    # Ручной запуск разрешён только с main. Иначе workflow_dispatch — единственный
+    # путь в обход needs: [db]: миграции с любой ветки уехали бы в общий staging,
+    # ни разу не пройдя pgTAP.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
+
+      # Стороннее действие ставится ДО того, как в окружении джоба появится
+      # строка подключения: GITHUB_ENV виден всем последующим шагам, включая
+      # чужой код. До переделки секрет был приклеен к конкретным шагам.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
 
       # Строку подключения собирает workflow, а секретом остаётся только
       # пароль. Так исчезают все четыре ошибки, на которых этот деплой уже
@@ -76,16 +88,16 @@ jobs:
             # лежит между ними и под шаблон не попадает, так что напечатать
             # кусок секрета эта строка не может.
             DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
-              | grep -oE '(postgres\.[a-z]{20}:|@db\.[a-z]{20}\.supabase\.co)' \
-              | grep -oE '[a-z]{20}' | head -1)
+              | grep -oE '(postgres\.[a-z0-9]{20}:|@db\.[a-z0-9]{20}\.supabase\.co)' \
+              | grep -oE '[a-z0-9]{20}' | head -1)
 
-            case "$SUPABASE_DB_URL" in
-              *"$EXPECTED_REF"*)
-                echo "Взята готовая строка: проект $EXPECTED_REF — верный." ;;
-              *)
-                echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются."
-                exit 1 ;;
-            esac
+            # Сравниваем разобранный ref, а не ищем подстроку по всей строке:
+            # ref мог бы встретиться в пароле или имени базы и пройти гейт.
+            if [ "$DETECTED" != "$EXPECTED_REF" ]; then
+              echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются."
+              exit 1
+            fi
+            echo "Взята готовая строка: проект $EXPECTED_REF — верный."
 
             case "$SUPABASE_DB_URL" in
               *db.*.supabase.co*)
@@ -101,10 +113,6 @@ jobs:
 
           echo "DB_URL=$URL" >> "$GITHUB_ENV"
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: 2.116.0
-
       # Работаем по строке подключения, без supabase link.
       #
       # Так это доступ к одной базе, а не токен ко всему аккаунту Supabase —
@@ -112,12 +120,21 @@ jobs:
       # logoped-crm. DB_URL собран предыдущим шагом и замаскирован в логах.
       - name: Что будет применено
         working-directory: packages/db
-        run: supabase migration list --db-url "$DB_URL"
+        run: supabase db push --dry-run --db-url "$DB_URL"
 
       - name: Применить миграции
         working-directory: packages/db
         run: supabase db push --db-url "$DB_URL"
 
+      # always(): при падении push картина «что в базе против того, что в
+      # файлах» нужна больше всего. Без неё в логе остаётся только сырой
+      # текст CLI.
       - name: Состояние после применения
+        if: always()
         working-directory: packages/db
         run: supabase migration list --db-url "$DB_URL"
+
+      - name: Если история миграций разошлась
+        if: failure()
+        run: |
+          echo "::error::История миграций в staging разошлась с файлами в репозитории. Смотрите таблицу шага «Состояние после применения»: версия в колонке Remote без пары в Local — её применяли руками не из этой ветки. Чинится не правкой базы, а тем, чтобы файл миграции оказался в main."

@@ -17,6 +17,7 @@ jobs:
   app:
     name: Приложение (lint, typecheck, tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +46,7 @@ jobs:
   db:
     name: База данных (миграции + pgTAP)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -101,15 +103,21 @@ jobs:
         working-directory: packages/db
         run: supabase stop --no-backup
 
-  # Деплой зависит от db и ни от чего больше: pgTAP проверяет схему и права,
-  # и пока он не зелёный, миграция до базы не доходит. Приёмка (e2e ниже) в
-  # зависимости не входит намеренно — она про интерфейс, а не про схему.
+  # Деплой зависит от db и app. pgTAP проверяет схему и права; в app крутится
+  # Vitest с зеркалами SQL-логики — расхождение календаря серии между SQL и
+  # TypeScript тоже не должно доехать до базы. Приёмка (e2e ниже) в
+  # зависимости не входит намеренно: она про интерфейс, а не про схему.
   #
   # Только push в main: на pull_request джоб не запускается вовсе, иначе
   # ветка катила бы миграции в общий staging.
-  deploy-staging:
-    name: Миграции в staging
-    needs: [db]
+  #
+  # Главный выигрыш переезда из workflow_run сюда — не скорость. В контексте
+  # workflow_run checkout брал верхушку main, а не коммит, который проверял
+  # pgTAP: между зелёным прогоном и деплоем мог проскочить ещё один пуш, и
+  # деплой применял непроверенные миграции. Здесь checkout берёт тот же SHA.
+  schema:
+    name: Схема
+    needs: [db, app]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/deploy-staging.yml
     secrets: inherit
@@ -117,6 +125,7 @@ jobs:
   e2e:
     name: Приёмка (Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -203,6 +212,8 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+          # Если джоб упал до запуска тестов, каталога нет — это не ошибка.
+          if-no-files-found: ignore
 
       - name: Остановка Supabase
         if: always()

@@ -12,8 +12,13 @@ export default defineConfig({
   workers: 1,
 
   forbidOnly: !!process.env.CI,
-  retries: 0,
-  timeout: 30_000,
+
+  // На холодном раннере один сценарий делает до трёх заполнений диалога с
+  // перезагрузкой и ждёт несколько ответов сервера — 30 секунд там мало.
+  // Один повтор безопасен: файлы объявлены serial, и Playwright перезапускает
+  // цепочку с начала, а не отдельный тест посреди накопленного состояния.
+  retries: process.env.CI ? 1 : 0,
+  timeout: process.env.CI ? 90_000 : 30_000,
   expect: { timeout: 10_000 },
 
   reporter: process.env.CI
@@ -58,7 +63,10 @@ export default defineConfig({
     {
       name: 'parent',
       testMatch: /parent\.spec\.ts/,
-      dependencies: ['setup', 'admin'],
+      // После teacher, а не рядом с ним: оба читают одну неделю фикстуры, и
+      // teacher её мутирует (отмечает занятие проведённым). Порядок соседей
+      // Playwright не гарантирует — задаём явно.
+      dependencies: ['setup', 'admin', 'teacher'],
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/parent.json' },
     },
   ],
