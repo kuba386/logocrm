@@ -1,0 +1,179 @@
+-- pgTAP: кому разрешено исполнять функции в public.
+-- Запуск: pnpm db:test   (supabase test db)
+--
+-- CLAUDE.md отмечает, что pgTAP ходит от роли authenticated и грантов не
+-- проверяет. Здесь это обходится: has_function_privilege принимает имя роли
+-- аргументом, переключаться на неё не нужно.
+--
+-- Тест появился после того, как линтер Supabase нашёл в 0006 четыре
+-- служебные функции, открытые роли authenticated: `revoke ... from public,
+-- anon` не снимает грант, который Supabase выдаёт authenticated по
+-- умолчанию.
+
+begin;
+
+create extension if not exists pgtap with schema extensions;
+set search_path = public, extensions;
+
+select * from no_plan();
+
+
+-- 1. Четыре функции из 0007 закрыты для всех прикладных ролей ------------------
+
+select ok(
+  not has_function_privilege(role_name, func, 'EXECUTE'),
+  format('%s не может исполнять %s', role_name, func)
+)
+from unnest(array[
+  'public.rebuild_lesson_participants(uuid)',
+  'public.lessons_participants_trigger()',
+  'public.group_students_participants_trigger()',
+  'public.lesson_slot_conflicts(uuid, uuid, uuid, uuid, uuid, timestamptz, timestamptz, uuid)'
+]) as func,
+unnest(array['public', 'anon', 'authenticated']) as role_name;
+
+
+-- 2. Забор: что вообще доступно каждой роли -----------------------------------
+
+-- Смысл не в проверке текущего состояния, а в том, что любая новая функция
+-- в будущей миграции ломает тест, пока автор явно не решит, кому она видна.
+-- Фильтр по pg_depend отсекает функции расширений — иначе набор поедет от
+-- смены версии Postgres.
+
+select is_empty(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prokind in ('f','p')
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+        and has_function_privilege('public', p.oid, 'EXECUTE') $$,
+  'Роль PUBLIC не исполняет ни одной функции в public'
+);
+
+select set_eq(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prokind in ('f','p')
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+        and has_function_privilege('anon', p.oid, 'EXECUTE') $$,
+  $$ values ('invitation_preview(text)') $$,
+  'anon исполняет только invitation_preview — единственную функцию до входа'
+);
+
+select set_eq(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prokind in ('f','p')
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+        and has_function_privilege('authenticated', p.oid, 'EXECUTE') $$,
+  $$ values
+    ('accept_invitation(text)'),
+    ('age_years(date)'),
+    ('archive_student(uuid)'),
+    ('cancel_lesson(uuid,text)'),
+    ('cancel_series_from(uuid,date,text)'),
+    ('center_timezone(uuid)'),
+    ('change_member_role(uuid,text)'),
+    ('create_center(text,text)'),
+    ('create_invitation(text,text,text,text,uuid)'),
+    ('create_lesson_series(jsonb)'),
+    ('create_lesson_series_preview(jsonb)'),
+    ('create_student_with_payer(text,uuid,text,text,text,date,text,uuid,text,text)'),
+    ('current_center()'),
+    ('emit_event(text,jsonb,uuid)'),
+    ('find_payer_by_phone(text)'),
+    ('has_feature(text)'),
+    ('invitation_preview(text)'),
+    ('is_member(uuid)'),
+    ('mark_lesson_status(uuid,text,text)'),
+    ('my_payer_id()'),
+    ('my_role()'),
+    ('my_teacher_id()'),
+    ('normalize_kg_phone(text)'),
+    ('parent_of_lesson(uuid)'),
+    ('parent_of_student(uuid)'),
+    ('payer_display_name(uuid)'),
+    ('reschedule_lesson(uuid,timestamp with time zone,timestamp with time zone)'),
+    ('restore_student(uuid)'),
+    ('revoke_membership(uuid)'),
+    ('role_in(uuid)'),
+    ('series_dates(jsonb)'),
+    ('substitute_teacher(uuid,uuid)'),
+    ('switch_center(uuid)'),
+    ('teacher_of_lesson(uuid)'),
+    ('teacher_teaches_student(uuid)'),
+    ('teacher_vacation(uuid,date,date)'),
+    ('teacher_vacation_preview(uuid,date,date)'),
+    ('user_email(uuid)'),
+    ('was_access_revoked()')
+  $$,
+  'authenticated исполняет только функции из белого списка'
+);
+
+
+-- 3. Триггер жив после снятия грантов ------------------------------------------
+
+-- Прямое доказательство того, что revoke не сломал состав участников:
+-- вложенный вызов проходит, потому что триггерные функции security definer
+-- и внутри них current_user = postgres, владелец функции.
+
+insert into auth.users (instance_id, id, aud, role, email)
+values ('00000000-0000-0000-0000-000000000000', '11111111-1111-1111-1111-111111111111',
+        'authenticated', 'authenticated', 'grants-owner@test.kg');
+
+insert into public.centers (id, name, slug, settings)
+values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Центр прав', 'centr-prav', '{}'::jsonb);
+
+insert into public.memberships (user_id, center_id, role)
+values ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'owner');
+
+insert into public.teachers (id, center_id, full_name)
+values ('cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Специалист');
+
+insert into public.payers (id, center_id, full_name, phone)
+values ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Родитель', '+996700000001');
+
+insert into public.students (id, center_id, full_name, payer_id)
+values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Ребёнок',
+        'dddddddd-dddd-dddd-dddd-dddddddddddd');
+
+create or replace function public.tests_claims(p_user uuid, p_center uuid)
+  returns void language plpgsql as $$
+begin
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', p_user, 'role', 'authenticated',
+                      'app_metadata', json_build_object('center_id', p_center))::text,
+    true
+  );
+end;
+$$;
+
+select public.tests_claims('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+set local role authenticated;
+
+insert into public.lessons (id, teacher_id, student_id, starts_at, ends_at)
+values ('ffffffff-ffff-ffff-ffff-ffffffffffff',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
+        'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        '2026-10-05 10:00:00+06', '2026-10-05 10:45:00+06');
+
+select is(
+  (select count(*) from public.lesson_participants
+    where lesson_id = 'ffffffff-ffff-ffff-ffff-ffffffffffff')::int,
+  1,
+  'Триггер состава сработал, несмотря на снятые гранты'
+);
+
+select throws_ok(
+  $q$ select public.rebuild_lesson_participants('ffffffff-ffff-ffff-ffff-ffffffffffff') $q$,
+  '42501',
+  null,
+  'Прямой вызов rebuild_lesson_participants отбивается'
+);
+
+reset role;
+
+
+select * from finish();
+
+rollback;
