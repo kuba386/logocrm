@@ -1,16 +1,24 @@
 name: Deploy staging
 
-# Катит миграции в staging после того, как CI на main отработал успешно.
+# Катит миграции в staging. Вызывается из CI джобом с `needs: [db, app]` —
+# то есть деплой физически не может опередить ни pgTAP, ни Vitest-зеркала
+# SQL-логики. Правило «схема только через зелёный db-джоб» держится
+# зависимостью между джобами, а не дисциплиной.
 #
-# Привязка к workflow_run, а не к push — намеренно: так деплой физически
-# не может опередить pgTAP. Правило «схема только через зелёный db-джоб»
-# держится зависимостью между workflow, а не дисциплиной.
+# Раньше связка шла через workflow_run по успеху ВСЕГО workflow CI. После
+# появления приёмочных тестов это означало бы, что красный Playwright
+# останавливает выкладку корректной схемы. pgTAP проверяет схему и права,
+# Playwright — интерфейс: сломанный интерфейс не повод не катить проверенную
+# миграцию. Приёмка при этом остаётся обязательной для мержа, так что до
+# main такой код всё равно не доходит.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
+
+# GITHUB_TOKEN только на чтение: ни один шаг не пишет в репозиторий, а дефолт
+# на репозитории может быть write.
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-staging
@@ -20,77 +28,123 @@ jobs:
   migrate:
     name: Миграции в staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15
     environment: staging
+    # Ручной запуск разрешён только с main. Иначе workflow_dispatch — единственный
+    # путь в обход needs: [db]: миграции с любой ветки уехали бы в общий staging,
+    # ни разу не пройдя pgTAP.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
 
-      # Секрет даёт доступ к одной базе, и ошибиться проектом легко: в том же
-      # аккаунте Supabase рядом живёт старый logoped-crm с боевыми данными
-      # детей. Строка подключения туда уже уезжала однажды, и от применения
-      # миграций LogoCRM поверх боевой базы спасло только то, что прямой хост
-      # отвечает по IPv6, а раннер ходит по IPv4. Полагаться на это нельзя.
-      #
-      # Сама строка нигде не печатается: сравнение идёт через case, ref
-      # проекта секретом не является — он и так лежит в репозитории.
-      - name: Строка подключения ведёт в staging LogoCRM
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          EXPECTED_REF: hiwstqrnxrlfuanvfggq
-        run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::Секрет SUPABASE_DB_URL пуст или недоступен. Он должен лежать в Environments → staging."
-            exit 1
-          fi
-
-          # Ref вытаскиваем только из структурных позиций — из имени
-          # пользователя до двоеточия и из хоста после собаки. Поле пароля
-          # лежит между ними и под шаблон не попадает, так что напечатать
-          # кусок секрета эта строка не может.
-          DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
-            | grep -oE '(postgres\.[a-z]{20}:|@db\.[a-z]{20}\.supabase\.co)' \
-            | grep -oE '[a-z]{20}' | head -1)
-
-          case "$SUPABASE_DB_URL" in
-            *"$EXPECTED_REF"*)
-              echo "Проект $EXPECTED_REF — верный, продолжаем."
-              ;;
-            *)
-              echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются. Секрет лежит в Environments → staging; значение оттуда перекрывает Repository secrets."
-              exit 1
-              ;;
-          esac
-
-          case "$SUPABASE_DB_URL" in
-            *db.*.supabase.co*)
-              echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — используйте Session pooler на порту 5432."
-              ;;
-          esac
-
+      # Стороннее действие ставится ДО того, как в окружении джоба появится
+      # строка подключения: GITHUB_ENV виден всем последующим шагам, включая
+      # чужой код. До переделки секрет был приклеен к конкретным шагам.
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
 
+      # Строку подключения собирает workflow, а секретом остаётся только
+      # пароль. Так исчезают все четыре ошибки, на которых этот деплой уже
+      # спотыкался: чужой проект, имя пользователя без ref, Direct connection
+      # вместо пулера и непроцентованный пароль. Ref и хост — не секреты, они
+      # и так лежат в репозитории.
+      #
+      # SUPABASE_DB_URL поддерживается как запасной путь: если он задан, берём
+      # его, но проверяем, что он ведёт в нужный проект. В том же аккаунте
+      # Supabase рядом живёт старый logoped-crm с боевыми данными детей, и
+      # строка туда уже уезжала однажды — от применения миграций LogoCRM
+      # поверх боевой базы спасло лишь то, что прямой хост отвечает по IPv6,
+      # а раннер ходит по IPv4. Полагаться на это нельзя.
+      - name: Собрать строку подключения
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          EXPECTED_REF: hiwstqrnxrlfuanvfggq
+          POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
+        run: |
+          set -u
+
+          if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+            # Пароль кодируется целиком: спецсимволы из генератора Supabase
+            # иначе рвут URL по '@' или '#', и до сервера уезжает мусор.
+            ENCODED=$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+
+            # Если переменная не доехала до подпроцесса, encodeURIComponent
+            # вернёт строку "undefined", и мы бы молча пошли подключаться с
+            # ней вместо пароля. Ошибка была бы 28P01 — неотличимо от
+            # «владелец ввёл не тот пароль».
+            if [ -z "$ENCODED" ] || [ "$ENCODED" = "undefined" ]; then
+              echo "::error::Пароль не доехал до шага сборки строки. Проверьте, что секрет называется SUPABASE_DB_PASSWORD и лежит в Environments → staging."
+              exit 1
+            fi
+
+            URL="postgresql://postgres.${EXPECTED_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
+            # Закодированный пароль не совпадает с секретом посимвольно, и
+            # автоматическая маскировка его бы не поймала.
+            echo "::add-mask::$ENCODED"
+            echo "::add-mask::$URL"
+            echo "Строка собрана из пароля: проект $EXPECTED_REF, Session pooler."
+
+          elif [ -n "${SUPABASE_DB_URL:-}" ]; then
+            # Ref вытаскиваем только из структурных позиций — из имени
+            # пользователя до двоеточия и из хоста после собаки. Поле пароля
+            # лежит между ними и под шаблон не попадает, так что напечатать
+            # кусок секрета эта строка не может.
+            DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
+              | grep -oE '(postgres\.[a-z0-9]{20}:|@db\.[a-z0-9]{20}\.supabase\.co)' \
+              | grep -oE '[a-z0-9]{20}' | head -1)
+
+            # Сравниваем разобранный ref, а не ищем подстроку по всей строке:
+            # ref мог бы встретиться в пароле или имени базы и пройти гейт.
+            if [ "$DETECTED" != "$EXPECTED_REF" ]; then
+              echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются."
+              exit 1
+            fi
+            echo "Взята готовая строка: проект $EXPECTED_REF — верный."
+
+            case "$SUPABASE_DB_URL" in
+              *db.*.supabase.co*)
+                echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — нужен Session pooler на порту 5432." ;;
+            esac
+
+            URL="$SUPABASE_DB_URL"
+
+          else
+            echo "::error::Нет ни SUPABASE_DB_PASSWORD, ни SUPABASE_DB_URL. Достаточно первого: положите пароль базы в Environments → staging, строку соберёт сам workflow."
+            exit 1
+          fi
+
+          echo "DB_URL=$URL" >> "$GITHUB_ENV"
+
       # Работаем по строке подключения, без supabase link.
       #
-      # Так нужен один секрет вместо двух, и это доступ к одной базе, а не
-      # токен ко всему аккаунту Supabase — таким можно удалить любой проект
-      # организации, включая боевой logoped-crm.
+      # Так это доступ к одной базе, а не токен ко всему аккаунту Supabase —
+      # таким можно удалить любой проект организации, включая боевой
+      # logoped-crm. DB_URL собран предыдущим шагом и замаскирован в логах.
       - name: Что будет применено
         working-directory: packages/db
-        run: supabase migration list --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase db push --dry-run --db-url "$DB_URL"
 
       - name: Применить миграции
+        id: push
         working-directory: packages/db
-        run: supabase db push --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase db push --db-url "$DB_URL"
 
+      # always(): при падении push картина «что в базе против того, что в
+      # файлах» нужна больше всего. Без неё в логе остаётся только сырой
+      # текст CLI.
       - name: Состояние после применения
+        # Но не тогда, когда строка так и не собралась: без DB_URL этот шаг
+        # лишь добавил бы вторую ошибку поверх первой.
+        if: always() && env.DB_URL != ''
         working-directory: packages/db
-        run: supabase migration list --db-url "$SUPABASE_DB_URL"
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase migration list --db-url "$DB_URL"
+
+      # Только при отказе самого push: если упала сборка строки или dry-run,
+      # эта подсказка увела бы не туда.
+      - name: Если история миграций разошлась
+        if: failure() && steps.push.outcome == 'failure'
+        run: |
+          echo "::error::История миграций в staging разошлась с файлами в репозитории. Смотрите таблицу шага «Состояние после применения»: версия в колонке Remote без пары в Local — её применяли руками не из этой ветки. Чинится не правкой базы, а тем, чтобы файл миграции оказался в main."

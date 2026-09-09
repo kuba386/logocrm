@@ -5,14 +5,24 @@ on:
   push:
     branches: [main]
 
+# GITHUB_TOKEN только на чтение: ни один шаг не пишет в репозиторий, а дефолт
+# на репозитории может быть write.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # На ветках гасим устаревшие прогоны — это экономит минуты раннера.
+  # На main нельзя: там в том же прогоне живёт джоб деплоя, и отмена убила бы
+  # `supabase db push` посреди применения миграций. Второй пуш подряд оставил
+  # бы историю миграций в состоянии, которое потом чинится руками.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   app:
     name: Приложение (lint, typecheck, tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +51,7 @@ jobs:
   db:
     name: База данных (миграции + pgTAP)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +102,123 @@ jobs:
           name: database-types
           path: /tmp/database.types.ts
           retention-days: 7
+
+      - name: Остановка Supabase
+        if: always()
+        working-directory: packages/db
+        run: supabase stop --no-backup
+
+  # Деплой зависит от db и app. pgTAP проверяет схему и права; в app крутится
+  # Vitest с зеркалами SQL-логики — расхождение календаря серии между SQL и
+  # TypeScript тоже не должно доехать до базы. Приёмка (e2e ниже) в
+  # зависимости не входит намеренно: она про интерфейс, а не про схему.
+  #
+  # Только push в main: на pull_request джоб не запускается вовсе, иначе
+  # ветка катила бы миграции в общий staging.
+  #
+  # Главный выигрыш переезда из workflow_run сюда — не скорость. В контексте
+  # workflow_run checkout брал верхушку main, а не коммит, который проверял
+  # pgTAP: между зелёным прогоном и деплоем мог проскочить ещё один пуш, и
+  # деплой применял непроверенные миграции. Здесь checkout берёт тот же SHA.
+  schema:
+    name: Схема
+    needs: [db, app]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-staging.yml
+    secrets: inherit
+
+  e2e:
+    name: Приёмка (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Установка зависимостей
+        run: pnpm install --frozen-lockfile
+
+      - name: Запуск локального Supabase
+        working-directory: packages/db
+        run: supabase start
+
+      # Схема собирается из миграций с нуля — тот же путь, что поедет в prod.
+      - name: Применение миграций
+        working-directory: packages/db
+        run: supabase db reset
+
+      # Фикстура отдельно от seed.sql: seed намеренно оставляет центр
+      # несозданным, чтобы проверять онбординг, а приёмке нужен готовый центр.
+      # Имена ключей в выводе status между версиями CLI не гарантированы,
+      # поэтому берём первый подошедший из нескольких написаний и падаем с
+      # понятным текстом, если не нашли ни одного. Молчаливо пустая
+      # переменная привела бы к падению на сборке, где причина уже не видна.
+      - name: Переменные локального стека
+        working-directory: packages/db
+        run: |
+          supabase status --output json > /tmp/supabase-status.json
+          node -e '
+            const s = JSON.parse(require("fs").readFileSync("/tmp/supabase-status.json", "utf8"))
+            const pick = (names) => {
+              for (const n of names) if (s[n]) return s[n]
+              throw new Error(
+                `не найден ни один из ключей ${names.join(", ")}; доступны: ${Object.keys(s).join(", ")}`,
+              )
+            }
+            const out = {
+              E2E_DB_URL: pick(["DB_URL", "DB_URL_POSTGRES", "DbUrl"]),
+              NEXT_PUBLIC_SUPABASE_URL: pick(["API_URL", "ApiUrl"]),
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: pick(["ANON_KEY", "PUBLISHABLE_KEY", "AnonKey"]),
+            }
+            require("fs").appendFileSync(
+              process.env.GITHUB_ENV,
+              Object.entries(out).map(([k, v]) => `${k}=${v}`).join("\n") + "\n",
+            )
+          '
+
+      # Фикстура отдельно от seed.sql: seed намеренно оставляет центр
+      # несозданным, чтобы проверять онбординг, а приёмке нужен готовый центр.
+      - name: Фикстура для приёмки
+        working-directory: packages/db
+        run: psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -f supabase/fixtures/e2e.sql
+
+      # Ключи локального стека фиксированные и публичные — это не секреты.
+      - name: Переменные окружения приложения
+        run: |
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"
+          } > apps/web/.env.local
+
+      - name: Сборка приложения
+        run: pnpm --filter @logocrm/web build
+
+      - name: Установка браузера
+        run: pnpm --filter @logocrm/web exec playwright install --with-deps chromium
+
+      - name: Приёмочные сценарии
+        run: pnpm --filter @logocrm/web e2e
+
+      - name: Отчёт Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+          # Если джоб упал до запуска тестов, каталога нет — это не ошибка.
+          if-no-files-found: ignore
 
       - name: Остановка Supabase
         if: always()

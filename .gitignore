@@ -29,3 +29,8 @@ packages/db/supabase/.temp/
 # Материалы из Stitch. Убрать отсюда, когда дойдём до редизайна и решим,
 # что из этого хранится в репозитории.
 /design/
+
+# Playwright
+apps/web/e2e/.auth/
+apps/web/playwright-report/
+apps/web/test-results/
