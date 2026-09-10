@@ -29,7 +29,20 @@ for (const role of ROLES) {
     // с /login?next=/app — туда middleware возвращает при несохранившейся
     // сессии, и setup «проходил», записывая пустой storageState. Падение
     // тогда уезжало в другие тесты с невнятным «heading не найден».
-    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/app(\/|$)/, { timeout: 20_000 })
+    //
+    // /select-center — не ошибка, а законное состояние: фикстура пишет
+    // center_id в JWT прямым UPDATE auth.users, в обход штатного
+    // switch_center() + refreshSession(). Самый первый вход сразу после
+    // этого может застать GoTrue до того, как он подхватит новое значение —
+    // AppLayout тогда уводит на /select-center, хотя там уже верно показан
+    // единственный центр текущим. Обычный пользователь в этой ситуации
+    // просто жмёт «Продолжить»/«Выбрать» — тест делает то же самое.
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(app|select-center)(\/|$)/, { timeout: 20_000 })
+
+    if (/\/select-center(\/|$)/.test(page.url())) {
+      await page.getByRole('button', { name: /Продолжить|Выбрать/ }).first().click()
+      await expect(page).toHaveURL(/^https?:\/\/[^/]+\/app(\/|$)/, { timeout: 20_000 })
+    }
 
     await page.context().storageState({ path: `e2e/.auth/${role.name}.json` })
   })
