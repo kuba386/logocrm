@@ -71,6 +71,22 @@ values ('88888888-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000
         'eeeeeeee-0000-0000-0000-000000000001','bbbbbbbb-0000-0000-0000-000000000001',
         '77777777-0000-0000-0000-000000000001', 8, 400000, 50000, current_date - 10);
 
+-- Абонемент центра Б — только для теста 11 (составной FK по чужому центру).
+-- Вставляется здесь, как postgres, до первого set local role: RLS
+-- attendance/services/subscriptions пускает insert только своему центру,
+-- а роль в этом месте файла ещё не переключена ни на одного пользователя
+-- (первое tests_claims — в блоке «1-3» ниже). Вставка под ролью owner-A
+-- (как было раньше, ближе к тесту 11) падает на RLS «чужого» insert.
+insert into public.services (id, center_id, name, duration_min, default_price_tiyin)
+values ('99999999-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b','Индивидуальное',45,70000);
+insert into public.subscription_types (id, center_id, name, service_id, kind, lessons_count, price_tiyin)
+values ('77777777-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b',
+        'Чужой тип','99999999-0000-0000-0000-00000000000b','lessons',4,100000);
+insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at)
+values ('88888888-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b',
+        'eeeeeeee-0000-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b',
+        '77777777-0000-0000-0000-00000000000b', 4, 100000, 25000, current_date - 5);
+
 -- Три занятия: ...001 «вчера» (текущий, открытый месяц) — общего вида.
 -- ...002 в M1 (2 месяца назад), уже status='done' — единственная причина,
 -- по которой close_month(M1) вообще сможет пройти в тесте 19. ...003 в M2
@@ -171,20 +187,11 @@ select throws_ok(
 
 -- 11. Платёж на абонемент чужого центра — составной FK -----------------------------
 
--- Настоящий, существующий абонемент — но центра Б. FK (subscription_id,
--- student_id, center_id) ищет строку с center_id центра А (он подставится
--- из current_center() внутри record_payment) — такой не существует, даже
--- если сам subscription_id реален.
-insert into public.services (id, center_id, name, duration_min, default_price_tiyin)
-values ('99999999-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b','Индивидуальное',45,70000);
-insert into public.subscription_types (id, center_id, name, service_id, kind, lessons_count, price_tiyin)
-values ('77777777-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b',
-        'Чужой тип','99999999-0000-0000-0000-00000000000b','lessons',4,100000);
-insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at)
-values ('88888888-0000-0000-0000-00000000000b','cccccccc-0000-0000-0000-00000000000b',
-        'eeeeeeee-0000-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b',
-        '77777777-0000-0000-0000-00000000000b', 4, 100000, 25000, current_date - 5);
-
+-- Абонемент центра Б (fin_b, фикстура вверху файла) — настоящий, существующий,
+-- но FK (subscription_id, student_id, center_id) ищет строку с center_id
+-- ЦЕНТРА А (он подставится из current_center() внутри record_payment,
+-- вызов идёт под owner-A) — такой не существует, даже если сам
+-- subscription_id реален.
 select throws_ok(
   $q$ select public.record_payment('bbbbbbbb-0000-0000-0000-000000000001', 100000, 'payment',
                                    'eeeeeeee-0000-0000-0000-000000000001', '88888888-0000-0000-0000-00000000000b') $q$,
