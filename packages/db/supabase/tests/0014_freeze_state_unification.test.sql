@@ -677,10 +677,15 @@ insert into public.subscription_freezes (center_id, subscription_id, period) val
   ('cccccccc-0001-0000-0000-000000000001','88888888-0001-0000-0000-00000000000f',
    daterange(public.center_today('cccccccc-0001-0000-0000-000000000001') - 20, null, '[)'));
 
+-- 14:00, не 10:00: единственный преподаватель фикстуры уже занят на
+-- today-1 в 08:00, 10:00, 11:00, 12:00 и 13:00 (тесты выше) — lessons_
+-- teacher_no_overlap ловит совпадение слота молча только на insert, а не
+-- по смыслу сценария (найдено на живом прогоне CI — тот же класс ошибки,
+-- что уже стоил три круга CI на фикстуре e2e.sql).
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000009','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-00000000000a',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '14:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '14:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
