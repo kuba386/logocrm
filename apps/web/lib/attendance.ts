@@ -29,10 +29,26 @@ export const ATTENDANCE_STATUS_CLASSES: Record<string, { active: string; inactiv
     inactive: 'border-danger/40 text-danger hover:bg-danger-bg',
     badge: 'bg-danger-bg text-danger',
   },
+  // Дефолт колонки color в attendance_statuses — статус, заведённый без
+  // выбора цвета, должен быть серым, а не притворяться «Пришёл».
+  slate: {
+    active: 'border-status-neutral bg-status-neutral text-white',
+    inactive: 'border-status-neutral/40 text-status-neutral hover:bg-status-neutral-bg',
+    badge: 'bg-status-neutral-bg text-status-neutral',
+  },
 }
 
+/** Что можно выбрать в справочнике статусов. Значение — то, что ляжет в attendance_statuses.color. */
+export const ATTENDANCE_COLORS = [
+  { value: 'green', label: 'Зелёный' },
+  { value: 'amber', label: 'Янтарный' },
+  { value: 'sky', label: 'Голубой' },
+  { value: 'rose', label: 'Красный' },
+  { value: 'slate', label: 'Серый' },
+] as const
+
 export function attendanceStatusClasses(color: string) {
-  return ATTENDANCE_STATUS_CLASSES[color] ?? ATTENDANCE_STATUS_CLASSES.green!
+  return ATTENDANCE_STATUS_CLASSES[color] ?? ATTENDANCE_STATUS_CLASSES.slate!
 }
 
 /** Состояния абонемента (subscription_state) — свои цвета, не связаны с посещением. */
