@@ -136,11 +136,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           .eq('student_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
+        // Без фильтров: имя нужно и для архивных/неактивных типов — они
+        // остаются на уже проданных абонементах (находка C, архив 0012).
+        // В форму продажи ниже попадают только is_active и не архивные.
         supabase
           .from('subscription_types')
-          .select('id, name, kind, price_tiyin, lessons_count, period_days')
-          .eq('is_active', true)
-          .is('deleted_at', null)
+          .select('id, name, kind, price_tiyin, lessons_count, period_days, is_active, deleted_at')
           .order('name'),
         supabase
           .from('student_balance')
@@ -236,14 +237,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         overdrawnTiyin: balanceRow?.overdrawn_tiyin ?? 0,
       },
       subscriptions,
-      types: (typeRows ?? []).map((t) => ({
-        id: t.id,
-        name: t.name,
-        kind: t.kind,
-        priceTiyin: t.price_tiyin,
-        lessonsCount: t.lessons_count,
-        periodDays: t.period_days,
-      })),
+      types: (typeRows ?? [])
+        .filter((t) => t.is_active && !t.deleted_at)
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          kind: t.kind,
+          priceTiyin: t.price_tiyin,
+          lessonsCount: t.lessons_count,
+          periodDays: t.period_days,
+        })),
       siblings: (siblingRows ?? []).map((s) => ({ id: s.id, fullName: s.full_name })),
       timeZone: centerTimeZone(center?.settings),
       attendanceHistory: attendanceRowsData.map((row) => {

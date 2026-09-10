@@ -37,7 +37,8 @@ from unnest(array[
   'public.lessons_recalc_attendance_trigger()',
   'public.recalc_subscription_usage(uuid)',
   'public.check_absent_streak(uuid, uuid, uuid)',
-  'public.subscriptions_guard_soft_delete()'
+  'public.subscriptions_guard_soft_delete()',
+  'public.attendance_statuses_check_default()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -77,7 +78,9 @@ select set_eq(
   $$ values
     ('accept_invitation(text)'),
     ('age_years(date)'),
+    ('archive_attendance_status(uuid)'),
     ('archive_student(uuid)'),
+    ('archive_subscription_type(uuid)'),
     ('cancel_lesson(uuid,text)'),
     ('cancel_series_from(uuid,date,text)'),
     ('center_timezone(uuid)'),
@@ -102,10 +105,13 @@ select set_eq(
     ('parent_of_student(uuid)'),
     ('payer_display_name(uuid)'),
     ('reschedule_lesson(uuid,timestamp with time zone,timestamp with time zone)'),
+    ('restore_attendance_status(uuid)'),
     ('restore_student(uuid)'),
+    ('restore_subscription_type(uuid)'),
     ('revoke_membership(uuid)'),
     ('role_in(uuid)'),
     ('series_dates(jsonb)'),
+    ('set_default_attendance_status(uuid)'),
     ('substitute_teacher(uuid,uuid)'),
     ('switch_center(uuid)'),
     ('teacher_of_lesson(uuid)'),

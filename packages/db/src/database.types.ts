@@ -1421,7 +1421,9 @@ export type Database = {
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
+      archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
+      archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       calc_lesson_price: {
         Args: { p_lessons: number; p_price_tiyin: number }
         Returns: number
@@ -1579,7 +1581,9 @@ export type Database = {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
       }
+      restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
       restore_student: { Args: { p_id: string }; Returns: undefined }
+      restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
       seed_attendance_statuses: {
@@ -1602,6 +1606,10 @@ export type Database = {
           ends_at: string
           starts_at: string
         }[]
+      }
+      set_default_attendance_status: {
+        Args: { p_id: string }
+        Returns: undefined
       }
       slugify: { Args: { p_text: string }; Returns: string }
       student_subscription_badge: {

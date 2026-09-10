@@ -5,9 +5,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
+import { CatalogAction } from '@/components/ui/catalog-action'
 import { cn } from '@/lib/utils'
 import { ATTENDANCE_COLORS, attendanceStatusClasses } from '@/lib/attendance'
-import { saveAttendanceStatus } from './actions'
+import {
+  saveAttendanceStatus,
+  archiveAttendanceStatus,
+  restoreAttendanceStatus,
+  setDefaultAttendanceStatus,
+} from './actions'
 
 export const metadata = { title: 'Статусы посещения — LogoCRM' }
 
@@ -22,6 +28,7 @@ type StatusRow = {
   notify_parent: boolean
   is_default: boolean
   sort: number
+  deleted_at: string | null
 }
 
 const FLAGS: { name: string; key: keyof StatusRow; label: string; hint: string }[] = [
@@ -75,15 +82,17 @@ function StatusFields({ status, idSuffix }: { status?: StatusRow; idSuffix: stri
             </span>
           </label>
         ))}
-        <label className="flex items-start gap-2 text-sm font-medium sm:col-span-2">
-          <input type="checkbox" name="isDefault" defaultChecked={status?.is_default ?? false} className="mt-0.5" />
-          <span>
-            По умолчанию
-            <span className="block text-xs font-normal text-muted-foreground">
-              его ставит «Все пришли»; в центре ровно один такой
+        {status ? null : (
+          <label className="flex items-start gap-2 text-sm font-medium sm:col-span-2">
+            <input type="checkbox" name="isDefault" defaultChecked={false} className="mt-0.5" />
+            <span>
+              По умолчанию
+              <span className="block text-xs font-normal text-muted-foreground">
+                его ставит «Все пришли»; в центре ровно один такой
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
       </div>
     </div>
   )
@@ -97,11 +106,12 @@ export default async function AttendanceStatusesPage() {
 
   const { data: statuses } = await supabase
     .from('attendance_statuses')
-    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, is_default, sort')
-    .is('deleted_at', null)
+    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, is_default, sort, deleted_at')
     .order('sort')
 
-  const rows = (statuses ?? []) as StatusRow[]
+  const allRows = (statuses ?? []) as StatusRow[]
+  const rows = allRows.filter((s) => !s.deleted_at)
+  const archived = allRows.filter((s) => s.deleted_at)
 
   return (
     <div className="space-y-6">
@@ -143,11 +153,46 @@ export default async function AttendanceStatusesPage() {
                 <input type="hidden" name="id" value={status.id} />
                 <StatusFields status={status} idSuffix={status.id} />
               </CatalogForm>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                {status.is_default ? (
+                  <span />
+                ) : (
+                  <CatalogAction id={status.id} action={setDefaultAttendanceStatus} label="Сделать по умолчанию" />
+                )}
+                <CatalogAction id={status.id} action={archiveAttendanceStatus} label="В архив" />
+              </div>
             </div>
           ))}
           {rows.length === 0 ? <p className="text-sm text-muted-foreground">Статусов пока нет.</p> : null}
         </CardContent>
       </Card>
+
+      {archived.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>В архиве</CardTitle>
+            <CardDescription>
+              Скрыты из панели отметки. История посещений и продаж продолжает показывать их название и цвет.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {archived.map((status) => (
+              <div
+                key={status.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn('rounded px-2 py-0.5 text-xs font-medium', attendanceStatusClasses(status.color).badge)}>
+                    {status.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{status.code}</span>
+                </div>
+                <CatalogAction id={status.id} action={restoreAttendanceStatus} label="Восстановить" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

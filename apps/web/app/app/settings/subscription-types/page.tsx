@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
-import { saveSubscriptionType } from './actions'
+import { CatalogAction } from '@/components/ui/catalog-action'
+import { saveSubscriptionType, archiveSubscriptionType, restoreSubscriptionType } from './actions'
 
 export const metadata = { title: 'Типы абонементов — LogoCRM' }
 
@@ -19,6 +20,7 @@ type TypeRow = {
   period_days: number | null
   price_tiyin: number
   is_active: boolean
+  deleted_at: string | null
 }
 
 type ServiceOption = { id: string; name: string }
@@ -121,13 +123,14 @@ export default async function SubscriptionTypesPage() {
   const [{ data: types }, { data: services }] = await Promise.all([
     supabase
       .from('subscription_types')
-      .select('id, name, service_id, kind, lessons_count, period_days, price_tiyin, is_active')
-      .is('deleted_at', null)
+      .select('id, name, service_id, kind, lessons_count, period_days, price_tiyin, is_active, deleted_at')
       .order('name'),
     supabase.from('services').select('id, name').is('deleted_at', null).eq('is_active', true).order('name'),
   ])
 
-  const rows = (types ?? []) as TypeRow[]
+  const allRows = (types ?? []) as TypeRow[]
+  const rows = allRows.filter((t) => !t.deleted_at)
+  const archived = allRows.filter((t) => t.deleted_at)
   const serviceOptions: ServiceOption[] = (services ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   return (
@@ -168,11 +171,43 @@ export default async function SubscriptionTypesPage() {
                 <input type="hidden" name="id" value={type.id} />
                 <TypeFields type={type} services={serviceOptions} idSuffix={type.id} />
               </CatalogForm>
+              <div className="flex justify-end border-t border-border pt-3">
+                <CatalogAction id={type.id} action={archiveSubscriptionType} label="В архив" />
+              </div>
             </div>
           ))}
           {rows.length === 0 ? <p className="text-sm text-muted-foreground">Типов пока нет.</p> : null}
         </CardContent>
       </Card>
+
+      {archived.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>В архиве</CardTitle>
+            <CardDescription>
+              Скрыты из формы продажи. Уже проданные по ним абонементы продолжают показывать название.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {archived.map((type) => (
+              <div
+                key={type.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+              >
+                <div className="text-sm">
+                  <p className="font-medium">{type.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {KIND_LABELS[type.kind] ?? type.kind}
+                    {type.kind === 'lessons' && type.lessons_count ? ` · ${type.lessons_count} занятий` : ''}
+                    {type.kind === 'period' && type.period_days ? ` · ${type.period_days} дней` : ''}
+                  </p>
+                </div>
+                <CatalogAction id={type.id} action={restoreSubscriptionType} label="Восстановить" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

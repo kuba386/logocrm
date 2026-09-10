@@ -68,6 +68,28 @@ export async function saveSubscriptionType(
   return { message: '', notice: 'Сохранено' }
 }
 
-// Архива нет намеренно — см. attendance-statuses/actions.ts. Практическую
-// потребность закрывает is_active: неактивный тип не попадает в продажу,
-// а проданные по нему абонементы держат type_id и живут дальше.
+export async function archiveSubscriptionType(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Тип абонемента не найден' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_subscription_type', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось отправить тип в архив')
+
+  revalidatePath('/app/settings/subscription-types')
+  revalidatePath('/app/students/[id]', 'page')
+  return { message: '', notice: 'Тип в архиве' }
+}
+
+export async function restoreSubscriptionType(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Тип абонемента не найден' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('restore_subscription_type', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось восстановить тип')
+
+  revalidatePath('/app/settings/subscription-types')
+  revalidatePath('/app/students/[id]', 'page')
+  return { message: '', notice: 'Тип восстановлен' }
+}
