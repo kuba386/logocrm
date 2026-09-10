@@ -100,6 +100,11 @@ select throws_ok(
 -- вычисляется ни разу, и функция не вызывается вовсе — абонемент не
 -- создаётся, а тест показывает NULL вместо цены.
 create temporary table t_sub (name text primary key, id uuid);
+-- Таблица создана от postgres, а писать и читать её будет роль authenticated
+-- после set local role. Чужая временная таблица для неё закрыта так же, как
+-- обычная: без гранта первая же вставка падает с 42501, транзакция
+-- обрывается, и pgTAP видит «planned 18, ran 3».
+grant select, insert on t_sub to authenticated;
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
@@ -232,6 +237,12 @@ select is(
   7,
   'Заморозка на 7 дней даёт сдвиг ровно в 7 дней'
 );
+
+-- Дальше от postgres: прямой insert в subscription_freezes роли authenticated
+-- закрыт намеренно (заморозка — только через freeze_subscription), и тест
+-- ограничения получил бы 42501 вместо 23P01. Claims остаются — они живут в
+-- транзакции, а не в роли, и freeze_subscription в тесте 15 читает роль из них.
+reset role;
 
 -- 14. Пересекающаяся заморозка отклонена EXCLUDE-ом ---------------------------
 
