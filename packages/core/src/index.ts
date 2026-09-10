@@ -11,3 +11,12 @@ export {
   type SeriesInput,
   type SeriesSlot,
 } from './schedule'
+export {
+  lessonsLeft,
+  refundAmount,
+  freezeShift,
+  isRunningOut,
+  isExhausted,
+  type SubscriptionKind,
+  type SubscriptionSnapshot,
+} from './subscription'

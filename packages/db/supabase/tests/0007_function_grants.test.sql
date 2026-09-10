@@ -28,7 +28,15 @@ from unnest(array[
   'public.rebuild_lesson_participants(uuid)',
   'public.lessons_participants_trigger()',
   'public.group_students_participants_trigger()',
-  'public.lesson_slot_conflicts(uuid, uuid, uuid, uuid, uuid, timestamptz, timestamptz, uuid)'
+  'public.lesson_slot_conflicts(uuid, uuid, uuid, uuid, uuid, timestamptz, timestamptz, uuid)',
+  'public.seed_attendance_statuses(uuid)',
+  'public.centers_seed_statuses()',
+  'public.subscriptions_apply_freeze_shift()',
+  'public.attendance_fill_and_check()',
+  'public.attendance_recalc_trigger()',
+  'public.lessons_recalc_attendance_trigger()',
+  'public.recalc_subscription_usage(uuid)',
+  'public.check_absent_streak(uuid, uuid, uuid)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -104,7 +112,21 @@ select set_eq(
     ('teacher_vacation(uuid,date,date)'),
     ('teacher_vacation_preview(uuid,date,date)'),
     ('user_email(uuid)'),
-    ('was_access_revoked()')
+    ('was_access_revoked()'),
+    ('calc_lesson_price(integer,integer)'),
+    ('center_today(uuid)'),
+    ('freeze_subscription(uuid,date,date)'),
+    ('mark_attendance(uuid,uuid,text,text)'),
+    ('mark_attendance_bulk(uuid,jsonb)'),
+    ('refund_calc(uuid)'),
+    ('refund_subscription(uuid,integer)'),
+    ('sell_subscription(uuid,uuid,integer,date)'),
+    ('student_subscription_badge(uuid)'),
+    ('subscription_freeze_days(uuid)'),
+    ('subscription_lessons_left(uuid)'),
+    ('subscription_state(uuid)'),
+    ('transfer_remaining(uuid,uuid)'),
+    ('unfreeze_subscription(uuid,date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
