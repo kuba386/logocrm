@@ -72,8 +72,12 @@ jobs:
             # Пароль базы не нужен: CLI получит временную роль через API.
             # Ref зашит здесь и только здесь — токен аккаунтный, и это
             # единственное, что удерживает его в границах одного проекта.
-            echo "DB_FLAG=--project-ref" >> "$GITHUB_ENV"
-            echo "DB_TARGET=$EXPECTED_REF" >> "$GITHUB_ENV"
+            # --linked, а не --project-ref: без состояния link CLI идёт на прямой
+            # хост, а он IPv6-only, и раннер GitHub падает с «IPv6 is not
+            # supported». Шаг «Привязать проект» ниже кладёт адрес пулера в
+            # .temp/ — по API, без пароля базы.
+            echo "DB_FLAG=--linked" >> "$GITHUB_ENV"
+            echo "DB_TARGET=" >> "$GITHUB_ENV"
             echo "Подключение по токену: проект $EXPECTED_REF, временная роль через API."
 
           elif [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
@@ -124,30 +128,41 @@ jobs:
       # DB_FLAG и DB_TARGET выбраны предыдущим шагом; строка с паролем, если
       # она есть, замаскирована в логах. Токен нужен только пути 1 и в
       # остальных случаях пуст.
+      # Только для пути по токену. link ходит в API за адресом пулера и
+      # кладёт его в packages/db/supabase/.temp/ (в .gitignore); пароль базы
+      # не спрашивает, если stdin не TTY. Проверено локально с < /dev/null.
+      - name: Привязать проект
+        if: env.DB_FLAG == '--linked'
+        working-directory: packages/db
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          EXPECTED_REF: hiwstqrnxrlfuanvfggq
+        run: supabase link --project-ref "$EXPECTED_REF" < /dev/null
+
       - name: Что будет применено
         working-directory: packages/db
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase db push --dry-run $DB_FLAG "$DB_TARGET"
+        run: supabase db push --dry-run $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
 
       - name: Применить миграции
         id: push
         working-directory: packages/db
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase db push $DB_FLAG "$DB_TARGET"
+        run: supabase db push $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
 
       # always(): при падении push картина «что в базе против того, что в
       # файлах» нужна больше всего. Без неё в логе остаётся только сырой
       # текст CLI.
       - name: Состояние после применения
-        # Но не тогда, когда способ так и не выбрался: без DB_TARGET этот шаг
+        # Но не тогда, когда способ так и не выбрался: без DB_FLAG этот шаг
         # лишь добавил бы вторую ошибку поверх первой.
-        if: always() && env.DB_TARGET != ''
+        if: always() && env.DB_FLAG != ''
         working-directory: packages/db
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase migration list $DB_FLAG "$DB_TARGET"
+        run: supabase migration list $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
 
       # Только при отказе самого push: если упала сборка строки или dry-run,
       # эта подсказка увела бы не туда.
