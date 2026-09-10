@@ -26,11 +26,14 @@ export async function AdminDashboard({ timeZone }: { timeZone: string }) {
       .order('starts_at'),
     // lessons_left <= 2 сам исключает и «безлимит», и «нет абонемента» —
     // оба приходят из student_balance как null, а null <= 2 в Postgres
-    // ложно (и PostgREST это уважает).
+    // ложно (и PostgREST это уважает). state <> 'frozen' исключает
+    // абонемент на оплаченной паузе: заканчивающийся остаток на паузе не
+    // повод звонить и продавать — семья и так не расходует занятия сейчас.
     supabase
       .from('student_balance')
-      .select('student_id, lessons_left')
+      .select('student_id, lessons_left, state')
       .lte('lessons_left', 2)
+      .neq('state', 'frozen')
       .order('lessons_left'),
     supabase.from('student_balance').select('student_id, debt_tiyin').gt('debt_tiyin', 0).order('debt_tiyin', { ascending: false }),
   ])

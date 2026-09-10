@@ -41,7 +41,9 @@ from unnest(array[
   'public.attendance_statuses_check_default()',
   'public.centers_seed_payment_sources()',
   'public.payments_recalc_trigger()',
-  'public.financial_period_guard()'
+  'public.financial_period_guard()',
+  'public.subscription_types_guard_sold_fields()',
+  'public.subscription_freezes_guard_backdate()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -137,7 +139,7 @@ select set_eq(
     ('refund_subscription(uuid,integer)'),
     ('sell_subscription(uuid,uuid,integer,date)'),
     ('student_subscription_badge(uuid)'),
-    ('subscription_freeze_days(uuid)'),
+    ('student_balance_pick(uuid)'),
     ('subscription_lessons_left(uuid)'),
     ('subscription_state(uuid)'),
     ('subscription_summary(uuid)'),

@@ -58,6 +58,8 @@ const CHECK_MESSAGES: Record<string, string> = {
   payments_subscription_needs_student: 'Платёж на абонемент обязан быть привязан к ученику',
   subscriptions_paid_not_negative: 'Возврат превышает оплаченную по абонементу сумму',
   financial_periods_month_is_first_of_month: 'Месяц периода — первое число месяца',
+  subscriptions_status_no_frozen_check: 'Такой статус абонемента больше не используется — заморозка определяется датами',
+  subscription_types_lessons_no_period_check: 'У абонемента на количество занятий не может быть срока действия',
 }
 
 function checkConstraintName(message: string): string | null {

@@ -103,8 +103,13 @@ select is(public.subscription_state('88888888-0000-0000-0000-000000000002'), nul
   'Состояние чужого абонемента не читается: NULL');
 select is(public.refund_calc('88888888-0000-0000-0000-000000000002'), null::integer,
   'Сумма возврата чужого абонемента не читается: NULL');
-select is(public.subscription_freeze_days('88888888-0000-0000-0000-000000000002'), null::integer,
-  'Дни заморозки чужого абонемента — NULL, а не «0 дней»');
+-- 0014: subscription_freeze_days стала definer и закрыта от authenticated
+-- совсем (см. 0014_freeze_state_unification.sql, раздел "Права") — точные
+-- дни заморозки отдаёт только subscription_summary (owner/admin своего
+-- центра), а не прямой RPC ни для чужого, ни для своего абонемента.
+select throws_ok(
+  $q$ select public.subscription_freeze_days('88888888-0000-0000-0000-000000000002') $q$,
+  '42501', null, 'Дни заморозки не выдаются прикладной роли напрямую — только через subscription_summary');
 
 -- 5–6. Бейдж и сводка чужого ребёнка/абонемента — отказ, не значение
 select throws_ok(
@@ -122,9 +127,11 @@ reset role;
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 
--- 7. Свой абонемент без заморозок — честный 0
-select is(public.subscription_freeze_days('88888888-0000-0000-0000-000000000002'), 0,
-  'Свой абонемент без заморозок: 0 дней');
+-- 7. 0014: тот же прямой RPC закрыт и для своего абонемента — точное
+-- число дней теперь только внутри subscription_summary, не отдельным вызовом.
+select throws_ok(
+  $q$ select public.subscription_freeze_days('88888888-0000-0000-0000-000000000002') $q$,
+  '42501', null, 'Дни заморозки своего абонемента — тоже не прямым RPC, только через subscription_summary');
 
 -- 8. Витрина жива: калькуляторы внутри security_invoker-вью исполняются вызывающим
 select cmp_ok((select count(*)::int from public.student_balance), '>=', 1,
