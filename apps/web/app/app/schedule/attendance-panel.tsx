@@ -14,23 +14,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
+import { attendanceStatusClasses } from '@/lib/attendance'
 
 const initial: ScheduleState = { message: '' }
 
-/**
- * Цвета статусов — из seed-данных attendance_statuses (0008_subscriptions.sql):
- * green/amber/sky/rose. «Болел» (sky) — временная заглушка, не из Stitch,
- * см. docs/Design/DESIGN.md, «Пробелы».
- */
-const STATUS_COLOR_CLASSES: Record<string, { active: string; inactive: string }> = {
-  green: { active: 'border-success bg-success text-white', inactive: 'border-success/40 text-success hover:bg-success-bg' },
-  amber: { active: 'border-warning bg-warning text-white', inactive: 'border-warning/40 text-warning hover:bg-warning-bg' },
-  sky: { active: 'border-info bg-info text-white', inactive: 'border-info/40 text-info hover:bg-info-bg' },
-  rose: { active: 'border-danger bg-danger text-white', inactive: 'border-danger/40 text-danger hover:bg-danger-bg' },
-}
-
 function statusClass(color: string, active: boolean): string {
-  const entry = STATUS_COLOR_CLASSES[color] ?? STATUS_COLOR_CLASSES.green!
+  const entry = attendanceStatusClasses(color)
   return active ? entry.active : entry.inactive
 }
 
