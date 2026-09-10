@@ -58,12 +58,20 @@ const CHECK_MESSAGES: Record<string, string> = {
   payments_subscription_needs_student: 'Платёж на абонемент обязан быть привязан к ученику',
   subscriptions_paid_not_negative: 'Возврат превышает оплаченную по абонементу сумму',
   financial_periods_month_is_first_of_month: 'Месяц периода — первое число месяца',
-  subscriptions_status_no_frozen_check: 'Такой статус абонемента больше не используется — заморозка определяется датами',
-  subscription_types_lessons_no_period_check: 'У абонемента на количество занятий не может быть срока действия',
+  subscriptions_status_no_frozen_check: 'Статус абонемента меняется только действиями карточки — заморозка и срок считаются по датам',
+  subscription_types_lessons_no_period_check: 'У типа абонемента на количество занятий срок действия не указывается',
 }
 
 function checkConstraintName(message: string): string | null {
   const m = /violates check constraint "([a-z0-9_]+)"/i.exec(message)
+  return m?.[1] ?? null
+}
+
+// Отдельно от checkConstraintName: у EXCLUDE другой текст Postgres
+// («violates exclusion constraint», не «check constraint»), и это другой
+// errcode (23P01) — но имя всё равно можно завести в CHECK_MESSAGES.
+function exclusionConstraintName(message: string): string | null {
+  const m = /violates exclusion constraint "([a-z0-9_]+)"/i.exec(message)
   return m?.[1] ?? null
 }
 const UNIQUE_VIOLATION = '23505'
@@ -112,6 +120,8 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
     // Гонка: база отказала, но пересчёт уже ничего не нашёл — конкурент
     // откатился. Повторять за пользователя не будем, но подскажем.
     if (!conflicts) {
+      const name = exclusionConstraintName(message)
+      if (name && CHECK_MESSAGES[name]) return { message: CHECK_MESSAGES[name] }
       return {
         message: message || 'Слот был занят на момент сохранения, попробуйте ещё раз',
         retryable: true,

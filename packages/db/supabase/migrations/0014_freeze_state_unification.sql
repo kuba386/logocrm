@@ -62,6 +62,12 @@
 --     всем ролям), но теперь, когда диапазон — единственный источник
 --     правды, цена будущего неосторожного grant insert выше — закреплено
 --     тестом ниже, а не кодом.
+--   - freeze_subscription не проверяет period относительно [starts_at,
+--     ends_at] абонемента — опечатка в годе даты замораживает на порядки
+--     дольше подписки без единой ошибки (найдено ревью написанного кода).
+--     Инвариант напрашивается констрейнтом/триггером (CLAUDE.md), но
+--     граница усложняется предыдущими заморозками и ends_at, который сам
+--     сдвигается заморозкой, — отдельная задача, не точечный фикс.
 -- =============================================================================
 
 
@@ -127,6 +133,13 @@ alter table public.subscription_types
 -- settings/subscription-types/actions.ts). Триггер бьёт только по факту —
 -- смене значения у типа, на который уже что-то продано; тип без единого
 -- проданного абонемента остаётся редактируемым полностью.
+-- service_id в том же списке по той же причине (найдено ревью написанного
+-- кода): attendance_fill_and_check читает t.service_id ТЕКУЩИМ, а не
+-- снимком (0014, раздел 11, подбор кандидата) — сменить услугу у типа
+-- задним числом значит, что уже проданные абонементы перестают подходить
+-- под занятия исходной услуги, и следующая отметка тихо уходит в долг по
+-- default_price_tiyin вместо списания. lessons_count не в списке: он
+-- снимается в lessons_total при продаже (0008:419) и после не читается.
 create or replace function public.subscription_types_guard_sold_fields()
   returns trigger
   language plpgsql
@@ -134,10 +147,12 @@ create or replace function public.subscription_types_guard_sold_fields()
   set search_path = ''
 as $$
 begin
-  if (new.kind is distinct from old.kind or new.period_days is distinct from old.period_days)
+  if (new.kind is distinct from old.kind
+      or new.period_days is distinct from old.period_days
+      or new.service_id is distinct from old.service_id)
      and exists (select 1 from public.subscriptions s where s.type_id = old.id)
   then
-    raise exception 'У этого типа уже есть проданные абонементы — kind и period_days менять нельзя, заведите новый тип'
+    raise exception 'У этого типа уже есть проданные абонементы — kind, period_days и услугу менять нельзя, заведите новый тип'
       using errcode = '22023';
   end if;
   return new;
@@ -146,7 +161,7 @@ $$;
 
 drop trigger if exists subscription_types_guard_sold_fields on public.subscription_types;
 create trigger subscription_types_guard_sold_fields
-  before update of kind, period_days on public.subscription_types
+  before update of kind, period_days, service_id on public.subscription_types
   for each row execute function public.subscription_types_guard_sold_fields();
 
 
@@ -194,7 +209,13 @@ begin
     return false;
   end if;
 
-  select * into v_sub from public.subscriptions where id = p_subscription_id;
+  -- deleted_at is null — обе политики, которые эта функция заменяет
+  -- (tenant_admin, subscriptions_parent_read), его требуют; без фильтра
+  -- родитель, знающий id архивного абонемента своего же ребёнка, получил
+  -- бы через subscription_state/subscription_freeze_days то, что раньше
+  -- RLS отдавала как NULL.
+  select * into v_sub from public.subscriptions
+   where id = p_subscription_id and deleted_at is null;
   if not found then
     return false;
   end if;
@@ -214,16 +235,25 @@ $$;
 -- ДО того, как булев предикат вообще будет с чем сравнивать. Возвращает
 -- daterange, а не всю строку subscription_freezes: та тащит reason/
 -- created_by/center_id и раздала бы их специалисту через PostgREST.
-create or replace function public.subscription_current_freeze(p_subscription_id uuid, p_on_date date)
+create or replace function public.subscription_current_freeze(p_subscription_id uuid, p_on_date date default null)
   returns daterange
   language sql
   stable
   security definer
   set search_path = ''
 as $$
+  -- default null + coalesce на center_today: без потребителей сегодня
+  -- (grep по apps/web и SQL — только pgTAP), но выдана authenticated, то
+  -- есть это живой /rest/v1/rpc/-эндпоинт. Следующий вызывающий, который
+  -- не подумает передать дату явно, иначе подставил бы NULL или — что
+  -- опаснее — дату из браузера: ровно класс ошибки из PR #26
+  -- ("Время рендерится в часовом поясе центра, не браузера", CLAUDE.md).
   select f.period from public.subscription_freezes f
    where f.subscription_id = p_subscription_id
-     and f.period @> p_on_date
+     and f.period @> coalesce(
+       p_on_date,
+       (select public.center_today(s.center_id) from public.subscriptions s where s.id = p_subscription_id)
+     )
      and public.subscription_visible_to_caller(p_subscription_id)
    order by lower(f.period) desc limit 1;
 $$;
@@ -254,14 +284,29 @@ create or replace function public.subscription_state_unchecked(p_subscription_id
   security definer
   set search_path = ''
 as $$
-  -- Порядок важен: cancelled → expired → exhausted → frozen → active, НЕ
-  -- frozen перед exhausted. Заморозка отсекается предикатом на остаток
+  -- Порядок важен: cancelled → exhausted → frozen → expired → active.
+  --
+  -- exhausted ПЕРЕД frozen: заморозка отсекается предикатом на остаток
   -- ещё до всякой заморозки в attendance_fill_and_check (замороженный и
   -- одновременно исчерпанный без allow_negative ведёт себя как обычный
   -- исчерпанный — списывать всё равно нечего), и ЯРЛЫК обязан совпадать
   -- с этим поведением. Иначе /app/debts, отфильтровывая frozen, спрятал
   -- бы реально растущий долг — деньги, которые никто не увидит, пока
   -- родитель не спросит.
+  --
+  -- frozen ПЕРЕД expired (найдено ревью написанного кода, до 0014 не
+  -- было — 0010 хранил status и frozen там стоял первым же): у
+  -- бессрочной заморозки число дней ещё не известно, поэтому
+  -- subscriptions_apply_freeze_shift (0008:544, через subscription_
+  -- freeze_days ниже) не двигает ends_at ДО закрытия заморозки — раз
+  -- заморозка НЕ дневная-и-закрытая, а всё ещё открыта, ends_at абонемента
+  -- "истекает" по календарю прямо посреди оплаченной паузы, хотя period
+  -- продолжает покрывать сегодня. Если бы expired стоял раньше, это был
+  -- бы ровно тот баг, который чинит вся эта миграция — тихий долг вместо
+  -- исключения "заморожен", только для заморозки без заранее известного
+  -- конца. attendance_fill_and_check ниже симметрично признаёт такой
+  -- абонемент кандидатом ДАЖЕ с устаревшим ends_at, пока период покрывает
+  -- дату занятия.
   -- Заморозка — прямым select из subscription_freezes, НЕ через
   -- subscription_current_freeze: та сама вызывает subscription_visible_
   -- to_caller (без ветки teacher) и вернула бы NULL специалисту даже
@@ -271,14 +316,14 @@ as $$
   -- иначе, второй гейт тут не нужен и вреден.
   select case
     when s.status = 'cancelled' then 'cancelled'
-    when s.ends_at is not null
-         and s.ends_at < public.center_today(s.center_id) then 'expired'
     when s.lessons_total is not null
          and s.lessons_total - s.lessons_used - s.lessons_written_off <= 0 then 'exhausted'
     when exists (
       select 1 from public.subscription_freezes f
        where f.subscription_id = s.id and f.period @> public.center_today(s.center_id)
     ) then 'frozen'
+    when s.ends_at is not null
+         and s.ends_at < public.center_today(s.center_id) then 'expired'
     else 'active'
   end
   from public.subscriptions s
@@ -309,17 +354,45 @@ begin
 end;
 $$;
 
--- Тот же перенос definer, что и subscription_state (была ровно та же
--- болезнь: coalesce(sum(...), 0) не отличал "нет заморозок" от "не
--- видно" — родителю возвращала 0 вместо реального числа дней). Грант
--- authenticated остаётся (раздел "Права") — родителю и владельцу эта
--- функция нужна напрямую, а от специалиста её защищает не грант (роль в
--- Postgres одна на всех), а сама visible_to_caller внутри: teacher получит
--- NULL, а не число. 'infinity'-форма нормализована в разделе 1,
--- поэтому sum() по upper-lower корректен без явного case для открытых
--- заморозок: upper() на неограниченной верхней границе даёт NULL, sum()
--- его пропускает — тот же результат, что раньше давал явный `when
--- upper_inf then 0`, без отдельной ветки.
+-- Без гейта — только арифметика по строке, никакой проверки "кому видно".
+-- Существует ради subscriptions_apply_freeze_shift (0008:534-556): тот
+-- триггер вызывается на любой insert/update/delete в subscription_freezes,
+-- в том числе из контекста БЕЗ auth.uid() (service_role, SQL-редактор,
+-- будущая data-fix миграция, pg_cron) — там subscription_visible_to_caller
+-- всегда вернула бы false (auth.uid() is null), а гейтованная версия ниже
+-- НЕ NULL, и `date + NULL` молча обнулил(!) бы ends_at любому period-
+-- абонементу, задетому такой записью — период становится бессрочным без
+-- единой ошибки. Найдено ревью написанного кода: сама эта миграция
+-- переживает переход только потому, что нормализация 'infinity' в
+-- разделе 1 идёт РАНЬШЕ этого CREATE и успевает отработать на invoker-
+-- версии 0010 — везение по порядку строк, не защита. Тот же приём, что
+-- уже применён для subscription_state/subscription_state_unchecked.
+create or replace function public.subscription_freeze_days_unchecked(p_subscription_id uuid)
+  returns integer
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  -- 'infinity'-форма нормализована в разделе 1, поэтому sum() по
+  -- upper-lower корректен без явного case для открытых заморозок: upper()
+  -- на неограниченной верхней границе даёт NULL, sum() его пропускает —
+  -- тот же результат, что раньше давал явный `when upper_inf then 0`, без
+  -- отдельной ветки.
+  select coalesce((
+    select sum(upper(f.period) - lower(f.period))
+      from public.subscription_freezes f
+     where f.subscription_id = p_subscription_id
+  ), 0)::int;
+$$;
+
+-- Публичная обёртка: тот же перенос definer, что и subscription_state
+-- (была ровно та же болезнь: coalesce(sum(...), 0) не отличал "нет
+-- заморозок" от "не видно" — родителю возвращала 0 вместо реального числа
+-- дней). Грант authenticated остаётся (раздел "Права") — родителю и
+-- владельцу эта функция нужна напрямую, а от специалиста её защищает не
+-- грант (роль в Postgres одна на всех), а сама visible_to_caller внутри:
+-- teacher получит NULL, а не число.
 create or replace function public.subscription_freeze_days(p_subscription_id uuid)
   returns integer
   language sql
@@ -328,12 +401,39 @@ create or replace function public.subscription_freeze_days(p_subscription_id uui
   set search_path = ''
 as $$
   select case when not public.subscription_visible_to_caller(p_subscription_id) then null
-    else coalesce((
-      select sum(upper(f.period) - lower(f.period))
-        from public.subscription_freezes f
-       where f.subscription_id = p_subscription_id
-    ), 0)::int
+    else public.subscription_freeze_days_unchecked(p_subscription_id)
   end;
+$$;
+
+-- Миграция неизменяема после мержа (CLAUDE.md) — 0008 нельзя переписать,
+-- поэтому переиздаём её триггерную функцию здесь через create or replace,
+-- меняя только имя вызываемого калькулятора на _unchecked-версию выше.
+-- Всё остальное тело — дословно 0008:534-556: пересчитывает ends_at с
+-- нуля от base_ends (starts_at + period_days ТИПА, не снимок), затрагивая
+-- только period-абонементы (join отфильтровывает kind='lessons' через
+-- t2.period_days is not null).
+create or replace function public.subscriptions_apply_freeze_shift()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_sub uuid := coalesce(new.subscription_id, old.subscription_id);
+begin
+  update public.subscriptions s
+     set ends_at = t.base_ends + public.subscription_freeze_days_unchecked(v_sub)
+    from (
+      select s2.id,
+             s2.starts_at + (t2.period_days) as base_ends
+        from public.subscriptions s2
+        join public.subscription_types t2 on t2.id = s2.type_id
+       where s2.id = v_sub and t2.period_days is not null
+    ) t
+   where s.id = t.id;
+
+  return null;
+end;
 $$;
 
 
@@ -378,7 +478,14 @@ begin
   -- в шести RPC 0010 — для функции, которая NULL возвращает штатно.
   v_state := coalesce(public.subscription_state(p_id), '');
   if v_state <> 'active' then
-    raise exception 'Заморозить можно только действующий абонемент, а он «%»', v_state
+    raise exception 'Заморозить можно только действующий абонемент — этот %',
+      case v_state
+        when 'frozen'    then 'уже заморожен'
+        when 'exhausted' then 'исчерпан'
+        when 'expired'   then 'истёк'
+        when 'cancelled' then 'отменён'
+        else 'не действует'
+      end
       using errcode = '22023';
   end if;
 
@@ -406,8 +513,13 @@ begin
     raise exception 'У абонемента уже есть незакрытая заморозка' using errcode = '22023';
   end if;
 
-  if p_to is not null and p_to < p_from then
-    raise exception 'Дата окончания заморозки раньше начала' using errcode = '22023';
+  -- <= , не < : p_to равный p_from даёт daterange(x,x,'[)') — пустой
+  -- диапазон. EXCLUDE его не ловит (не пересекается ни с чем), guard-
+  -- триггер тоже (нет дней внутри) — без этой проверки RPC молча вставил
+  -- бы нулевую заморозку и ответил "Абонемент заморожен", а state остался
+  -- бы 'active': пользователь ввёл дату и получил тишину вместо эффекта.
+  if p_to is not null and p_to <= p_from then
+    raise exception 'Дата окончания заморозки должна быть позже даты начала' using errcode = '22023';
   end if;
 
   -- Открытый конец — неограниченная граница (NULL), не дата 'infinity':
@@ -450,7 +562,7 @@ begin
   -- Ищем и бессрочную, и ещё НЕ НАЧАВШУЮСЯ датированную заморозку: обе
   -- "открыты" в смысле, который здесь важен — обе можно отменить целиком.
   -- Датированная, уже начавшаяся, сюда не попадает — её закрыть раньше
-  -- срока нельзя (продуктовое решение 2), и это ветка ниже (lower &lt;=
+  -- срока нельзя (продуктовое решение 2), и это ветка ниже (lower <=
   -- сегодня) корректно не находит замену и падает в обычную логику.
   select * into v_open from public.subscription_freezes f
    where f.subscription_id = p_id and f.center_id = v_center
@@ -547,7 +659,12 @@ declare
   v_old_period   daterange;
   v_blocked_date date;
 begin
-  if tg_op = 'UPDATE' then
+  -- and new.subscription_id = old.subscription_id: без этого условия
+  -- сужение периода на другом абонементе (гипотетически — сегодня нет ни
+  -- одного гранта на update subscription_id для authenticated) прошло бы
+  -- ранний выход, ничего не проверив, хотя new.period и old.period тогда
+  -- описывают заморозки разных абонементов и сравнивать их бессмысленно.
+  if tg_op = 'UPDATE' and new.subscription_id = old.subscription_id then
     v_old_period := old.period;
     if new.period <@ v_old_period then
       return new;
@@ -603,10 +720,20 @@ create trigger subscription_freezes_guard_backdate
 -- freeze_from/freeze_to заполняются независимо от state: если абонемент
 -- одновременно исчерпан и заморожен, state='exhausted' (раздел 5), но
 -- диапазон текущей заморозки в ответе всё равно есть. Карточка ученика
--- рендерит блок заморозки только при state==='frozen' — для исчерпанного
--- эти два поля останутся в ответе, но не на экране. Сознательно: если
--- абонемент решено показывать пустым, вторая история про паузу поверх
--- этого — не то, что должно отвлекать администратора в первую очередь.
+-- показывает блок заморозки и кнопку "Разморозить" по freeze_from/
+-- freeze_to, а не по state === 'frozen' — иначе исчерпанный-и-
+-- замороженный абонемент показывал бы пустую карточку без единой кнопки:
+-- ни заморозить (уже есть незакрытая), ни разморозить (state не 'frozen').
+--
+-- Лукап заморозки — не только "покрывающая сегодня", но и, если такой
+-- нет, ближайшая БУДУЩАЯ (найдено ревью написанного кода): без этого
+-- ещё не начавшаяся заморозка ("с понедельника") была бы не видна вовсе —
+-- freeze_from/to оставались бы NULL, а раздел 7 (unfreeze_subscription,
+-- ветка отмены до начала) был бы написан в SQL, но недостижим ни с одного
+-- экрана. state при этом всё равно останется 'active' (period ещё не
+-- покрывает сегодня, раздел 5) — это верно: занятия сегодня продолжают
+-- списываться как обычно, только "На панели ученика видно" и "спишется
+-- сегодня" — разные вопросы.
 drop function if exists public.subscription_summary(uuid);
 
 create or replace function public.subscription_summary(p_subscription_id uuid)
@@ -653,8 +780,11 @@ begin
       from public.subscriptions s
       left join lateral (
         select * from public.subscription_freezes sf
-         where sf.subscription_id = s.id and sf.period @> public.center_today(s.center_id)
-         order by lower(sf.period) desc limit 1
+         where sf.subscription_id = s.id
+           and (sf.period @> public.center_today(s.center_id)
+                or lower(sf.period) > public.center_today(s.center_id))
+         order by (sf.period @> public.center_today(s.center_id)) desc, lower(sf.period)
+         limit 1
       ) f on true
      where s.id = p_subscription_id;
 end;
@@ -932,7 +1062,6 @@ begin
            and s.deleted_at is null
            and s.status <> 'cancelled'
            and s.starts_at <= v_lesson_date
-           and (s.ends_at is null or s.ends_at >= v_lesson_date)
            and (s.allow_negative
                 or s.lessons_total is null
                 or s.lessons_total - s.lessons_used - s.lessons_written_off > 0)
@@ -941,6 +1070,14 @@ begin
                             where t.id = s.type_id
                               and (t.service_id is null or t.service_id = v_lesson.service_id)))
       ) c
+     -- ends_at вынесен из внутреннего WHERE сюда, чтобы сослаться на уже
+     -- посчитанный c.is_frozen (найдено ревью написанного кода): у
+     -- бессрочной заморозки ends_at не сдвигается, пока она не закрыта
+     -- (раздел 5, комментарий про порядок frozen/expired) — без этого
+     -- условия абонемент, реально замороженный СЕЙЧАС, выпадал бы из
+     -- кандидатов по устаревшему ends_at и уходил в долг по цене услуги
+     -- (ветка else ниже) вместо исключения "заморожен".
+     where c.ends_at is null or c.ends_at >= v_lesson_date or c.is_frozen
      order by c.is_frozen asc, c.ends_at asc nulls last, c.created_at, c.id
      limit 1;
 
@@ -1055,7 +1192,8 @@ $$;
 -- от чего защищают 0003 и 0007.
 revoke execute on function
   public.subscription_types_guard_sold_fields(),
-  public.subscription_freezes_guard_backdate()
+  public.subscription_freezes_guard_backdate(),
+  public.attendance_fill_and_check()
   from public, anon, authenticated;
 
 -- Postgres/Supabase не различают owner/admin/teacher/parent на уровне
@@ -1090,7 +1228,8 @@ grant execute on function
 -- и что закрывает публичная subscription_state.
 revoke execute on function
   public.subscription_visible_to_caller(uuid),
-  public.subscription_state_unchecked(uuid)
+  public.subscription_state_unchecked(uuid),
+  public.subscription_freeze_days_unchecked(uuid)
   from public, anon, authenticated;
 
 -- Вызывается из student_balance (security_invoker = true) под правами
@@ -1098,3 +1237,19 @@ revoke execute on function
 -- внутреннем вызове этой функции для всех, кроме владельца объектов.
 revoke all on function public.student_balance_pick(uuid) from public, anon;
 grant execute on function public.student_balance_pick(uuid) to authenticated;
+
+-- Эти четыре сохранили грант через create or replace (0008/0010 уже
+-- выдавали authenticated, сигнатуры не менялись) — переиздаём явно, а не
+-- полагаемся молча на унаследованный ACL: правило проекта "каждая функция
+-- заканчивается явными грантами" (найдено ревью написанного кода).
+revoke all on function public.subscription_state(uuid) from public, anon;
+grant execute on function public.subscription_state(uuid) to authenticated;
+
+revoke all on function public.freeze_subscription(uuid, date, date) from public, anon;
+grant execute on function public.freeze_subscription(uuid, date, date) to authenticated;
+
+revoke all on function public.unfreeze_subscription(uuid, date) from public, anon;
+grant execute on function public.unfreeze_subscription(uuid, date) to authenticated;
+
+revoke all on function public.student_subscription_badge(uuid) from public, anon;
+grant execute on function public.student_subscription_badge(uuid) to authenticated;

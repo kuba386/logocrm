@@ -23,7 +23,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(54);
+select plan(59);
 
 -- Фикстуры: центры, роли, справочники ------------------------------------------
 
@@ -640,6 +640,73 @@ set local role authenticated;
 select is(
   (select count(*)::int from public.student_balance_pick('eeeeeeee-0001-0000-0000-000000000001')),
   0, 'student_balance_pick для специалиста возвращает 0 строк даже для его собственного ученика — RLS subscriptions, не только фильтр на вьюхе');
+
+
+-- 38-39. Ревью написанного кода (после зелёного db, до мержа): бессрочная
+-- заморозка не сдвигает ends_at, пока не закрыта (subscription_freeze_
+-- days_unchecked считает upper-lower, у открытой границы это NULL) —
+-- если бы expired стоял раньше frozen в CASE (раздел 5), это был бы ровно
+-- тот баг, который чинит вся эта миграция, только для заморозки без
+-- заранее известного конца. Фикстура — снимок состояния "заморожен давно,
+-- номинальный срок бы уже истёк", а не последовательность вызовов:
+-- freeze_subscription сама отказывает, если state уже не 'active', то
+-- есть заморозить УЖЕ истёкший по датам абонемент через RPC нельзя —
+-- только вставка задним числом (как выглядела бы база спустя месяцы
+-- открытой заморозки) воспроизводит комбинацию "открытая заморозка,
+-- покрывающая сегодня" + "номинальный ends_at уже в прошлом".
+reset role;
+
+insert into public.students (id, center_id, full_name, payer_id, primary_teacher_id) values
+  ('eeeeeeee-0001-0000-0000-00000000000a','cccccccc-0001-0000-0000-000000000001','С10 Улан','bbbbbbbb-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001');
+
+-- Абонемент E — для 38: обычный действующий, ничего не заморожено.
+insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at, ends_at) values
+  ('88888888-0001-0000-0000-00000000000e','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-00000000000a','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000002', null, 600000, 600000,
+   public.center_today('cccccccc-0001-0000-0000-000000000001'), public.center_today('cccccccc-0001-0000-0000-000000000001') + 30);
+
+-- Абонемент F — для 39: period_days=30, starts_at=today-40 → номинальный
+-- ends_at (starts_at+period_days) = today-10. Заморозка [today-20,
+-- infinity) покрывает и today-10, и сегодня: реальный интервал, где
+-- заморозка началась, пока абонемент был ещё действующим (today-20 раньше
+-- today-10), а открытый конец — то, что не даёт ends_at сдвинуться дальше.
+insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at, ends_at) values
+  ('88888888-0001-0000-0000-00000000000f','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-00000000000a','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000002', null, 600000, 600000,
+   public.center_today('cccccccc-0001-0000-0000-000000000001') - 40, public.center_today('cccccccc-0001-0000-0000-000000000001') - 10);
+
+insert into public.subscription_freezes (center_id, subscription_id, period) values
+  ('cccccccc-0001-0000-0000-000000000001','88888888-0001-0000-0000-00000000000f',
+   daterange(public.center_today('cccccccc-0001-0000-0000-000000000001') - 20, null, '[)'));
+
+insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
+  ('44444444-0001-0000-0000-000000000009','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-00000000000a',
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
+set local role authenticated;
+
+-- 38. p_to = p_from — пустой диапазон, раньше проходил бы как "успех" без эффекта.
+select throws_ok(
+  $q$ select public.freeze_subscription('88888888-0001-0000-0000-00000000000e'::uuid,
+        public.center_today('cccccccc-0001-0000-0000-000000000001'),
+        public.center_today('cccccccc-0001-0000-0000-000000000001')) $q$,
+  '22023', 'Дата окончания заморозки должна быть позже даты начала',
+  'freeze_subscription отклоняет p_to = p_from — пустой диапазон, не тихий no-op');
+select is(public.subscription_state('88888888-0001-0000-0000-00000000000e'), 'active',
+  'Абонемент E не тронут отклонённым вызовом');
+
+-- 39. Бессрочная заморозка пережила номинальный ends_at — state остаётся
+-- 'frozen', а не 'expired' (порядок CASE, раздел 5), и отметка занятия
+-- внутри неё — исключение "заморожен", а не тихий долг (раздел 11,
+-- c.ends_at вынесен в внешний WHERE вместе с c.is_frozen).
+select is(public.subscription_state('88888888-0001-0000-0000-00000000000f'), 'frozen',
+  'ends_at в прошлом, но период заморозки открыт и покрывает сегодня — frozen, не expired');
+select throws_ok(
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000009','eeeeeeee-0001-0000-0000-00000000000a','present') $q$,
+  '22023', null, 'Занятие внутри бессрочной заморозки, пережившей ends_at: исключение, не долг');
+select is((select count(*)::int from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000009'), 0,
+  'Отметка не создана — subscription_id не ушёл в NULL и долг по цене услуги');
+reset role;
 
 select * from finish();
 rollback;

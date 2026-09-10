@@ -40,7 +40,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
   const [{ data: balances }, { data: upcoming }] = await Promise.all([
     supabase
       .from('student_balance')
-      .select('student_id, active_subscription_id, lessons_left, debt_tiyin')
+      .select('student_id, active_subscription_id, lessons_left, debt_tiyin, state')
       .in('student_id', childIds),
     supabase
       .from('lesson_participants')
@@ -93,8 +93,13 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
           const lesson = next ? lessonById.get(next.lessonId) : null
           const teacher = lesson ? (lesson.substitute_teacher_id ?? lesson.teacher_id) : null
 
+          // state === 'frozen' проверяется до active_subscription_id: заморозка
+          // не трогает lessons_left/ends_at (0014, раздел 5) — без этой ветки
+          // родитель на паузе видел бы то же «N из M», что и до заморозки, без
+          // намёка, что списаний сейчас нет.
           let balanceLabel: string
           if (!balance?.active_subscription_id) balanceLabel = 'нет абонемента'
+          else if (balance.state === 'frozen') balanceLabel = 'заморожен'
           else if (balance.lessons_left == null) balanceLabel = 'без лимита'
           else balanceLabel = total != null ? `${balance.lessons_left} из ${total}` : `${balance.lessons_left}`
 
