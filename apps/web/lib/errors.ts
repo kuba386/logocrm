@@ -54,6 +54,10 @@ const CHECK_MESSAGES: Record<string, string> = {
   subscriptions_lesson_price_consistent: 'Цена занятия не соответствует цене абонемента',
   subscription_freezes_no_overlap: 'Заморозки пересекаются',
   attendance_statuses_default_not_deleted: 'Архивный статус не может быть по умолчанию',
+  payments_sign_matches_kind: 'Сумма не соответствует типу операции',
+  payments_subscription_needs_student: 'Платёж на абонемент обязан быть привязан к ученику',
+  subscriptions_paid_not_negative: 'Возврат превышает оплаченную по абонементу сумму',
+  financial_periods_month_is_first_of_month: 'Месяц периода — первое число месяца',
 }
 
 function checkConstraintName(message: string): string | null {
