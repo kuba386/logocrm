@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, lessonCard, lessonsThisWeek, openTodayWeek, openWeek, studentCards } from './helpers'
+import { actAndAwait, lessonCard, lessonsThisWeek, openBishkekYesterdayWeek, openWeek, studentCards } from './helpers'
 
 // Пункт 5 чек-листа: специалист видит только своё, отмечает занятие
 // проведённым, создавать не может.
@@ -50,9 +50,12 @@ test('5б. Специалист отмечает занятие проведён
 // посещение своего занятия и видит остаток абонемента словом, а не числом.
 // Пятое (последнее, ещё не отмеченное) занятие Данияра из фикстуры — те же
 // четыре из них уже отметил admin в attendance-subscriptions.spec.ts,
-// оставшийся остаток — 5 занятий из проданных восьми.
+// оставшийся остаток — 5 занятий из проданных восьми. Занятия датированы
+// вчера по Бишкеку (e2e.sql) — openBishkekYesterdayWeek, не openTodayWeek:
+// на границе недели (если прогон CI стартовал в понедельник) «сегодня» и
+// «вчера» могут попасть в разные недели расписания.
 test('5в. Специалист отмечает посещение и не видит остаток числом', async ({ page }) => {
-  await openTodayWeek(page)
+  await openBishkekYesterdayWeek(page)
   await studentCards(page, STUDENTS.daniyar).nth(4).click()
   await page.getByRole('button', { name: 'Отметить посещение' }).click()
 
