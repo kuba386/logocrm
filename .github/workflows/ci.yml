@@ -131,15 +131,11 @@ jobs:
             diff <(norm /tmp/database.types.ts) <(norm src/database.types.ts) | head -60 || true
           fi
 
-      # GITHUB_TOKEN не в состоянии молча пропустить собственный пуш: GitHub
-      # всё равно пытается завести на него прогон и тут же гасит его защитой
-      # от рекурсии — PR получает лишний "failure" без единого джоба внутри
-      # (проверено: именно так и произошло при первой обкатке этого шага).
-      # [skip ci] в сообщении коммита — единственный чистый способ не дать
-      # GitHub вообще пытаться: ни лишнего прогона, ни лишней галочки.
-      # Следующий человеческий пуш в ветку прогонит всё уже с актуальными
-      # типами; обычно он и так нужен — если типы для новой RPC не дописали,
-      # typecheck в app уже упал в этом же прогоне.
+      # Коммит от GITHUB_TOKEN не запускает новый прогон CI — так GitHub
+      # защищается от рекурсии. У коммита бота не будет своих проверок;
+      # следующий пуш в ветку прогонит всё уже с актуальными типами. Обычно
+      # он и так нужен: если типы для новой RPC не дописали, typecheck в app
+      # уже упал в этом же прогоне.
       #
       # Тестировали merge-коммит (checkout по умолчанию), а писать надо в head
       # ветки — поэтому отдельный worktree, а не checkout поверх рабочей копии
@@ -161,9 +157,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/db/src/database.types.ts
-          git commit -m "chore(db): типы из схемы миграций — сгенерировано в CI [skip ci]"
+          git commit -m "chore(db): типы из схемы миграций — сгенерировано в CI"
           git push origin "HEAD:refs/heads/$HEAD_REF"
-          echo "::notice::Типы закоммичены ботом в $HEAD_REF (с [skip ci] — своего прогона нет намеренно); актуальны со следующего человеческого пуша."
+          echo "::notice::Типы закоммичены ботом в $HEAD_REF; у этого коммита нет своего прогона CI — он появится со следующим пушем."
 
       - name: Типы разошлись, а коммитить некуда
         if: steps.types.outputs.changed == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
