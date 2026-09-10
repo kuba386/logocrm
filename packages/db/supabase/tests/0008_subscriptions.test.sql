@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(18);
+select plan(19);
 
 -- Фикстуры: два центра, чтобы проверять границу, а не только «работает» ------
 
@@ -309,6 +309,26 @@ select is(
 
 reset role;
 
+
+-- 19. Заморозка только через функцию: прямая вставка закрыта -------------------
+
+-- Это и есть смысл revoke all на subscription_freezes: EXCLUDE держит
+-- пересечение, но проверки «уже заморожен» и сдвиг ends_at живут в
+-- freeze_subscription. Прямая вставка мимо неё — вторая дорога к тем же
+-- данным, и тест фиксирует, что она закрыта.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+
+select throws_ok(
+  $q$ insert into public.subscription_freezes (center_id, subscription_id, period)
+      select center_id, id, daterange(current_date + 60, current_date + 70, '[)')
+        from public.subscriptions
+       where student_id = 'eeeeeeee-0000-0000-0000-000000000001' limit 1 $q$,
+  '42501', null,
+  'Прямая вставка заморозки от прикладной роли отклонена — путь только через freeze_subscription'
+);
+
+reset role;
 
 select * from finish();
 

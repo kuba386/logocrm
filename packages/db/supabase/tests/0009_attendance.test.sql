@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(20);
+select plan(21);
 
 -- Фикстуры ---------------------------------------------------------------------
 
@@ -310,6 +310,22 @@ select is(
   'Долг посчитан по цене, замороженной в отметке'
 );
 
+
+-- 21. Замороженные факты не правятся напрямую: триггер перетирает --------------
+
+-- На attendance у администратора есть update, и это нормально — правка
+-- статуса идёт через него. Но deducted, price_tiyin и subscription_id
+-- клиент задать не может: BEFORE-триггер вычисляет их заново из статуса,
+-- услуги и действующего абонемента при каждой записи, а не только при
+-- вставке. Иначе PATCH с price_tiyin=0 обнулял бы долг.
+update public.attendance set deducted = false, price_tiyin = 0
+ where lesson_id = '44444444-0000-0000-0000-000000000001';
+
+select ok(
+  (select deducted and price_tiyin = 50000 from public.attendance
+    where lesson_id = '44444444-0000-0000-0000-000000000001'),
+  'Прямая правка deducted и price_tiyin перетёрта триггером из статуса и услуги'
+);
 
 select * from finish();
 
