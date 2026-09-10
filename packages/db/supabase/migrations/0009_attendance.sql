@@ -358,11 +358,24 @@ begin
 
     -- Событие ровно на границе, а не «при остатке <= 2»: иначе третья,
     -- четвёртая и пятая отметки шлют его повторно.
-    if v_left = 2 then
+    -- Дедупликация по данным, а не по памяти. Событие на границе шлётся
+    -- один раз, но остаток — величина пересчитываемая: правка статуса
+    -- «болел» → «пришёл» снова приводит его к двойке, и без этой проверки
+    -- родитель получил бы второе «остаётся 2 занятия» о том же факте.
+    if v_left = 2 and not exists (
+      select 1 from public.events e
+       where e.type = 'subscription.low_balance'
+         and e.payload ->> 'subscription_id' = v_sub::text
+         and (e.payload ->> 'lessons_left')::int = 2
+    ) then
       perform public.emit_event('subscription.low_balance',
         jsonb_build_object('center_id', new.center_id, 'subscription_id', v_sub,
                            'student_id', new.student_id, 'lessons_left', v_left), new.center_id);
-    elsif v_left = 0 then
+    elsif v_left = 0 and not exists (
+      select 1 from public.events e
+       where e.type = 'subscription.exhausted'
+         and e.payload ->> 'subscription_id' = v_sub::text
+    ) then
       perform public.emit_event('subscription.exhausted',
         jsonb_build_object('center_id', new.center_id, 'subscription_id', v_sub,
                            'student_id', new.student_id), new.center_id);
@@ -443,8 +456,9 @@ as
       or (public.my_role() = 'parent' and public.parent_of_student(s.id))
     );
 
--- Специалисту витрина не гранится: остатки и долги это деньги центра.
-grant select on public.student_balance to authenticated;
+-- Грант выдаётся ниже, в общем блоке прав, после revoke дефолтных.
+-- Роль фильтрует сама вью: грант в Postgres выдаётся роли authenticated
+-- целиком, а «специалисту нельзя» — это условие на строку, не на роль.
 
 
 -- 6. Что видит специалист --------------------------------------------------------------
@@ -584,8 +598,12 @@ $$;
 
 -- Права ---------------------------------------------------------------------------------
 
+-- То же, что в 0008: дефолтные права Supabase снимаются явно.
+revoke all on public.attendance, public.student_balance from anon, authenticated;
+
 grant select on public.attendance to authenticated;
 grant insert, update on public.attendance to authenticated;
+grant select on public.student_balance to authenticated;
 
 revoke execute on function
   public.attendance_fill_and_check(),

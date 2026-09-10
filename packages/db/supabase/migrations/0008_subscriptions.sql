@@ -680,6 +680,18 @@ $$;
 
 -- Права -------------------------------------------------------------------------
 
+-- Supabase выдаёт роли authenticated полные права на каждую новую таблицу в
+-- public: это `alter default privileges` при инициализации проекта. Пока
+-- они на месте, колоночный грант ниже ничего не сужает — он добавляет
+-- права к уже выданным, а не заменяет их, и PATCH с lessons_used проходит.
+-- Тот же механизм разбирался в 0003 для EXECUTE: снимать нужно оба.
+revoke all on
+  public.attendance_statuses,
+  public.subscription_types,
+  public.subscriptions,
+  public.subscription_freezes
+  from anon, authenticated;
+
 grant select, insert, update on public.attendance_statuses, public.subscription_types to authenticated;
 grant select on public.subscriptions, public.subscription_freezes to authenticated;
 
