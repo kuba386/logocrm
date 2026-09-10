@@ -24,7 +24,7 @@
     --ring: 175 100% 18%;
     --radius: 0.5rem;
 
-    /* Статусы — из бейджей на макетах, не из ролей Material 3. «Болел» ещё нет — DESIGN.md, «Пробелы». */
+    /* Статусы — из бейджей на макетах, не из ролей Material 3. */
     --status-success: 142 72% 29%;
     --status-success-bg: 141 84% 93%;
     --status-warning: 26 90% 37%;
@@ -33,6 +33,11 @@
     --status-danger-bg: 0 93% 94%;
     --status-neutral: 215 16% 47%;
     --status-neutral-bg: 210 40% 96%;
+    /* «Болел» (sky) не пришёл ни в одном макете Stitch — временная заглушка
+       (обычный доступный синий), чтобы статус-кнопка не осталась без цвета.
+       Заменить, когда экран attendance-panel наконец сгенерируют — DESIGN.md, «Пробелы». */
+    --status-info: 201 96% 32%;
+    --status-info-bg: 204 94% 94%;
   }
 
   .dark {
@@ -63,6 +68,8 @@
     --status-danger-bg: 0 40% 18%;
     --status-neutral: 215 16% 65%;
     --status-neutral-bg: 215 15% 20%;
+    --status-info: 199 95% 74%;
+    --status-info-bg: 204 80% 16%;
   }
 
   * {

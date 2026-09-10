@@ -9,6 +9,7 @@ import {
   substituteTeacher,
   type ScheduleState,
 } from './actions'
+import { AttendancePanel } from './attendance-panel'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -63,9 +64,16 @@ export function LessonPanel({
   const [seriesState, seriesAction] = useActionState(cancelSeriesFrom, initial)
   const [substituteState, substituteAction] = useActionState(substituteTeacher, initial)
   const [moveState, moveAction] = useActionState(rescheduleLesson, initial)
-  const [mode, setMode] = useState<'view' | 'move' | 'substitute' | 'cancel'>('view')
+  const [mode, setMode] = useState<'view' | 'move' | 'substitute' | 'cancel' | 'attendance'>('view')
 
   if (!lesson) return null
+
+  // Отметка посещения — не переход статуса занятия (mark_attendance его не
+  // трогает), поэтому доступна и на «done», и на «planned» — но только пока
+  // занятие не отменено и уже началось: до начала отмечать нечего, RPC
+  // всё равно откажет с «Занятие ещё не началось».
+  const canMarkAttendance =
+    (lesson.isMine || canManage) && lesson.status !== 'cancelled' && new Date(lesson.startsAt) <= new Date()
 
   const close = () => {
     setMode('view')
@@ -120,6 +128,23 @@ export function LessonPanel({
         ) : null}
 
         <Result state={statusState} />
+
+        {canMarkAttendance && mode !== 'attendance' ? (
+          <div className="border-t border-border pt-4">
+            <Button type="button" size="sm" onClick={() => setMode('attendance')}>
+              Отметить посещение
+            </Button>
+          </div>
+        ) : null}
+
+        {mode === 'attendance' ? (
+          <div className="space-y-3 border-t border-border pt-4">
+            <AttendancePanel lessonId={lesson.id} />
+            <Button type="button" size="sm" variant="outline" onClick={() => setMode('view')}>
+              Назад
+            </Button>
+          </div>
+        ) : null}
 
         {canManage ? (
           <div className="space-y-3 border-t border-border pt-4">
