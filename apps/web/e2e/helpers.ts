@@ -113,9 +113,13 @@ export async function submitLessonDialog(page: Page, expectedNotice: string | Re
  */
 async function expectServerReply(page: Page, expectedNotice: string | RegExp) {
   const notice = page.getByRole('status')
-  // hasText с \S отсекает служебный пустой <div role="alert"> Next.js
-  // (__next-route-announcer__), который всегда есть в DOM.
-  const error = page.getByRole('alert').filter({ hasText: /\S/ })
+  // Служебный <div role="alert" id="__next-route-announcer__"> Next.js
+  // обычно пуст, но после клиентской навигации (Link, без полной
+  // перезагрузки) на миг держит заголовок новой страницы для скринридера —
+  // тогда фильтр по «непустому тексту» его не отсекает, и тест видит
+  // «отказ» вида «Карточка ученика — LogoCRM». Исключаем по id, а не по
+  // содержимому: оно то пустое, то нет, а id всегда один и тот же.
+  const error = page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({ hasText: /\S/ })
 
   await expect(notice.or(error).first()).toBeVisible({ timeout: 20_000 })
 
