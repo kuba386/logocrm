@@ -8,6 +8,15 @@
 -- кандидата (badge/attendance/student_balance) сортирует "незамороженные
 -- первыми" и молча меняет ответ, если на одном студенте случайно оказались
 -- два абонемента от разных, не связанных друг с другом тестов.
+--
+-- Занятия, которые реально отмечаются (insert into attendance), никогда не
+-- датируются РОВНО center_today() — attendance_fill_and_check отказывает
+-- "занятие ещё не началось" при starts_at > now(), а конкретный час CI не
+-- контролирует: "сегодня в 10:00" может оказаться будущим, если раннер
+-- стартовал в 3 часа ночи по Бишкеку. Там, где нужна дата ВНУТРИ окна
+-- заморозки, а не именно "сегодня", берётся center_today() - 1 — заведомо
+-- прошлый час суток на любой момент "сегодня", и заморозка при этом
+-- начинается с той же даты, а не с center_today().
 
 begin;
 
@@ -93,8 +102,8 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
 -- не на ваших занятиях" ещё до проверки заморозки.
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001')),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '08:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '08:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001')),
   ('44444444-0001-0000-0000-000000000002','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
     ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
     ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
@@ -210,7 +219,7 @@ select ok(
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 
--- 9. Занятие СЕГОДНЯ — внутри окна заморозки [-2,+5) абонемента 1: новое
+-- 9. Занятие ВЧЕРА — внутри окна заморозки [-2,+5) абонемента 1: новое
 -- списание — исключение, а не тихий долг. Имя ребёнка есть в тексте.
 select throws_ok(
   $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
@@ -258,15 +267,16 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
   ('88888888-0001-0000-0000-000000000002','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000002','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000002', null, 600000, 20000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 5, public.center_today('cccccccc-0001-0000-0000-000000000001') + 25, true);
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000003','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000002',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '10:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '10:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '10:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 -- Бессрочная (без p_to): нужна такой ниже, в тесте на subscription_summary
--- (freeze_to = NULL для "пока не разморозят").
+-- (freeze_to = NULL для "пока не разморозят"). С вчера, не с сегодня —
+-- занятие теста 12 тоже вчерашнее (шапка файла, "занятие ещё не началось").
 select public.freeze_subscription('88888888-0001-0000-0000-000000000002'::uuid,
-  public.center_today('cccccccc-0001-0000-0000-000000000001'));
+  public.center_today('cccccccc-0001-0000-0000-000000000001') - 1);
 reset role;
 
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
@@ -286,8 +296,8 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
   ('88888888-0001-0000-0000-000000000003','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000003','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000001', 8, 8, 400000, 50000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 90, null);
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000004','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000003',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '11:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '11:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '11:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '11:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 -- Абонемент уже exhausted (lessons_used=lessons_total) — freeze_subscription
 -- отказал бы "можно заморозить только действующий"; заморозка тут и не нужна
@@ -325,13 +335,13 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
   ('88888888-0001-0000-0000-000000000005','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000004','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000001', 8, 400000, 50000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 5, null);
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000005','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000004',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '12:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '12:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '12:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '12:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select public.freeze_subscription('88888888-0001-0000-0000-000000000004'::uuid,
-  public.center_today('cccccccc-0001-0000-0000-000000000001'),
+  public.center_today('cccccccc-0001-0000-0000-000000000001') - 1,
   public.center_today('cccccccc-0001-0000-0000-000000000001') + 10);
 reset role;
 
@@ -363,18 +373,23 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
 -- гейтом, 0007_lock_down_participant_functions.sql:44-47).
 insert into public.groups (id, center_id, name, teacher_id) values
   ('dddddddd-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','Группа Т','aaaaaaaa-0001-0000-0000-000000000001');
-insert into public.group_students (group_id, student_id, center_id) values
-  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000005','cccccccc-0001-0000-0000-000000000001'),
-  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001');
+-- joined_at — явно, не по умолчанию (current_date сессии, обычно UTC):
+-- rebuild_lesson_participants берёт состав группы "вошёл не позже даты
+-- занятия" (0006:249), а занятие теперь вчерашнее (шапка файла) — если
+-- joined_at окажется today по UTC, а занятие today-1 по центру, дефолт
+-- будет ПОЗЖЕ занятия, и участник в состав не попадёт вовсе.
+insert into public.group_students (group_id, student_id, center_id, joined_at) values
+  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000005','cccccccc-0001-0000-0000-000000000001', public.center_today('cccccccc-0001-0000-0000-000000000001') - 30),
+  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001', public.center_today('cccccccc-0001-0000-0000-000000000001') - 30);
 insert into public.lessons (id, center_id, service_id, teacher_id, group_id, starts_at, ends_at) values
   ('44444444-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','dddddddd-0001-0000-0000-000000000001',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '13:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '13:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '13:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '13:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select public.freeze_subscription('88888888-0001-0000-0000-000000000006'::uuid,
-  public.center_today('cccccccc-0001-0000-0000-000000000001'),
+  public.center_today('cccccccc-0001-0000-0000-000000000001') - 1,
   public.center_today('cccccccc-0001-0000-0000-000000000001') + 10);
 reset role;
 
