@@ -140,6 +140,8 @@ select set_eq(
     ('sell_subscription(uuid,uuid,integer,date)'),
     ('student_subscription_badge(uuid)'),
     ('student_balance_pick(uuid)'),
+    ('subscription_current_freeze(uuid,date)'),
+    ('subscription_freeze_days(uuid)'),
     ('subscription_lessons_left(uuid)'),
     ('subscription_state(uuid)'),
     ('subscription_summary(uuid)'),

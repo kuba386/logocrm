@@ -163,19 +163,22 @@ create trigger subscription_types_guard_sold_fields
 -- CLAUDE.md — только не policy-to-policy рекурсия, а invoker-функция,
 -- тихо получающая урезанный RLS-снимок вместо отказа.
 --
--- Без ветки teacher: эта функция решает, кому МОЖНО напрямую вызвать
--- subscription_state/subscription_current_freeze/subscription_freeze_days
--- как RPC (все три — раздел "Права" в конце файла) — специалисту нельзя
--- ни то, ни другое, только готовое слово бейджа. Раньше (первая версия
--- этого файла) ветка teacher здесь была нужна, чтобы subscription_state
--- впускала бейдж, — но это давало специалисту, вызвавшему subscription_
--- state напрямую с известным subscription_id (виден в attendance.
--- subscription_id по его же занятиям), больше категорий состояния
--- (exhausted/expired/cancelled), чем бейдж вообще показывает (сворачивает
--- их все в "нет") — обратное тому, что обещает 0008:245-248. Теперь бейдж
--- читает состояние через subscription_state_unchecked напрямую (сам уже
--- проверил teacher_teaches_student на входе, строка ниже), а эта функция
--- отвечает только за прямой вызов RPC посторонним.
+-- Без ветки teacher: у роли authenticated нет отдельного грамма для
+-- owner/admin/parent/teacher — это одна и та же Postgres-роль, разница
+-- только в my_role() внутри тела. Значит "специалисту нельзя, остальным
+-- можно" нечем выразить в GRANT — это решается тем, что ЭТА функция
+-- возвращает для teacher false, а вызывающие её (subscription_current_
+-- freeze, subscription_freeze_days, раздел 5) на false отвечают NULL,
+-- сами оставаясь выданными authenticated (раздел "Права"). Раньше (первая
+-- версия этого файла) ветка teacher здесь была нужна, чтобы subscription_
+-- state впускала бейдж, — но это давало специалисту, вызвавшему
+-- subscription_state напрямую с известным subscription_id (виден в
+-- attendance.subscription_id по его же занятиям), больше категорий
+-- состояния (exhausted/expired/cancelled), чем бейдж вообще показывает
+-- (сворачивает их все в "нет") — обратное тому, что обещает 0008:245-248.
+-- Теперь бейдж читает состояние через subscription_state_unchecked
+-- напрямую (сам уже проверил teacher_teaches_student на входе, строка
+-- ниже) — та функция вообще без грантов, у неё нет своей проверки видимости.
 create or replace function public.subscription_visible_to_caller(p_subscription_id uuid)
   returns boolean
   language plpgsql
@@ -299,10 +302,11 @@ $$;
 
 -- Тот же перенос definer, что и subscription_state (была ровно та же
 -- болезнь: coalesce(sum(...), 0) не отличал "нет заморозок" от "не
--- видно" — родителю возвращала 0 вместо реального числа дней). Прямой
--- грант authenticated НЕ выдаётся (раздел "Права") — только через
--- subscription_summary, которая сама definer и сама решает, кому отвечать
--- (owner/admin, без teacher). 'infinity'-форма нормализована в разделе 1,
+-- видно" — родителю возвращала 0 вместо реального числа дней). Грант
+-- authenticated остаётся (раздел "Права") — родителю и владельцу эта
+-- функция нужна напрямую, а от специалиста её защищает не грант (роль в
+-- Postgres одна на всех), а сама visible_to_caller внутри: teacher получит
+-- NULL, а не число. 'infinity'-форма нормализована в разделе 1,
 -- поэтому sum() по upper-lower корректен без явного case для открытых
 -- заморозок: upper() на неограниченной верхней границе даёт NULL, sum()
 -- его пропускает — тот же результат, что раньше давал явный `when
@@ -1045,27 +1049,38 @@ revoke execute on function
   public.subscription_freezes_guard_backdate()
   from public, anon, authenticated;
 
--- Не триггерные, но и не прикладные RPC: вызываются только из уже
--- definer-контекста, который сам решил, что вызывающему видно (subscription_
--- state, subscription_summary — оба owner/admin/parent через subscription_
--- visible_to_caller; student_subscription_badge — сам проверил teacher_
--- teaches_student/parent_of_student и зовёт unchecked-версию напрямую).
--- Прямой грант authenticated любой из четырёх отдал бы специалисту либо
--- точные даты/дни заморозки, либо категорию состояния (exhausted/expired/
--- cancelled) в обход бейджа, который единственный умеет сворачивать все
--- эти случаи в слово "нет" (раздел 4) — специалисту положено только оно.
---
--- subscription_freeze_days существовала и раньше (0010), но была security
--- invoker — прямой грант authenticated был безопасен, потому что RLS
--- subscriptions сама отсекала специалиста (ноль строк, NULL). Теперь она
--- definer ради того же чтения subscription_freezes под собственными
--- правами, что и current_freeze — и старый грант должен быть отозван
--- явно: create or replace ACL не трогает (0010_stage4_hardening.test.sql,
--- тесты 4 и 7 — переписаны на throws_ok под этот отзыв).
+-- Postgres/Supabase не различают owner/admin/teacher/parent на уровне
+-- GRANT — это одна и та же роль authenticated, разница только в my_role()
+-- внутри тела функции. Поэтому отзывать EXECUTE у authenticated целиком,
+-- чтобы закрыть доступ ИМЕННО специалисту, — не работает: это заодно
+-- отзывает его и у владельца, и у родителя, которым эти же данные нужны
+-- напрямую (родителю — дни заморозки, раздел 5; владельцу — оба
+-- калькулятора в проверках ниже и в подсчётах вроде теста на сумму дней).
+-- Разница по ролям уже сделана ВНУТРИ тела: subscription_current_freeze и
+-- subscription_freeze_days сами вызывают subscription_visible_to_caller
+-- (без ветки teacher, раздел 4) и возвращают NULL, если вызывающему не
+-- положено, — специалист, вызвав их напрямую, получит NULL, а не точные
+-- даты/дни, и грант на EXECUTE тут ни при чём. Значит грант остаётся, как
+-- у subscription_state и subscription_summary.
+revoke all on function
+  public.subscription_current_freeze(uuid, date),
+  public.subscription_freeze_days(uuid)
+  from public, anon;
+grant execute on function
+  public.subscription_current_freeze(uuid, date),
+  public.subscription_freeze_days(uuid)
+  to authenticated;
+
+-- Эти две — другое дело: у subscription_visible_to_caller нет причины
+-- быть вызываемой отдельно от функций выше (она не отвечает на вопрос про
+-- заморозку сама по себе, только "видно ли"), а subscription_state_
+-- unchecked вообще не имеет собственной проверки — рассчитана только на
+-- вызов из уже проверившего доступ кода (badge). Дать ей грант — значит
+-- дать любому authenticated точную категорию состояния (exhausted/expired/
+-- cancelled) без какого-либо гейта: ровно то, что нашла находка 3 (round5)
+-- и что закрывает публичная subscription_state.
 revoke execute on function
   public.subscription_visible_to_caller(uuid),
-  public.subscription_current_freeze(uuid, date),
-  public.subscription_freeze_days(uuid),
   public.subscription_state_unchecked(uuid)
   from public, anon, authenticated;
 

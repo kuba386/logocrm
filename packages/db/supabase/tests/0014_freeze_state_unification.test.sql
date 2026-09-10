@@ -150,21 +150,27 @@ select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0001
 set local role authenticated;
 select is(public.subscription_state('88888888-0001-0000-0000-000000000001'), null::text,
   'Чужой центр: subscription_state — NULL, не факт о чужой заморозке');
-select throws_ok(
-  $q$ select public.subscription_freeze_days('88888888-0001-0000-0000-000000000001') $q$,
-  '42501', null, 'subscription_freeze_days закрыта от authenticated совсем — включая чужой центр');
+-- Грант на subscription_freeze_days есть у authenticated целиком (Postgres
+-- не различает owner/admin/parent внутри одной роли) — видимость проверяет
+-- сама функция через subscription_visible_to_caller и на чужом центре
+-- отдаёт NULL тем же путём, что раньше давала RLS у invoker-версии.
+select is(public.subscription_freeze_days('88888888-0001-0000-0000-000000000001'), null::integer,
+  'Дни заморозки чужого абонемента — NULL, не отказ в правах: функция вызываема, видимость проверяет она сама');
 reset role;
 
--- 6. Специалист: бейдж — словом; прямые RPC — не дают больше слова.
+-- 6. Специалист: бейдж — словом; прямые RPC той же функцией — тоже NULL,
+-- не больше. subscription_state_unchecked — исключение, у неё нет своей
+-- проверки видимости вообще, поэтому она остаётся закрытой грантом.
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select is(public.student_subscription_badge('eeeeeeee-0001-0000-0000-000000000001'), 'заморожен',
   'Специалист видит слово «заморожен» через бейдж своего ученика');
 select is(public.subscription_state('88888888-0001-0000-0000-000000000001'), null::text,
   'Специалист напрямую через subscription_state получает NULL, не категорию (round5, находка 3)');
-select throws_ok(
-  $q$ select public.subscription_current_freeze('88888888-0001-0000-0000-000000000001', public.center_today('cccccccc-0001-0000-0000-000000000001')) $q$,
-  '42501', null, 'subscription_current_freeze закрыта от authenticated совсем');
+select is(
+  public.subscription_current_freeze('88888888-0001-0000-0000-000000000001', public.center_today('cccccccc-0001-0000-0000-000000000001')),
+  null::daterange,
+  'subscription_current_freeze специалисту напрямую — NULL, не точный диапазон (проверка видимости внутри функции)');
 select throws_ok(
   $q$ select public.subscription_state_unchecked('88888888-0001-0000-0000-000000000001') $q$,
   '42501', null, 'subscription_state_unchecked закрыта от authenticated совсем, включая владельца своего центра');
