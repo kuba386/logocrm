@@ -10,7 +10,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(32);
+select plan(38);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -107,6 +107,27 @@ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, s
    date_trunc('month', now() - interval '3 months') + interval '10 days',
    date_trunc('month', now() - interval '3 months') + interval '10 days' + interval '45 min', 'planned');
 
+-- ...002 отмечена (как postgres, тем же приёмом, что 0009_attendance.
+-- test.sql:88) — после 0014 close_month смотрит не на status='done', а на
+-- отметку участника; без этой строки close_month(M1) в тесте 19 находит
+-- ...002 неотмеченной и падает раньше, чем должен.
+insert into public.attendance (center_id, lesson_id, student_id, status_id)
+select 'cccccccc-0000-0000-0000-00000000000a', '44444444-0000-0000-0000-000000000002',
+       'eeeeeeee-0000-0000-0000-000000000001', id
+  from public.attendance_statuses
+ where center_id = 'cccccccc-0000-0000-0000-00000000000a' and code = 'present';
+
+-- Платежи центра А для тестов 1-3 и 27 — без них «не видит платежей»
+-- проходило бы и с полностью открытыми политиками: до первого
+-- record_payment (тест 15) платежей нигде не существует вовсе, проверка
+-- изоляции ничего не изолирует. Второй — от «чужого» плательщика d2,
+-- специально для теста 27 (родитель не видит платежи не своего плательщика).
+insert into public.payments (center_id, payer_id, student_id, amount_tiyin, kind, paid_at) values
+  ('cccccccc-0000-0000-0000-00000000000a','bbbbbbbb-0000-0000-0000-000000000001',
+   'eeeeeeee-0000-0000-0000-000000000001', 30000, 'payment', now()),
+  ('cccccccc-0000-0000-0000-00000000000a','bbbbbbbb-0000-0000-0000-000000000002',
+   null, 30000, 'payment', now());
+
 
 -- 1-3. Изоляция и роли ---------------------------------------------------------
 
@@ -121,6 +142,14 @@ select is(
   (select count(*)::int from public.payments), 0,
   'Владелец центра Б не видит платежей центра А'
 );
+select is(
+  -- Не голый count(*) = 0: у центра Б есть своя строка student_payers
+  -- (триггер завёл её на "Чужой" студентке при фикстурной вставке, payer_id
+  -- ...b). Фильтр по center_id — именно то, что проверяет межтенантную
+  -- границу, не зависит от того, сколько у Б своих строк.
+  (select count(*)::int from public.student_payers where center_id = 'cccccccc-0000-0000-0000-00000000000a'), 0,
+  'Владелец центра Б не видит student_payers центра А'
+);
 
 reset role;
 
@@ -130,6 +159,10 @@ set local role authenticated;
 select is(
   (select count(*)::int from public.payments), 0,
   'Специалист не видит ни одного платежа своего же центра'
+);
+select is(
+  (select count(*)::int from public.student_payers), 0,
+  'Специалист не видит student_payers своего же центра'
 );
 
 reset role;
@@ -164,6 +197,18 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.payments', 'INSERT'),
   'authenticated не может вставить платёж напрямую — только через record_payment'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.student_payers', 'INSERT'),
+  'authenticated не может вставить строку в student_payers напрямую — только триггером'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.student_payers', 'UPDATE'),
+  'authenticated не может изменить строку student_payers'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.student_payers', 'DELETE'),
+  'authenticated не может удалить строку student_payers — append-only'
 );
 select throws_ok(
   $q$ update public.financial_periods set closed_at = now() where center_id = 'cccccccc-0000-0000-0000-00000000000a' $q$,
@@ -340,6 +385,10 @@ select is(
   (select count(*)::int from public.payments p where p.payer_id = 'bbbbbbbb-0000-0000-0000-000000000002'),
   0,
   'Родитель не видит платежи чужого плательщика того же центра'
+);
+select is(
+  (select count(*)::int from public.student_payers), 0,
+  'Родитель не видит student_payers (apply_tenant_rls — только owner/admin, как и у специалиста)'
 );
 
 reset role;
