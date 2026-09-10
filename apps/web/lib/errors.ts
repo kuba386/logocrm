@@ -53,6 +53,7 @@ const CHECK_MESSAGES: Record<string, string> = {
   subscriptions_not_overdrawn: 'Списание превышает оплаченное количество занятий',
   subscriptions_lesson_price_consistent: 'Цена занятия не соответствует цене абонемента',
   subscription_freezes_no_overlap: 'Заморозки пересекаются',
+  attendance_statuses_default_not_deleted: 'Архивный статус не может быть по умолчанию',
 }
 
 function checkConstraintName(message: string): string | null {

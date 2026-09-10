@@ -45,31 +45,10 @@ export async function saveAttendanceStatus(
   const { data: dup } = await duplicate.maybeSingle()
   if (dup) return { message: `Код «${code}» уже занят другим статусом` }
 
-  if (id && !isDefault) {
-    // Снять «по умолчанию» с единственного статуса нельзя: массовая отметка
-    // без него откажет всей форме. Назначить другой — можно, флаг переедет сам.
-    const { data: current } = await supabase
-      .from('attendance_statuses')
-      .select('is_default')
-      .eq('id', id)
-      .maybeSingle()
-    if (current?.is_default) {
-      return { message: 'Сначала назначьте другой статус по умолчанию — центр не может остаться без него' }
-    }
-  }
-
-  if (isDefault) {
-    // Статус по умолчанию один на центр — частичный уникальный индекс.
-    // Триггера, снимающего флаг с прежнего, нет, поэтому снимаем здесь до
-    // записи. Между двумя запросами центр на миг без default — для
-    // справочника терпимо: mark_attendance без статуса откажет, а не
-    // поставит случайный.
-    let clear = supabase.from('attendance_statuses').update({ is_default: false }).eq('is_default', true)
-    if (id) clear = clear.neq('id', id)
-    const { error } = await clear
-    if (error) return toAppError(error, 'Не удалось снять прежний статус по умолчанию')
-  }
-
+  // is_default вне гранта на update (0012) — «ровно один default на центр»
+  // держит отложенный констрейнт-триггер, менять флаг умеет только
+  // set_default_attendance_status. При создании нового статуса колонка
+  // ещё доступна через insert, поэтому isDefault учитываем только там.
   const payload = {
     code,
     name,
@@ -78,13 +57,12 @@ export async function saveAttendanceStatus(
     pays_teacher: flag(formData, 'paysTeacher'),
     counts_absence: flag(formData, 'countsAbsence'),
     notify_parent: flag(formData, 'notifyParent'),
-    is_default: isDefault,
     sort,
   }
 
   const { error } = id
     ? await supabase.from('attendance_statuses').update(payload).eq('id', id)
-    : await supabase.from('attendance_statuses').insert(payload)
+    : await supabase.from('attendance_statuses').insert({ ...payload, is_default: isDefault })
 
   if (error) return toAppError(error, 'Не удалось сохранить статус')
 
@@ -92,7 +70,38 @@ export async function saveAttendanceStatus(
   return { message: '', notice: 'Сохранено' }
 }
 
-// Архива здесь нет намеренно: прямой update deleted_at не проходит
-// tenant_admin — PostgREST добавляет RETURNING, а using(deleted_at is null)
-// не пропускает обновлённую строку. Нужен security-definer RPC по образцу
-// archive_student, это следующая миграция.
+export async function setDefaultAttendanceStatus(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Статус не найден' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('set_default_attendance_status', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось назначить статус по умолчанию')
+
+  revalidatePath('/app/settings/attendance-statuses')
+  return { message: '', notice: 'Статус назначен по умолчанию' }
+}
+
+export async function archiveAttendanceStatus(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Статус не найден' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_attendance_status', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось отправить статус в архив')
+
+  revalidatePath('/app/settings/attendance-statuses')
+  return { message: '', notice: 'Статус в архиве' }
+}
+
+export async function restoreAttendanceStatus(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Статус не найден' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('restore_attendance_status', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось восстановить статус')
+
+  revalidatePath('/app/settings/attendance-statuses')
+  return { message: '', notice: 'Статус восстановлен' }
+}
