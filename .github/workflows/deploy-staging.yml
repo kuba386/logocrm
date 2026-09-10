@@ -5,12 +5,25 @@ name: Deploy staging
 # SQL-логики. Правило «схема только через зелёный db-джоб» держится
 # зависимостью между джобами, а не дисциплиной.
 #
+# Три способа подключения, по убыванию приоритета:
+#
+# 1. SUPABASE_ACCESS_TOKEN — CLI сам получает временную роль через
+#    api.supabase.com/v1/projects/<ref>/cli/login-role и подключается без
+#    пароля базы. Единственный путь, который работает, пока открыт
+#    supabase/supabase#44210: пулер стабильно отвергает пароль роли
+#    postgres после сброса в дашборде, в том числе в ap-south-1. Цена —
+#    токен аккаунтный: им можно удалить любой проект организации. Ref
+#    проекта поэтому зашит в файл, а не берётся из секрета.
+# 2. SUPABASE_DB_PASSWORD — строку собирает workflow, пароль кодируется.
+#    Доступ к одной базе, а не к аккаунту. Вернуться к нему, когда #44210
+#    закроют: удалить секрет с токеном, и деплой сам переключится.
+# 3. SUPABASE_DB_URL — готовая строка, запасной путь с проверкой ref.
+#
 # Раньше связка шла через workflow_run по успеху ВСЕГО workflow CI. После
 # появления приёмочных тестов это означало бы, что красный Playwright
 # останавливает выкладку корректной схемы. pgTAP проверяет схему и права,
 # Playwright — интерфейс: сломанный интерфейс не повод не катить проверенную
-# миграцию. Приёмка при этом остаётся обязательной для мержа, так что до
-# main такой код всё равно не доходит.
+# миграцию. Приёмка при этом остаётся обязательной для мержа.
 on:
   workflow_call:
   workflow_dispatch:
@@ -45,20 +58,9 @@ jobs:
         with:
           version: 2.116.0
 
-      # Строку подключения собирает workflow, а секретом остаётся только
-      # пароль. Так исчезают все четыре ошибки, на которых этот деплой уже
-      # спотыкался: чужой проект, имя пользователя без ref, Direct connection
-      # вместо пулера и непроцентованный пароль. Ref и хост — не секреты, они
-      # и так лежат в репозитории.
-      #
-      # SUPABASE_DB_URL поддерживается как запасной путь: если он задан, берём
-      # его, но проверяем, что он ведёт в нужный проект. В том же аккаунте
-      # Supabase рядом живёт старый logoped-crm с боевыми данными детей, и
-      # строка туда уже уезжала однажды — от применения миграций LogoCRM
-      # поверх боевой базы спасло лишь то, что прямой хост отвечает по IPv6,
-      # а раннер ходит по IPv4. Полагаться на это нельзя.
-      - name: Собрать строку подключения
+      - name: Выбрать способ подключения
         env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           EXPECTED_REF: hiwstqrnxrlfuanvfggq
@@ -66,85 +68,86 @@ jobs:
         run: |
           set -u
 
-          if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
-            # Пароль кодируется целиком: спецсимволы из генератора Supabase
-            # иначе рвут URL по '@' или '#', и до сервера уезжает мусор.
-            # trim() обязателен: GitHub хранит секрет как есть, и перенос строки,
-            # прилипший при вставке, превращается в %0A на конце пароля. Локальный
-            # скрипт проверки пробелы обрезает, поэтому у владельца «ГОТОВО», а
-            # здесь 28P01 — и расхождение невозможно заметить со стороны.
+          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            # Пароль базы не нужен: CLI получит временную роль через API.
+            # Ref зашит здесь и только здесь — токен аккаунтный, и это
+            # единственное, что удерживает его в границах одного проекта.
+            echo "DB_FLAG=--project-ref" >> "$GITHUB_ENV"
+            echo "DB_TARGET=$EXPECTED_REF" >> "$GITHUB_ENV"
+            echo "Подключение по токену: проект $EXPECTED_REF, временная роль через API."
+
+          elif [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+            # trim() обязателен: GitHub хранит секрет как есть, и перенос
+            # строки, прилипший при вставке, превращается в %0A на конце
+            # пароля. Локальный скрипт проверки пробелы обрезает, поэтому у
+            # владельца «ГОТОВО», а здесь 28P01.
             ENCODED=$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD.trim()))')
 
-            # Если переменная не доехала до подпроцесса, encodeURIComponent
-            # вернёт строку "undefined", и мы бы молча пошли подключаться с
-            # ней вместо пароля. Ошибка была бы 28P01 — неотличимо от
-            # «владелец ввёл не тот пароль».
             if [ -z "$ENCODED" ] || [ "$ENCODED" = "undefined" ]; then
               echo "::error::Пароль не доехал до шага сборки строки. Проверьте, что секрет называется SUPABASE_DB_PASSWORD и лежит в Environments → staging."
               exit 1
             fi
 
             URL="postgresql://postgres.${EXPECTED_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
-            # Закодированный пароль не совпадает с секретом посимвольно, и
-            # автоматическая маскировка его бы не поймала.
             echo "::add-mask::$ENCODED"
             echo "::add-mask::$URL"
+            echo "DB_FLAG=--db-url" >> "$GITHUB_ENV"
+            echo "DB_TARGET=$URL" >> "$GITHUB_ENV"
             echo "Строка собрана из пароля: проект $EXPECTED_REF, Session pooler."
+            echo "::warning::Пока открыт supabase/supabase#44210, пулер может отвергать пароль после сброса. Если ниже 28P01 — положите SUPABASE_ACCESS_TOKEN, он имеет приоритет."
 
           elif [ -n "${SUPABASE_DB_URL:-}" ]; then
-            # Ref вытаскиваем только из структурных позиций — из имени
-            # пользователя до двоеточия и из хоста после собаки. Поле пароля
-            # лежит между ними и под шаблон не попадает, так что напечатать
-            # кусок секрета эта строка не может.
             DETECTED=$(printf '%s' "$SUPABASE_DB_URL" \
               | grep -oE '(postgres\.[a-z0-9]{20}:|@db\.[a-z0-9]{20}\.supabase\.co)' \
               | grep -oE '[a-z0-9]{20}' | head -1)
 
-            # Сравниваем разобранный ref, а не ищем подстроку по всей строке:
-            # ref мог бы встретиться в пароле или имени базы и пройти гейт.
             if [ "$DETECTED" != "$EXPECTED_REF" ]; then
               echo "::error::Строка подключения ведёт в проект «${DETECTED:-не распознан}», а ожидался $EXPECTED_REF. Миграции не применяются."
               exit 1
             fi
-            echo "Взята готовая строка: проект $EXPECTED_REF — верный."
 
             case "$SUPABASE_DB_URL" in
               *db.*.supabase.co*)
                 echo "::warning::Похоже на Direct connection. Он отвечает только по IPv6, а раннеры GitHub работают по IPv4 — нужен Session pooler на порту 5432." ;;
             esac
 
-            URL="$SUPABASE_DB_URL"
+            echo "DB_FLAG=--db-url" >> "$GITHUB_ENV"
+            echo "DB_TARGET=$SUPABASE_DB_URL" >> "$GITHUB_ENV"
+            echo "Взята готовая строка: проект $EXPECTED_REF — верный."
 
           else
-            echo "::error::Нет ни SUPABASE_DB_PASSWORD, ни SUPABASE_DB_URL. Достаточно первого: положите пароль базы в Environments → staging, строку соберёт сам workflow."
+            echo "::error::Нет ни SUPABASE_ACCESS_TOKEN, ни SUPABASE_DB_PASSWORD, ни SUPABASE_DB_URL. Пока открыт supabase/supabase#44210, рабочий вариант — токен: Account → Access Tokens в Supabase, секрет в Environments → staging."
             exit 1
           fi
 
-          echo "DB_URL=$URL" >> "$GITHUB_ENV"
-
-      # Работаем по строке подключения, без supabase link.
-      #
-      # Так это доступ к одной базе, а не токен ко всему аккаунту Supabase —
-      # таким можно удалить любой проект организации, включая боевой
-      # logoped-crm. DB_URL собран предыдущим шагом и замаскирован в логах.
+      # Без supabase link: и --db-url, и --project-ref работают напрямую.
+      # DB_FLAG и DB_TARGET выбраны предыдущим шагом; строка с паролем, если
+      # она есть, замаскирована в логах. Токен нужен только пути 1 и в
+      # остальных случаях пуст.
       - name: Что будет применено
         working-directory: packages/db
-        run: supabase db push --dry-run --db-url "$DB_URL"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase db push --dry-run $DB_FLAG "$DB_TARGET"
 
       - name: Применить миграции
         id: push
         working-directory: packages/db
-        run: supabase db push --db-url "$DB_URL"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase db push $DB_FLAG "$DB_TARGET"
 
       # always(): при падении push картина «что в базе против того, что в
       # файлах» нужна больше всего. Без неё в логе остаётся только сырой
       # текст CLI.
       - name: Состояние после применения
-        # Но не тогда, когда строка так и не собралась: без DB_URL этот шаг
+        # Но не тогда, когда способ так и не выбрался: без DB_TARGET этот шаг
         # лишь добавил бы вторую ошибку поверх первой.
-        if: always() && env.DB_URL != ''
+        if: always() && env.DB_TARGET != ''
         working-directory: packages/db
-        run: supabase migration list --db-url "$DB_URL"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase migration list $DB_FLAG "$DB_TARGET"
 
       # Только при отказе самого push: если упала сборка строки или dry-run,
       # эта подсказка увела бы не туда.
