@@ -98,7 +98,7 @@ UI:
 
 **Промт.**
 ```
-Миграция 0007_attendance_subscriptions.sql:
+Миграции 0008_subscriptions.sql и 0009_attendance.sql:
 1. attendance_statuses: id, center_id, code text, name text, color text, deducts_lesson bool, pays_teacher bool, counts_absence bool, notify_parent bool, is_default bool, sort int. RLS/audit. При create_center — seed 4 статуса: пришёл (deduct, pay), опоздал (deduct, pay), болел (no deduct, no pay, absence), прогул (deduct, pay, absence).
 2. subscription_types: id, center_id, name, service_id, kind text check in ('lessons','period','unlimited'), lessons_count int, period_days int, price_tiyin int not null, is_active. RLS/audit.
 3. subscriptions: id, center_id, student_id not null, payer_id not null, type_id, lessons_total int, lessons_used int default 0, price_tiyin int, lesson_price_tiyin int (расчётная = price/lessons, округление вниз), starts_at date, ends_at date, freeze_from date, freeze_to date, allow_negative bool default false, status text check in ('active','frozen','exhausted','expired','cancelled'), notes. RLS: admin; parent_read свои; teacher — не видит вообще.
@@ -140,7 +140,7 @@ UI:
 
 **Промт.**
 ```
-Миграция 0008_finance.sql:
+Миграция 0010_finance.sql:
 1. payment_sources: id, center_id, name (наличные, Mbank, O!Dengi, Elcart, перевод), is_active, sort. Seed при create_center. RLS admin.
 2. payments: id, center_id, payer_id not null, student_id, subscription_id, amount_tiyin int not null, source_id, paid_at timestamptz default now(), kind text check in ('payment','refund','correction'), comment, + конвенции. RLS admin only; parent — select свои. audit.
 3. expenses: id, center_id, category text, amount_tiyin, paid_at, comment. RLS admin.
@@ -184,7 +184,7 @@ UI:
 
 **Промт.**
 ```
-Миграция 0009_notifications.sql:
+Миграция 0011_notifications.sql:
 1. telegram_accounts: user_id, chat_id bigint unique, linked_at. Функция link_telegram(code) — привязка по одноразовому коду из бота.
 2. message_templates: center_id, event_type, channel ('telegram','whatsapp_link'), text (с плейсхолдерами {child}, {date}, {left}), is_active. Seed дефолтных RU шаблонов при create_center: lesson.reminder, subscription.low_balance, student.absent_streak, installment.due, homework.assigned, lesson.summary.
 3. notification_log: center_id, event_id, recipient_user_id, channel, status, sent_at, error. RLS admin.
@@ -220,7 +220,7 @@ UI:
 
 **Промт.**
 ```
-Миграция 0010_clinical.sql:
+Миграция 0012_clinical.sql:
 1. diagnostics: student_id, date, teacher_id, conclusion text, sounds jsonb (по звукам: {"р": "искажение", "л": "отсутствие"}), speech_areas jsonb (звукопроизношение/фонематика/лексика/грамматика/связная речь — уровень 1–5), attachments jsonb, + конвенции. RLS: admin + teacher своих учеников (через ту же политику, что students) + parent read-only conclusion.
 2. goals: student_id, area text, sound text, stage text check in ('isolated','syllables','words','phrases','speech','automated'), title, target_date, status ('active','achieved','paused'), created_by. goal_progress: goal_id, lesson_id, date, score int 0–100, note. RLS как diagnostics.
 3. exercise_library: center_id (null = общая библиотека платформы), area, sound, stage, title, instructions text, media_url, age_from, age_to, tags text[]. RLS: общая читается всеми, своя — по центру.
@@ -260,7 +260,7 @@ UI:
 
 **Промт.**
 ```
-Миграция 0011_saas.sql:
+Миграция 0013_saas.sql:
 1. plans: code, name, price_som_month int, limits jsonb {teachers, students, ai_notes_month, telehealth bool, branches}, features text[]. Seed: solo 2000, studio 5000, ai 10000 (уточнить у владельца).
 2. centers: plan_expires_at, billing_email, invoices jsonb. platform_payments: center_id, amount, source, paid_at, months. Функция extend_subscription.
 3. Триггеры лимитов: teachers (active count), students (active), ai_usage — исключение с понятным русским текстом «Тариф Solo: 1 специалист. Перейдите на Studio».
