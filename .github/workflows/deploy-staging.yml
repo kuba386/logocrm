@@ -74,8 +74,8 @@ jobs:
             # единственное, что удерживает его в границах одного проекта.
             # --linked, а не --project-ref: без состояния link CLI идёт на прямой
             # хост, а он IPv6-only, и раннер GitHub падает с «IPv6 is not
-            # supported». Шаг «Привязать проект» ниже кладёт адрес пулера в
-            # .temp/ — по API, без пароля базы.
+            # supported». Шаг «Подготовить привязку» ниже кладёт ref и адрес
+            # пулера в .temp/ — без обращения к API.
             echo "DB_FLAG=--linked" >> "$GITHUB_ENV"
             echo "DB_TARGET=" >> "$GITHUB_ENV"
             echo "Подключение по токену: проект $EXPECTED_REF, временная роль через API."
@@ -128,16 +128,23 @@ jobs:
       # DB_FLAG и DB_TARGET выбраны предыдущим шагом; строка с паролем, если
       # она есть, замаскирована в логах. Токен нужен только пути 1 и в
       # остальных случаях пуст.
-      # Только для пути по токену. link ходит в API за адресом пулера и
-      # кладёт его в packages/db/supabase/.temp/ (в .gitignore); пароль базы
-      # не спрашивает, если stdin не TTY. Проверено локально с < /dev/null.
-      - name: Привязать проект
+      # Только для пути по токену. `supabase link` здесь не вызывается: он
+      # дёргает эндпоинт с ключами API, который требует роли Owner/Admin в
+      # организации, и упал с «does not have the necessary privileges».
+      # А --linked нужны всего два файла в .temp/ — ref и адрес пулера, —
+      # и ни один из них не секрет. Проверено локально: с этими двумя файлами
+      # и без остальных migration list --linked проходит через пулер.
+      - name: Подготовить привязку
         if: env.DB_FLAG == '--linked'
         working-directory: packages/db
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           EXPECTED_REF: hiwstqrnxrlfuanvfggq
-        run: supabase link --project-ref "$EXPECTED_REF" < /dev/null
+          POOLER_HOST: aws-0-ap-south-1.pooler.supabase.com
+        run: |
+          mkdir -p supabase/.temp
+          printf '%s' "$EXPECTED_REF" > supabase/.temp/project-ref
+          printf 'postgresql://postgres.%s@%s:5432/postgres' "$EXPECTED_REF" "$POOLER_HOST" > supabase/.temp/pooler-url
+          echo "Привязка подготовлена: проект $EXPECTED_REF, пулер $POOLER_HOST."
 
       - name: Что будет применено
         working-directory: packages/db
