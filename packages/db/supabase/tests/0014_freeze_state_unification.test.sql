@@ -105,11 +105,13 @@ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, s
     ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '08:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
     ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 1) + time '08:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001')),
   ('44444444-0001-0000-0000-000000000002','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
-    -- today-10, не today-40: абонемент 1 начинается today-20
-    -- (s.starts_at <= v_lesson_date) — более ранняя дата исключила бы
-    -- его из кандидатов, отметка ушла бы в долг вместо списания.
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 10) + time '09:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 10) + time '09:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+    -- today-6: единственный безопасный зазор для "вне заморозки" у
+    -- абонемента 1 — между starts_at (today-20) и обеими его заморозками
+    -- (today-15..-8 и today-2..+5). today-10 и today-40 уже наступали на
+    -- одну из трёх границ по очереди — считать заново при следующей правке
+    -- этого фрагмента, а не гадать: валидный диапазон [-20,-15) ∪ [-8,-2).
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 6) + time '09:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 6) + time '09:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
@@ -239,7 +241,7 @@ select throws_ok(
 select is((select count(*)::int from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000001'), 0,
   'Строки в attendance не осталось — транзакция отменена целиком');
 
--- 10. Занятие 10 дней назад — вне окна заморозки [-2,+5): отметка проходит и
+-- 10. Занятие 6 дней назад — вне окон обеих заморозок абонемента 1: отметка проходит и
 -- списывается как обычно (заморозка проверяется по дате ЗАНЯТИЯ, не по факту
 -- существования какой-либо заморозки вообще).
 select lives_ok(
