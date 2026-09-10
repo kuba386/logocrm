@@ -23,6 +23,12 @@ export type SubscriptionSnapshot = {
   lessonsWrittenOff: number
   /** Цена одного занятия, замороженная при продаже. */
   lessonPriceTiyin: number | null
+  /**
+   * Разрешено уйти в минус. Такой абонемент не считается исчерпанным при
+   * нулевом остатке — списание продолжается в отрицательный баланс, а не в
+   * долг по цене услуги. Зеркало subscription_state в 0010.
+   */
+  allowNegative?: boolean
 }
 
 /**
@@ -72,14 +78,22 @@ export function freezeShift(endsAt: string, days: number): string {
  * Заканчивается ли абонемент: остаток не больше порога.
  *
  * Безлимитный не заканчивается никогда — возвращает false, а не «0 ≤ 2».
+ * С allow_negative порог тоже показывается: родителю полезно знать, что
+ * оплаченное кончилось, даже если списание продолжится.
  */
 export function isRunningOut(sub: SubscriptionSnapshot, threshold = 2): boolean {
   const left = lessonsLeft(sub)
   return left !== null && left <= threshold && left > 0
 }
 
-/** Исчерпан ли абонемент. Безлимитный — никогда. */
+/**
+ * Исчерпан ли абонемент. Безлимитный — никогда; с allow_negative — тоже
+ * никогда: флаг означает «списывать дальше в минус», и база (subscription_state)
+ * продолжает выбирать такой абонемент для списания. Иначе TypeScript показал
+ * бы «исчерпан», а SQL списал бы следующее занятие — два источника истины.
+ */
 export function isExhausted(sub: SubscriptionSnapshot): boolean {
+  if (sub.allowNegative) return false
   const left = lessonsLeft(sub)
   return left !== null && left <= 0
 }

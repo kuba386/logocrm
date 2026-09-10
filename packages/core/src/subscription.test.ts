@@ -114,4 +114,18 @@ describe('isRunningOut и isExhausted', () => {
     expect(isRunningOut(sub)).toBe(false)
     expect(isExhausted(sub)).toBe(false)
   })
+
+  it('с allow_negative нулевой остаток — не исчерпан: списание идёт в минус', () => {
+    const sub = pack({ lessonsUsed: 8, allowNegative: true })
+    expect(isExhausted(sub)).toBe(false)
+    expect(lessonsLeft(sub)).toBe(0)
+  })
+
+  it('с allow_negative отрицательный остаток — тоже не исчерпан', () => {
+    expect(isExhausted(pack({ lessonsUsed: 10, allowNegative: true }))).toBe(false)
+  })
+
+  it('без allow_negative нулевой остаток — исчерпан, как и раньше', () => {
+    expect(isExhausted(pack({ lessonsUsed: 8, allowNegative: false }))).toBe(true)
+  })
 })
