@@ -274,6 +274,44 @@ export type Database = {
         }
         Relationships: []
       }
+      financial_periods: {
+        Row: {
+          center_id: string
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          id: string
+          month: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          month: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          month?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_periods_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_students: {
         Row: {
           center_id: string
@@ -772,6 +810,144 @@ export type Database = {
           },
         ]
       }
+      payment_sources: {
+        Row: {
+          center_id: string
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_sources_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount_tiyin: number
+          center_id: string
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          paid_at: string
+          payer_id: string
+          source_id: string | null
+          student_id: string | null
+          subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          paid_at?: string
+          payer_id: string
+          source_id?: string | null
+          student_id?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          paid_at?: string
+          payer_id?: string
+          source_id?: string | null
+          student_id?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "payments_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "payments_source_fk"
+            columns: ["source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "payments_student_payer_fk"
+            columns: ["student_id", "payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "payer_id", "center_id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_fk"
+            columns: ["subscription_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           capacity: number
@@ -1080,6 +1256,7 @@ export type Database = {
           lessons_used: number
           lessons_written_off: number
           notes: string | null
+          paid_tiyin: number
           payer_id: string
           price_tiyin: number
           starts_at: string
@@ -1101,6 +1278,7 @@ export type Database = {
           lessons_used?: number
           lessons_written_off?: number
           notes?: string | null
+          paid_tiyin?: number
           payer_id: string
           price_tiyin: number
           starts_at: string
@@ -1122,6 +1300,7 @@ export type Database = {
           lessons_used?: number
           lessons_written_off?: number
           notes?: string | null
+          paid_tiyin?: number
           payer_id?: string
           price_tiyin?: number
           starts_at?: string
@@ -1417,6 +1596,7 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       calc_lesson_price: {
@@ -1441,6 +1621,7 @@ export type Database = {
         Args: { p_center: string; p_lesson: string; p_student: string }
         Returns: undefined
       }
+      close_month: { Args: { p_month: string }; Returns: undefined }
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
@@ -1563,25 +1744,48 @@ export type Database = {
         Args: { p_lesson_id: string }
         Returns: undefined
       }
+      recalc_subscription_paid: {
+        Args: { p_subscription_id: string }
+        Returns: undefined
+      }
       recalc_subscription_usage: {
         Args: { p_subscription_id: string }
         Returns: undefined
+      }
+      record_payment: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment?: string
+          p_kind?: string
+          p_paid_at?: string
+          p_payer_id: string
+          p_source_id?: string
+          p_student_id?: string
+          p_subscription_id?: string
+        }
+        Returns: string
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string }
         Returns: number
       }
+      reopen_month: { Args: { p_month: string }; Returns: undefined }
       reschedule_lesson: {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
       }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      restore_payment_source: { Args: { p_id: string }; Returns: undefined }
       restore_student: { Args: { p_id: string }; Returns: undefined }
       restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
       seed_attendance_statuses: {
+        Args: { p_center_id: string }
+        Returns: undefined
+      }
+      seed_payment_sources: {
         Args: { p_center_id: string }
         Returns: undefined
       }
