@@ -5,8 +5,9 @@ on:
   push:
     branches: [main]
 
-# GITHUB_TOKEN только на чтение: ни один шаг не пишет в репозиторий, а дефолт
-# на репозитории может быть write.
+# GITHUB_TOKEN по умолчанию только на чтение — дефолт на репозитории может
+# быть write. Единственное исключение объявлено на уровне джоба: `db` пишет
+# в ветку PR сгенерированные типы (см. там), и только туда, никогда в main.
 permissions:
   contents: read
 
@@ -19,6 +20,34 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Что тронул коммит — чтобы не гонять пятиминутную приёмку с браузером ради
+  # правки отчёта или памяти. Фильтр на уровне джоба (`if:` у e2e), а не
+  # `on.paths` у workflow: пропущенный по `if` джоб GitHub засчитывает как
+  # успешный для required checks, а не запустившийся по `paths` workflow
+  # висит в «Expected» и блокирует merge.
+  changes:
+    name: Что изменилось
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      e2e: ${{ steps.filter.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            e2e:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci.yml'
+
   app:
     name: Приложение (lint, typecheck, tests)
     runs-on: ubuntu-latest
@@ -52,6 +81,10 @@ jobs:
     name: База данных (миграции + pgTAP)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Единственный джоб с правом записи: коммитит в ветку PR канонические
+    # типы, сгенерированные из миграций. В main не пишет никогда.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -74,27 +107,63 @@ jobs:
       # Локальный стек — единственный источник канонических типов: он собран
       # из тех же миграций, что поедут в prod.
       #
-      # Сравниваем без комментариев и пустых строк: в коммит добавлена шапка
-      # с инструкцией, которой генератор не пишет. Разные генераторы (CLI из
-      # миграций против MCP из облака) дают ещё и косметические отличия —
-      # блок __InternalSupabase и расстановку скобок в дженериках. Поэтому
-      # канонический файл всегда кладётся артефактом: расхождение чинится
-      # заменой файла из артефакта, а не ручной правкой.
+      # Сравниваем без комментариев и пустых строк: разные генераторы (CLI из
+      # миграций против MCP из облака) дают косметические отличия — блок
+      # __InternalSupabase и расстановку скобок в дженериках. Расхождение
+      # раньше чинилось руками (скачать артефакт, подменить файл, запушить),
+      # а ещё чаще — типы для новой RPC дописывались вручную по образцу.
+      # Теперь тот же файл коммитит в ветку PR сам джоб, шаг ниже.
       - name: Сгенерировать канонические типы
         working-directory: packages/db
         run: supabase gen types typescript --local --schema public > /tmp/database.types.ts
 
       - name: Проверка, что типы совпадают с миграциями
+        id: types
         working-directory: packages/db
         run: |
           norm() { grep -v '^//' "$1" | grep -v '^[[:space:]]*$'; }
-          if ! diff -q <(norm /tmp/database.types.ts) <(norm src/database.types.ts) > /dev/null; then
-            echo "::warning::src/database.types.ts отличается от схемы — возьмите файл из артефакта database-types"
-            echo "Расхождение:"
-            diff <(norm /tmp/database.types.ts) <(norm src/database.types.ts) | head -60 || true
-          else
+          if diff -q <(norm /tmp/database.types.ts) <(norm src/database.types.ts) > /dev/null; then
             echo "Типы совпадают со схемой."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Расхождение (слева — из миграций, справа — в коммите):"
+            diff <(norm /tmp/database.types.ts) <(norm src/database.types.ts) | head -60 || true
           fi
+
+      # Коммит от GITHUB_TOKEN не запускает новый прогон CI — так GitHub
+      # защищается от рекурсии. У коммита бота не будет своих проверок;
+      # следующий пуш в ветку прогонит всё уже с актуальными типами. Обычно
+      # он и так нужен: если типы для новой RPC не дописали, typecheck в app
+      # уже упал в этом же прогоне.
+      #
+      # Тестировали merge-коммит (checkout по умолчанию), а писать надо в head
+      # ветки — поэтому отдельный worktree, а не checkout поверх рабочей копии
+      # с поднятым Supabase. Токен из actions/checkout лежит в .git/config и
+      # общий для всех worktree.
+      - name: Закоммитить канонические типы в ветку PR
+        if: steps.types.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git fetch --depth=1 origin "$HEAD_REF"
+          git worktree add /tmp/head FETCH_HEAD
+          cp /tmp/database.types.ts /tmp/head/packages/db/src/database.types.ts
+          cd /tmp/head
+          if git diff --quiet -- packages/db/src/database.types.ts; then
+            echo "В ветке PR типы уже актуальны."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/db/src/database.types.ts
+          git commit -m "chore(db): типы из схемы миграций — сгенерировано в CI"
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+          echo "::notice::Типы закоммичены ботом в $HEAD_REF; у этого коммита нет своего прогона CI — он появится со следующим пушем."
+
+      - name: Типы разошлись, а коммитить некуда
+        if: steps.types.outputs.changed == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+        run: echo "::warning::src/database.types.ts отличается от схемы — возьмите файл из артефакта database-types"
 
       - name: Выложить канонические типы артефактом
         uses: actions/upload-artifact@v4
@@ -129,6 +198,8 @@ jobs:
 
   e2e:
     name: Приёмка (Playwright)
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -201,11 +272,37 @@ jobs:
             echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"
           } > apps/web/.env.local
 
+      # Инкрементальная сборка Next.js: ключ по lockfile и исходникам, а
+      # restore-keys подхватывает ближайший предыдущий кэш — так советует
+      # сам Next.js для CI.
+      - name: Кэш сборки Next.js
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/app/**', 'apps/web/components/**', 'apps/web/lib/**', 'packages/*/src/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Сборка приложения
         run: pnpm --filter @logocrm/web build
 
+      # Chromium — ~150 МБ на каждый прогон. Версия браузера привязана к
+      # версии playwright в lockfile, он и ключ кэша.
+      - name: Кэш браузера Playwright
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Установка браузера
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @logocrm/web exec playwright install --with-deps chromium
+
+      # Браузер из кэша, но системные библиотеки на свежем раннере нужны всё равно.
+      - name: Системные зависимости браузера
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @logocrm/web exec playwright install-deps chromium
 
       - name: Приёмочные сценарии
         run: pnpm --filter @logocrm/web e2e
