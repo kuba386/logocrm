@@ -19,6 +19,25 @@ export async function openWeek(page: Page, isoDate: string) {
   await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
 }
 
+/**
+ * Сегодняшняя дата — для занятий, у которых starts_at считается от now()
+ * (этап 4: «Отметить посещение» доступно только для уже начавшихся
+ * занятий, canMarkAttendance в lesson-panel.tsx). Фиксированные будущие
+ * даты вроде MONDAY для такой проверки не годятся.
+ */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export async function openTodayWeek(page: Page) {
+  await openWeek(page, todayIso())
+}
+
+/** Карточки занятий ученика на открытой неделе, в порядке рендера сетки. */
+export function studentCards(page: Page, student: string): Locator {
+  return page.locator('button').filter({ hasText: student })
+}
+
 export type LessonForm = {
   service: string
   /** Специалист выбирается всегда явно: диалог по умолчанию берёт первого

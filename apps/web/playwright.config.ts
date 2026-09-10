@@ -54,7 +54,7 @@ export default defineConfig({
 
     {
       name: 'admin',
-      testMatch: /schedule\.spec\.ts/,
+      testMatch: /(schedule|attendance-subscriptions)\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
     },

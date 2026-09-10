@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, lessonCard, lessonsThisWeek, openWeek } from './helpers'
+import { actAndAwait, lessonCard, lessonsThisWeek, openTodayWeek, openWeek, studentCards } from './helpers'
 
 // Пункт 5 чек-листа: специалист видит только своё, отмечает занятие
 // проведённым, создавать не может.
@@ -44,4 +44,26 @@ test('5б. Специалист отмечает занятие проведён
   // это же слово есть в подписи статуса, и ассерт мог бы сработать на
   // ещё не обновившейся панели.
   await actAndAwait(page, 'Провёл', 'Занятие проведено')
+})
+
+// Этап 4, п.5 чек-листа (docs/Roadmap/stages.md): специалист отмечает
+// посещение своего занятия и видит остаток абонемента словом, а не числом.
+// Пятое (последнее, ещё не отмеченное) занятие Данияра из фикстуры — те же
+// четыре из них уже отметил admin в attendance-subscriptions.spec.ts,
+// оставшийся остаток — 5 занятий из проданных восьми.
+test('5в. Специалист отмечает посещение и не видит остаток числом', async ({ page }) => {
+  await openTodayWeek(page)
+  await studentCards(page, STUDENTS.daniyar).nth(4).click()
+  await page.getByRole('button', { name: 'Отметить посещение' }).click()
+
+  const row = page.locator('li').filter({ hasText: STUDENTS.daniyar })
+
+  // Остаток 5 из 8 — не «заканчивается» (порог ≤2) и не «нет» (порог ≤0),
+  // значит student_subscription_badge отдаёт «есть». Числа вида «5 зан.»
+  // (как видит admin) здесь быть не должно вовсе.
+  await expect(row.getByText('есть', { exact: true })).toBeVisible()
+  await expect(row.getByText(/^\d+\s*зан\.$/)).toHaveCount(0)
+
+  await row.getByRole('button', { name: 'Пришёл', exact: true }).click()
+  await expect(row.getByRole('button', { name: 'Пришёл', exact: true })).toHaveClass(/text-white/)
 })
