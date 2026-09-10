@@ -1826,10 +1826,14 @@ export type Database = {
         Returns: string
       }
       subscription_current_freeze: {
-        Args: { p_on_date: string; p_subscription_id: string }
+        Args: { p_on_date?: string; p_subscription_id: string }
         Returns: unknown
       }
       subscription_freeze_days: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
+      subscription_freeze_days_unchecked: {
         Args: { p_subscription_id: string }
         Returns: number
       }
