@@ -86,7 +86,12 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // интерфейсе напрямую — карточка абонемента выводит только полную цену
   // (subscriptions-panel.tsx:297). Проверено на уровне SQL: pgTAP уже
   // покрывает «8 занятий за 400000 → lesson_price 50000» (0008 test, п.4).
-  await expect(page.getByText(TYPE_NAME)).toBeVisible()
+  //
+  // exact: true — форма продажи остаётся на странице с тем же типом всё
+  // ещё выбранным в <select>, а его <option> содержит TYPE_NAME как
+  // подстроку («Восемь занятий · e2e · 8 занятий») — без exact запрос
+  // находит оба элемента разом и падает на strict mode violation.
+  await expect(page.getByText(TYPE_NAME, { exact: true })).toBeVisible()
   // formatSom разделяет тысячи неразрывным пробелом (U+00A0), не обычным —
   // сверяемся с самим форматтером, а не гадаем пробел в литерале.
   await expect(page.getByText(formatSom(400_000), { exact: false })).toBeVisible()
