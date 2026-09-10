@@ -936,8 +936,8 @@ export type Database = {
             foreignKeyName: "payments_student_payer_fk"
             columns: ["student_id", "payer_id", "center_id"]
             isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id", "payer_id", "center_id"]
+            referencedRelation: "student_payers"
+            referencedColumns: ["student_id", "payer_id", "center_id"]
           },
           {
             foreignKeyName: "payments_subscription_fk"
@@ -1045,6 +1045,76 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_payers: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          payer_id: string
+          student_id: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payer_id: string
+          student_id: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payer_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_payers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_payers_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_payers_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_payers_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_payers_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_payers_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -1599,6 +1669,8 @@ export type Database = {
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
+      backfill_student_payers_history: { Args: never; Returns: undefined }
+      backfill_subscription_payments: { Args: never; Returns: undefined }
       calc_lesson_price: {
         Args: { p_lessons: number; p_price_tiyin: number }
         Returns: number
@@ -1781,6 +1853,7 @@ export type Database = {
       restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
+      ru_month_year: { Args: { p_date: string }; Returns: string }
       seed_attendance_statuses: {
         Args: { p_center_id: string }
         Returns: undefined
