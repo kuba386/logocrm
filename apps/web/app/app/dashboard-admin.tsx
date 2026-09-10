@@ -136,6 +136,9 @@ export async function AdminDashboard({ timeZone }: { timeZone: string }) {
                   <span className="shrink-0 text-destructive">{formatSom(row.debt_tiyin ?? 0)}</span>
                 </Link>
               ))}
+              <Link href="/app/debts" className="block pt-1 font-medium text-primary hover:underline">
+                Все долги →
+              </Link>
             </CardContent>
           ) : null}
         </Card>
