@@ -79,6 +79,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <Link href="/app/groups" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                     Группы
                   </Link>
+                  <Link href="/app/debts" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                    Долги
+                  </Link>
                   <Link
                     href="/app/settings/staff"
                     className={buttonVariants({ variant: 'ghost', size: 'sm' })}
