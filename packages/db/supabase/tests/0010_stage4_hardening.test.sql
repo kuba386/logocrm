@@ -266,7 +266,17 @@ select lives_ok(
 select is((select subscription_id from public.attendance where lesson_id = '44444444-0000-0000-0000-000000000007'),
   '88888888-0000-0000-0000-000000000002'::uuid, 'Привязка к абонементу сохранена после смены статуса');
 set local role authenticated;
-select public.unfreeze_subscription('88888888-0000-0000-0000-000000000002');
+-- current_date вместо умолчания: unfreeze_subscription без p_to сама берёт
+-- center_today() (пояс центра), а фикстура выше открыла заморозку через
+-- current_date (пояс сессии psql, обычно UTC) — 6 часов в сутки (18:00-
+-- 23:59 UTC, когда в Бишкеке уже следующий день) эти два «сегодня»
+-- расходятся, freeze_subscription/unfreeze_subscription в те же полсуток
+-- открывают и закрывают заморозку РАЗНЫМИ днями вместо no-op, и в
+-- subscription_freezes остаётся однодневный хвост. Он не мешает этому
+-- тесту, но глушит allow_negative у теста 37 (та же подписка), потому что
+-- attendance_fill_and_check исключает подписку из кандидатов на дату,
+-- которую хвост накрывает. Фиксируем оба конца интервала одним временем.
+select public.unfreeze_subscription('88888888-0000-0000-0000-000000000002', current_date);
 reset role;
 select is(public.subscription_state('88888888-0000-0000-0000-000000000002'), 'active',
   'После разморозки абонемент снова действующий');
@@ -274,7 +284,11 @@ select is(public.subscription_state('88888888-0000-0000-0000-000000000002'), 'ac
 -- 28. Заморозка на 7 дней и разморозка: дни считаются
 set local role authenticated;
 select public.freeze_subscription('88888888-0000-0000-0000-000000000004', current_date - 7);
-select public.unfreeze_subscription('88888888-0000-0000-0000-000000000004');
+-- current_date вторым аргументом — та же причина, что у теста 25-27 выше:
+-- без него unfreeze берёт center_today() (пояс Бишкека), а p_from здесь
+-- уже посчитан в поясе сессии (current_date) — при расхождении интервал
+-- получается 6 или 8 дней вместо 7, не всегда 7.
+select public.unfreeze_subscription('88888888-0000-0000-0000-000000000004', current_date);
 reset role;
 select ok(public.subscription_freeze_days('88888888-0000-0000-0000-000000000004') = 7
           and public.subscription_state('88888888-0000-0000-0000-000000000004') = 'active',
