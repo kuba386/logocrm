@@ -318,7 +318,10 @@ reset role;
 -- 18. ru_month_year по всем двенадцати месяцам ---------------------------------------
 
 select set_eq(
-  $q$ select extract(month from d)::int, public.ru_month_year(d)
+  -- generate_series(date, date, interval) не существует как отдельная
+  -- перегрузка — d приводится к timestamptz, а ru_month_year принимает
+  -- только date. Явный ::date обратно.
+  $q$ select extract(month from d)::int, public.ru_month_year(d::date)
         from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') d $q$,
   $q$ values
     (1,'январь 2026'),(2,'февраль 2026'),(3,'март 2026'),(4,'апрель 2026'),

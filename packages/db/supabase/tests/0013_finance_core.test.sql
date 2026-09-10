@@ -111,6 +111,13 @@ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, s
 -- test.sql:88) — после 0014 close_month смотрит не на status='done', а на
 -- отметку участника; без этой строки close_month(M1) в тесте 19 находит
 -- ...002 неотмеченной и падает раньше, чем должен.
+--
+-- Claims выставляются до вставки, роль остаётся postgres (0009_attendance.
+-- test.sql:81-83): триггер отметки зовёт emit_event, а тот требует
+-- auth.uid() — без claims insert падал на "Требуется авторизация", не
+-- дойдя до plan.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
 select 'cccccccc-0000-0000-0000-00000000000a', '44444444-0000-0000-0000-000000000002',
        'eeeeeeee-0000-0000-0000-000000000001', id
