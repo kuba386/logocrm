@@ -1103,11 +1103,18 @@ as $$
 declare
   v_sub uuid;
 begin
+  -- Список колонок у триггера с transition tables Postgres не допускает
+  -- (0A000: transition tables cannot be specified for triggers with column
+  -- lists), поэтому триггер — на любой update, а «изменились ли status или
+  -- deleted_at» проверяется здесь сравнением старой и новой таблиц.
   for v_sub in
     select distinct a.subscription_id
-      from changed c
-      join public.attendance a on a.lesson_id = c.id
+      from next_rows n
+      join prev_rows p on p.id = n.id
+      join public.attendance a on a.lesson_id = n.id
      where a.subscription_id is not null
+       and (n.status is distinct from p.status
+            or n.deleted_at is distinct from p.deleted_at)
      order by 1
   loop
     perform public.recalc_subscription_usage(v_sub);
@@ -1118,8 +1125,8 @@ $$;
 
 drop trigger if exists lessons_recalc_attendance on public.lessons;
 create trigger lessons_recalc_attendance
-  after update of status, deleted_at on public.lessons
-  referencing new table as changed
+  after update on public.lessons
+  referencing old table as prev_rows new table as next_rows
   for each statement execute function public.lessons_recalc_attendance_trigger();
 
 
