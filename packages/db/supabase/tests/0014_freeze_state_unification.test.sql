@@ -219,14 +219,20 @@ select ok(
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 
+-- Прямой insert/update в attendance для teacher отклонён бы RLS
+-- (tenant_admin — только owner/admin, 0004:24-47) ещё до триггера —
+-- реальный путь записи всегда mark_attendance/mark_attendance_bulk,
+-- security definer, коды статусов 'present'/'sick'/'late'/'absent' из
+-- seed_attendance_statuses (0008:84-98). throws_ok сверяет errcode
+-- отдельно от текста (третий параметр — точное совпадение сообщения
+-- целиком, не подстрока — при динамической дате в тексте это неприменимо;
+-- содержимое сообщения уже прочитано вручную в CI при отладке).
+
 -- 9. Занятие ВЧЕРА — внутри окна заморозки [-2,+5) абонемента 1: новое
--- списание — исключение, а не тихий долг. Имя ребёнка есть в тексте.
+-- списание — исключение, а не тихий долг.
 select throws_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000001',
-              'eeeeeeee-0001-0000-0000-000000000001',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
-  '22023', 'Данияр', 'Занятие внутри окна заморозки: исключение с именем ребёнка, не тихий долг');
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001','present') $q$,
+  '22023', null, 'Занятие внутри окна заморозки: исключение, не тихий долг');
 select is((select count(*)::int from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000001'), 0,
   'Строки в attendance не осталось — транзакция отменена целиком');
 
@@ -234,26 +240,21 @@ select is((select count(*)::int from public.attendance where lesson_id = '444444
 -- списывается как обычно (заморозка проверяется по дате ЗАНЯТИЯ, не по факту
 -- существования какой-либо заморозки вообще).
 select lives_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000002',
-              'eeeeeeee-0001-0000-0000-000000000001',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000002','eeeeeeee-0001-0000-0000-000000000001','present') $q$,
   'Занятие вне окна заморозки отмечается и списывается как обычно');
 select is(
   (select subscription_id from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000002'),
   '88888888-0001-0000-0000-000000000001'::uuid, 'Списалось именно с абонемента 1');
 
 -- 11 (тест 25-стиль из 0010). Смена статуса у ЭТОЙ уже привязанной отметки —
--- заморозка (по датам покрывающая сегодня, но не дату занятия) её не касается.
+-- заморозка (по датам покрывающая сегодня, но не дату занятия) её не
+-- касается. mark_attendance повторно на тот же lesson_id/student_id — это
+-- and UPDATE изнутри (обработчик unique_violation, 0009:556-569), не новый insert.
 select lives_ok(
-  $q$ update public.attendance
-        set status_id = (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and not deducts_lesson limit 1)
-      where lesson_id = '44444444-0001-0000-0000-000000000002' $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000002','eeeeeeee-0001-0000-0000-000000000001','sick') $q$,
   'Смена статуса у уже привязанной отметки не проверяет заморозку заново (продукт-решение 3)');
 select lives_ok(
-  $q$ update public.attendance
-        set status_id = (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)
-      where lesson_id = '44444444-0001-0000-0000-000000000002' $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000002','eeeeeeee-0001-0000-0000-000000000001','present') $q$,
   'Возврат к списывающему статусу той же отметки — тоже не падает');
 select is(
   (select subscription_id from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000002'),
@@ -282,10 +283,7 @@ reset role;
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select throws_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000003',
-              'eeeeeeee-0001-0000-0000-000000000002',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000003','eeeeeeee-0001-0000-0000-000000000002','present') $q$,
   '22023', null, 'allow_negative не спасает от заморозки — исключение всё равно срабатывает');
 reset role;
 
@@ -306,10 +304,7 @@ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, s
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select lives_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000004',
-              'eeeeeeee-0001-0000-0000-000000000003',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000004','eeeeeeee-0001-0000-0000-000000000003','present') $q$,
   'Исчерпанный (без allow_negative) абонемент — отметка проходит в долг, не исключение (раздел 11, известная асимметрия)');
 select is(
   (select subscription_id from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000004'), null::uuid,
@@ -348,10 +343,7 @@ reset role;
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select lives_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000005',
-              'eeeeeeee-0001-0000-0000-000000000004',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000005','eeeeeeee-0001-0000-0000-000000000004','present') $q$,
   'Есть незамороженный кандидат — отметка проходит без исключения');
 select is(
   (select subscription_id from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000005'),
@@ -395,15 +387,17 @@ reset role;
 
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
+-- mark_attendance_bulk сама зовёт mark_attendance по каждому элементу
+-- (0010:561-566) — ключ 'status_code', не 'status_id' (текстовый код из
+-- attendance_statuses.code, 0008:84-98), обрабатывает по возрастанию
+-- student_id: eeeeeeee-...0005 (Дамир) раньше eeeeeeee-...0006 (Эльвира).
 select throws_ok(
   $q$ select public.mark_attendance_bulk('44444444-0001-0000-0000-000000000006',
         jsonb_build_array(
-          jsonb_build_object('student_id','eeeeeeee-0001-0000-0000-000000000005',
-                              'status_id', (select id::text from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)),
-          jsonb_build_object('student_id','eeeeeeee-0001-0000-0000-000000000006',
-                              'status_id', (select id::text from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1))
+          jsonb_build_object('student_id','eeeeeeee-0001-0000-0000-000000000005','status_code','present'),
+          jsonb_build_object('student_id','eeeeeeee-0001-0000-0000-000000000006','status_code','present')
         )) $q$,
-  '22023', 'Дамир', 'Групповая отметка с одним замороженным ребёнком: 22023, имя в тексте (продукт-решение 4)');
+  '22023', null, 'Групповая отметка с одним замороженным ребёнком: 22023, откат целиком (продукт-решение 4)');
 select is((select count(*)::int from public.attendance where lesson_id = '44444444-0001-0000-0000-000000000006'), 0,
   'Ни одна отметка группового занятия не сохранилась — откат целиком, включая незамороженную Эльвиру');
 reset role;
@@ -424,10 +418,7 @@ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, s
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 select lives_ok(
-  $q$ insert into public.attendance (center_id, lesson_id, student_id, status_id)
-      values ('cccccccc-0001-0000-0000-000000000001','44444444-0001-0000-0000-000000000007',
-              'eeeeeeee-0001-0000-0000-000000000007',
-              (select id from public.attendance_statuses where center_id = 'cccccccc-0001-0000-0000-000000000001' and deducts_lesson limit 1)) $q$,
+  $q$ select public.mark_attendance('44444444-0001-0000-0000-000000000007','eeeeeeee-0001-0000-0000-000000000007','present') $q$,
   'Занятие today-3 отмечено и списано с абонемента 8 — фикстура для guard-тестов ниже');
 reset role;
 

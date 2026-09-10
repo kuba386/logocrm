@@ -262,14 +262,23 @@ as $$
   -- с этим поведением. Иначе /app/debts, отфильтровывая frozen, спрятал
   -- бы реально растущий долг — деньги, которые никто не увидит, пока
   -- родитель не спросит.
+  -- Заморозка — прямым select из subscription_freezes, НЕ через
+  -- subscription_current_freeze: та сама вызывает subscription_visible_
+  -- to_caller (без ветки teacher) и вернула бы NULL специалисту даже
+  -- здесь — свело бы на нет весь смысл unchecked-версии, ради которой её
+  -- и завели (бейдж переставал бы видеть "заморожен" для teacher).
+  -- unchecked уже вызывается только из мест, где доступ подтверждён
+  -- иначе, второй гейт тут не нужен и вреден.
   select case
     when s.status = 'cancelled' then 'cancelled'
     when s.ends_at is not null
          and s.ends_at < public.center_today(s.center_id) then 'expired'
     when s.lessons_total is not null
          and s.lessons_total - s.lessons_used - s.lessons_written_off <= 0 then 'exhausted'
-    when public.subscription_current_freeze(s.id, public.center_today(s.center_id)) is not null
-      then 'frozen'
+    when exists (
+      select 1 from public.subscription_freezes f
+       where f.subscription_id = s.id and f.period @> public.center_today(s.center_id)
+    ) then 'frozen'
     else 'active'
   end
   from public.subscriptions s
