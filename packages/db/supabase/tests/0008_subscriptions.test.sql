@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(18);
+select plan(19);
 
 -- Фикстуры: два центра, чтобы проверять границу, а не только «работает» ------
 
@@ -94,15 +94,30 @@ select throws_ok(
 
 -- Продажа --------------------------------------------------------------------
 
+-- Продажа идёт отдельным стейтментом, а её результат кладётся сюда.
+-- Вызвать функцию прямо в `where id = sell_subscription(...)` нельзя:
+-- на пустой таблице сканирование не даёт ни одной строки, условие не
+-- вычисляется ни разу, и функция не вызывается вовсе — абонемент не
+-- создаётся, а тест показывает NULL вместо цены.
+create temporary table t_sub (name text primary key, id uuid);
+-- Таблица создана от postgres, а писать и читать её будет роль authenticated
+-- после set local role. Чужая временная таблица для неё закрыта так же, как
+-- обычная: без гранта первая же вставка падает с 42501, транзакция
+-- обрывается, и pgTAP видит «planned 18, ran 3».
+grant select, insert on t_sub to authenticated;
+
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
+
+insert into t_sub (name, id)
+values ('pack8', public.sell_subscription('77777777-0000-0000-0000-000000000001',
+                                          'eeeeeeee-0000-0000-0000-000000000001'));
 
 -- 4. Пункт 1 чек-листа: 8 занятий за 4000 сом → 500 сом за занятие -----------
 
 select is(
   (select lesson_price_tiyin from public.subscriptions
-    where id = public.sell_subscription('77777777-0000-0000-0000-000000000001',
-                                        'eeeeeeee-0000-0000-0000-000000000001')),
+    where id = (select id from t_sub where name = 'pack8')),
   50000,
   'Продажа 8 занятий за 400000 тыйын даёт цену занятия 50000'
 );
@@ -110,18 +125,20 @@ select is(
 -- 5. Остаток сразу после продажи ---------------------------------------------
 
 select is(
-  (select public.subscription_lessons_left(id) from public.subscriptions
-    where student_id = 'eeeeeeee-0000-0000-0000-000000000001' limit 1),
+  (select public.subscription_lessons_left(id) from t_sub where name = 'pack8'),
   8,
   'Остаток нового абонемента равен проданному количеству'
 );
 
 -- 6. Цена не считается браузером: аргумент переопределяет тип ----------------
 
+insert into t_sub (name, id)
+values ('custom', public.sell_subscription('77777777-0000-0000-0000-000000000001',
+                                           'eeeeeeee-0000-0000-0000-000000000002', 200000));
+
 select is(
   (select price_tiyin from public.subscriptions
-    where id = public.sell_subscription('77777777-0000-0000-0000-000000000001',
-                                        'eeeeeeee-0000-0000-0000-000000000002', 200000)),
+    where id = (select id from t_sub where name = 'custom')),
   200000,
   'Явная цена в аргументе переопределяет цену типа'
 );
@@ -221,6 +238,12 @@ select is(
   'Заморозка на 7 дней даёт сдвиг ровно в 7 дней'
 );
 
+-- Дальше от postgres: прямой insert в subscription_freezes роли authenticated
+-- закрыт намеренно (заморозка — только через freeze_subscription), и тест
+-- ограничения получил бы 42501 вместо 23P01. Claims остаются — они живут в
+-- транзакции, а не в роли, и freeze_subscription в тесте 15 читает роль из них.
+reset role;
+
 -- 14. Пересекающаяся заморозка отклонена EXCLUDE-ом ---------------------------
 
 select throws_ok(
@@ -286,6 +309,26 @@ select is(
 
 reset role;
 
+
+-- 19. Заморозка только через функцию: прямая вставка закрыта -------------------
+
+-- Это и есть смысл revoke all на subscription_freezes: EXCLUDE держит
+-- пересечение, но проверки «уже заморожен» и сдвиг ends_at живут в
+-- freeze_subscription. Прямая вставка мимо неё — вторая дорога к тем же
+-- данным, и тест фиксирует, что она закрыта.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+
+select throws_ok(
+  $q$ insert into public.subscription_freezes (center_id, subscription_id, period)
+      select center_id, id, daterange(current_date + 60, current_date + 70, '[)')
+        from public.subscriptions
+       where student_id = 'eeeeeeee-0000-0000-0000-000000000001' limit 1 $q$,
+  '42501', null,
+  'Прямая вставка заморозки от прикладной роли отклонена — путь только через freeze_subscription'
+);
+
+reset role;
 
 select * from finish();
 
