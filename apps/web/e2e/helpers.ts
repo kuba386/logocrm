@@ -19,6 +19,25 @@ export async function openWeek(page: Page, isoDate: string) {
   await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
 }
 
+/**
+ * Сегодняшняя дата — для занятий, у которых starts_at считается от now()
+ * (этап 4: «Отметить посещение» доступно только для уже начавшихся
+ * занятий, canMarkAttendance в lesson-panel.tsx). Фиксированные будущие
+ * даты вроде MONDAY для такой проверки не годятся.
+ */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export async function openTodayWeek(page: Page) {
+  await openWeek(page, todayIso())
+}
+
+/** Карточки занятий ученика на открытой неделе, в порядке рендера сетки. */
+export function studentCards(page: Page, student: string): Locator {
+  return page.locator('button').filter({ hasText: student })
+}
+
 export type LessonForm = {
   service: string
   /** Специалист выбирается всегда явно: диалог по умолчанию берёт первого
@@ -94,9 +113,13 @@ export async function submitLessonDialog(page: Page, expectedNotice: string | Re
  */
 async function expectServerReply(page: Page, expectedNotice: string | RegExp) {
   const notice = page.getByRole('status')
-  // hasText с \S отсекает служебный пустой <div role="alert"> Next.js
-  // (__next-route-announcer__), который всегда есть в DOM.
-  const error = page.getByRole('alert').filter({ hasText: /\S/ })
+  // Служебный <div role="alert" id="__next-route-announcer__"> Next.js
+  // обычно пуст, но после клиентской навигации (Link, без полной
+  // перезагрузки) на миг держит заголовок новой страницы для скринридера —
+  // тогда фильтр по «непустому тексту» его не отсекает, и тест видит
+  // «отказ» вида «Карточка ученика — LogoCRM». Исключаем по id, а не по
+  // содержимому: оно то пустое, то нет, а id всегда один и тот же.
+  const error = page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({ hasText: /\S/ })
 
   await expect(notice.or(error).first()).toBeVisible({ timeout: 20_000 })
 

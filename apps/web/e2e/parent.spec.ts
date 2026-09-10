@@ -32,3 +32,31 @@ test('6б. Родителю недоступно создание занятий
   await openWeek(page, PARENT_WEEK)
   await expect(page.getByRole('button', { name: 'Добавить занятие' })).toHaveCount(0)
 })
+
+// Этап 4, п.6 чек-листа (docs/Roadmap/stages.md): /app показывает остаток
+// своего ребёнка и не показывает чужого. Дашборд ветвится по роли на той же
+// /app — отдельного /app/my нет (dashboard-parent.tsx, «Одна страница на
+// все роли», CLAUDE.md — отступление от самого брифа, см. reports/stage-4.md).
+//
+// К этому месту абонемент Данияра тронут дважды после продажи (8): admin
+// в attendance-subscriptions.spec.ts довёл до 5, teacher в teacher.spec.ts —
+// до 4. Файлы этого проекта идут строго по цепочке зависимостей admin →
+// teacher → parent (playwright.config.ts), так что здесь остаток уже 4 из 8.
+test('6в. Родитель видит остаток своего ребёнка числом, чужого — не видит вовсе', async ({ page }) => {
+  await page.goto('/app')
+  await expect(page.getByRole('heading', { name: 'Мои дети' })).toBeVisible()
+
+  // Два фильтра разом: карточка ребёнка — единственный div, где встречаются
+  // оба текста сразу (имя — в CardHeader, «Осталось занятий» — в
+  // CardContent, они соседи, а не вложены друг в друга). .last() берёт
+  // самый вложенный подходящий div — саму карточку, а не общий контейнер
+  // сетки, в котором тоже «есть» оба текста где-то внутри.
+  const daniyarCard = page
+    .locator('div')
+    .filter({ hasText: STUDENTS.daniyar })
+    .filter({ hasText: 'Осталось занятий' })
+    .last()
+  await expect(daniyarCard.getByText('4 из 8')).toBeVisible()
+
+  await expect(page.getByText(STUDENTS.foreign)).toHaveCount(0)
+})
