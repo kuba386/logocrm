@@ -41,7 +41,6 @@ const config: Config = {
           foreground: 'hsl(var(--card-foreground))',
         },
         // Статусы посещения/абонементов — из бейджей на макетах Stitch, не из ролей Material 3.
-        // «Болел» (голубой) ещё не сгенерирован — docs/Design/DESIGN.md, «Пробелы».
         success: {
           DEFAULT: 'hsl(var(--status-success))',
           bg: 'hsl(var(--status-success-bg))',
@@ -57,6 +56,11 @@ const config: Config = {
         'status-neutral': {
           DEFAULT: 'hsl(var(--status-neutral))',
           bg: 'hsl(var(--status-neutral-bg))',
+        },
+        // «Болел» — временная заглушка, не из Stitch. globals.css, «Болел» рядом.
+        info: {
+          DEFAULT: 'hsl(var(--status-info))',
+          bg: 'hsl(var(--status-info-bg))',
         },
       },
       borderRadius: {

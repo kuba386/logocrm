@@ -189,6 +189,180 @@ export async function markLessonStatus(
   return { message: '', notice: status === 'done' ? 'Занятие проведено' : 'Статус изменён' }
 }
 
+export type AttendanceStatusOption = {
+  id: string
+  code: string
+  name: string
+  color: string
+  isDefault: boolean
+}
+
+export type AttendanceParticipant = {
+  studentId: string
+  fullName: string
+  statusId: string | null
+  statusCode: string | null
+  comment: string | null
+  /** Родителю и teacher — только слово («есть»/«заканчивается»/«нет»); admin/owner — число занятий. */
+  balance: string
+}
+
+export type AttendancePanelData = {
+  participants: AttendanceParticipant[]
+  statuses: AttendanceStatusOption[]
+} & Partial<AppError>
+
+/**
+ * Список участников занятия с текущими отметками и остатком абонемента.
+ * Отдельный запрос на занятие, а не на неделю: участники нужны только
+ * открытой панели, а не всей сетке расписания.
+ */
+export async function getAttendancePanelData(lessonId: string): Promise<AttendancePanelData> {
+  const empty = { participants: [], statuses: [] }
+  if (!lessonId) return { ...empty, message: 'Занятие не найдено' }
+
+  const supabase = await createClient()
+
+  const [{ data: lesson, error: lessonError }, { data: role }, { data: statusRows, error: statusError }] =
+    await Promise.all([
+      supabase.from('lessons').select('id, student_id, group_id').eq('id', lessonId).maybeSingle(),
+      supabase.rpc('my_role'),
+      supabase
+        .from('attendance_statuses')
+        .select('id, code, name, color, is_default')
+        .is('deleted_at', null)
+        .order('sort'),
+    ])
+
+  if (lessonError) return { ...empty, ...toAppError(lessonError, 'Не удалось загрузить занятие') }
+  if (!lesson) return { ...empty, message: 'Занятие не найдено' }
+  if (statusError) return { ...empty, ...toAppError(statusError, 'Не удалось загрузить статусы') }
+
+  const statuses: AttendanceStatusOption[] = (statusRows ?? []).map((row) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    color: row.color,
+    isDefault: row.is_default,
+  }))
+
+  let studentIds: string[] = []
+  if (lesson.group_id) {
+    const { data: participantRows, error: participantsError } = await supabase
+      .from('lesson_participants')
+      .select('student_id')
+      .eq('lesson_id', lessonId)
+      .is('deleted_at', null)
+    if (participantsError) return { ...empty, statuses, ...toAppError(participantsError, 'Не удалось загрузить участников') }
+    studentIds = (participantRows ?? []).map((row) => row.student_id)
+  } else if (lesson.student_id) {
+    studentIds = [lesson.student_id]
+  }
+
+  if (studentIds.length === 0) return { participants: [], statuses }
+
+  const isAdmin = role === 'owner' || role === 'admin'
+
+  // Admin/owner — число из student_balance (teacher туда не пущен самой
+  // вьюхой); teacher/parent — только слово из student_subscription_badge.
+  // Разные формы одного и того же результата сведены к одной форме здесь,
+  // а не разбираются в JSX компонента.
+  const fetchBalanceLabels = async (): Promise<{ studentId: string; label: string }[]> => {
+    if (isAdmin) {
+      const { data } = await supabase
+        .from('student_balance')
+        .select('student_id, active_subscription_id, lessons_left')
+        .in('student_id', studentIds)
+      return (data ?? []).map((row) => {
+        // lessons_left = null неоднозначен сам по себе: у student_balance
+        // это и «абонемент безлимитный», и «абонемента нет вовсе» —
+        // отличает только active_subscription_id. DESIGN.md уже наступал
+        // на этот же null в другом месте (0010, «Пробелы» по subscription_lessons_left).
+        let label: string
+        if (!row.active_subscription_id) label = 'нет абонемента'
+        else if (row.lessons_left == null) label = 'без лимита'
+        else label = `${row.lessons_left} зан.`
+        return { studentId: row.student_id ?? '', label }
+      })
+    }
+
+    return Promise.all(
+      studentIds.map(async (studentId) => {
+        const { data } = await supabase.rpc('student_subscription_badge', { p_student_id: studentId })
+        return { studentId, label: data ?? '—' }
+      }),
+    )
+  }
+
+  const [{ data: students }, { data: attendanceRows }, balanceLabels] = await Promise.all([
+    supabase.from('students').select('id, full_name').in('id', studentIds),
+    supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
+    fetchBalanceLabels(),
+  ])
+
+  const nameById = new Map((students ?? []).map((s) => [s.id, s.full_name]))
+  const statusById = new Map(statuses.map((s) => [s.id, s]))
+  const attendanceByStudent = new Map((attendanceRows ?? []).map((row) => [row.student_id, row]))
+  const balanceByStudent = new Map(balanceLabels.map((row) => [row.studentId, row.label]))
+
+  const participants: AttendanceParticipant[] = studentIds.map((studentId) => {
+    const mark = attendanceByStudent.get(studentId)
+    const status = mark?.status_id ? statusById.get(mark.status_id) : undefined
+
+    return {
+      studentId,
+      fullName: nameById.get(studentId) ?? 'Ученик',
+      statusId: mark?.status_id ?? null,
+      statusCode: status?.code ?? null,
+      comment: mark?.comment ?? null,
+      balance: balanceByStudent.get(studentId) ?? '—',
+    }
+  })
+
+  return { participants, statuses }
+}
+
+export async function markAttendance(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const lessonId = String(formData.get('lessonId') ?? '')
+  const studentId = String(formData.get('studentId') ?? '')
+  const statusCode = String(formData.get('statusCode') ?? '')
+  if (!lessonId || !studentId || !statusCode) return { message: 'Не хватает данных' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('mark_attendance', {
+    p_lesson_id: lessonId,
+    p_student_id: studentId,
+    p_status_code: statusCode,
+    p_comment: optional(formData, 'comment'),
+  })
+
+  if (error) return toAppError(error, 'Не удалось отметить посещение')
+
+  revalidatePath('/app/schedule')
+  return { message: '', notice: 'Отмечено' }
+}
+
+/** «Все пришли»: статус не передаётся — каждому ставится статус по умолчанию центра. */
+export async function markAttendanceAllPresent(
+  _prev: ScheduleState,
+  formData: FormData,
+): Promise<ScheduleState> {
+  const lessonId = String(formData.get('lessonId') ?? '')
+  const studentIds = formData.getAll('studentId').map(String)
+  if (!lessonId || studentIds.length === 0) return { message: 'Нет участников' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('mark_attendance_bulk', {
+    p_lesson_id: lessonId,
+    p: studentIds.map((studentId) => ({ student_id: studentId })) as never,
+  })
+
+  if (error) return toAppError(error, 'Не удалось отметить посещение')
+
+  revalidatePath('/app/schedule')
+  return { message: '', notice: 'Отмечены все участники' }
+}
+
 export async function teacherVacation(
   _prev: ScheduleState,
   formData: FormData,
