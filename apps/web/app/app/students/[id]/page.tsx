@@ -5,8 +5,17 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { centerTimeZone } from '@/lib/timezone'
 import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
 import { StudentForm, type StudentFormValues } from './student-form'
+import {
+  SubscriptionsPanel,
+  type AttendanceHistoryRow,
+  type BalanceView,
+  type SiblingOption,
+  type SubscriptionTypeOption,
+  type SubscriptionView,
+} from './subscriptions-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
@@ -93,6 +102,163 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   const waNumber = payer?.phone ? whatsappNumber(payer.phone) : null
 
+  // Специалисту — только слово (student_subscription_badge), admin/owner —
+  // числа и действия (продать/заморозить/вернуть). Промт этапа 4: цифры и
+  // деньги видит только тот, кто уходит открывать кабинет через дорогу.
+  const subscriptionBadge = !isAdmin
+    ? (await supabase.rpc('student_subscription_badge', { p_student_id: id })).data
+    : null
+
+  let subscriptionsSection: {
+    balance: BalanceView
+    subscriptions: SubscriptionView[]
+    types: SubscriptionTypeOption[]
+    siblings: SiblingOption[]
+    attendanceHistory: AttendanceHistoryRow[]
+    timeZone: string
+  } | null = null
+
+  if (isAdmin) {
+    const payerId = 'payer_id' in base ? base.payer_id : null
+    const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
+
+    const [
+      { data: subsRows },
+      { data: typeRows },
+      { data: balanceRow },
+      { data: siblingRows },
+      { data: attendanceRows },
+      { data: center },
+    ] = await Promise.all([
+        supabase
+          .from('subscriptions')
+          .select('id, type_id, price_tiyin, starts_at, ends_at, status')
+          .eq('student_id', id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('subscription_types')
+          .select('id, name, kind, price_tiyin, lessons_count, period_days')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('name'),
+        supabase
+          .from('student_balance')
+          .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin')
+          .eq('student_id', id)
+          .maybeSingle(),
+        payerId
+          ? supabase.from('students').select('id, full_name').eq('payer_id', payerId).neq('id', id).is('deleted_at', null)
+          : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+        supabase
+          .from('attendance')
+          .select('id, lesson_id, status_id, comment')
+          .eq('student_id', id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+      ])
+
+    const typeNameById = new Map((typeRows ?? []).map((t) => [t.id, t.name]))
+    const subscriptionIds = (subsRows ?? []).map((row) => row.id)
+
+    const [summaries, { data: freezeRows }] = await Promise.all([
+      Promise.all((subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id }))),
+      subscriptionIds.length
+        ? supabase.from('subscription_freezes').select('subscription_id, period').in('subscription_id', subscriptionIds)
+        : Promise.resolve({ data: [] as { subscription_id: string; period: unknown }[] }),
+    ])
+
+    // period приходит текстом daterange: «[2026-09-12,2026-09-15)» или
+    // «[2026-09-12,)» у открытой. Верхняя граница исключающая, поэтому
+    // последний замороженный день — на сутки раньше: человеку показываем
+    // «по 14.09», а не «по 15.09», иначе он насчитает лишний день.
+    const freezeBySubscription = new Map<string, { from: string | null; to: string | null }>()
+    for (const row of freezeRows ?? []) {
+      const raw = typeof row.period === 'string' ? row.period : ''
+      const match = /^[[(]([^,]*),([^)\]]*)[)\]]$/.exec(raw)
+      if (!match) continue
+
+      const from = (match[1] ?? '').replaceAll('"', '').trim()
+      const upper = (match[2] ?? '').replaceAll('"', '').trim()
+      const isOpen = upper === '' || upper === 'infinity'
+
+      let to: string | null = null
+      if (!isOpen) {
+        const lastDay = new Date(`${upper}T00:00:00Z`)
+        lastDay.setUTCDate(lastDay.getUTCDate() - 1)
+        to = lastDay.toISOString().slice(0, 10)
+      }
+
+      freezeBySubscription.set(row.subscription_id, { from: from || null, to })
+    }
+
+    const subscriptions: SubscriptionView[] = (subsRows ?? []).map((row, index) => {
+      const summary = summaries[index]?.data?.[0]
+      const freeze = freezeBySubscription.get(row.id)
+      return {
+        id: row.id,
+        typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
+        priceTiyin: row.price_tiyin,
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
+        lessonsLeft: summary?.lessons_left ?? null,
+        state: summary?.state ?? row.status,
+        freezeDays: summary?.freeze_days ?? 0,
+        refundTiyin: summary?.refund_tiyin ?? 0,
+        freezeFrom: freeze?.from ?? null,
+        freezeTo: freeze?.to ?? null,
+      }
+    })
+
+    const attendanceRowsData = attendanceRows ?? []
+    const lessonIds = attendanceRowsData.map((a) => a.lesson_id)
+    const statusIds = attendanceRowsData.map((a) => a.status_id).filter((v): v is string => Boolean(v))
+
+    const [{ data: lessonRows }, { data: statusRows }] = await Promise.all([
+      lessonIds.length
+        ? supabase.from('lessons').select('id, starts_at').in('id', lessonIds)
+        : Promise.resolve({ data: [] as { id: string; starts_at: string }[] }),
+      statusIds.length
+        ? supabase.from('attendance_statuses').select('id, name, color').in('id', statusIds)
+        : Promise.resolve({ data: [] as { id: string; name: string; color: string }[] }),
+    ])
+
+    const lessonStartById = new Map((lessonRows ?? []).map((l) => [l.id, l.starts_at]))
+    const statusById = new Map((statusRows ?? []).map((s) => [s.id, s]))
+
+    subscriptionsSection = {
+      balance: {
+        lessonsLeft: balanceRow?.lessons_left ?? null,
+        activeSubscriptionId: balanceRow?.active_subscription_id ?? null,
+        endsAt: balanceRow?.ends_at ?? null,
+        debtTiyin: balanceRow?.debt_tiyin ?? 0,
+        overdrawnTiyin: balanceRow?.overdrawn_tiyin ?? 0,
+      },
+      subscriptions,
+      types: (typeRows ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        kind: t.kind,
+        priceTiyin: t.price_tiyin,
+        lessonsCount: t.lessons_count,
+        periodDays: t.period_days,
+      })),
+      siblings: (siblingRows ?? []).map((s) => ({ id: s.id, fullName: s.full_name })),
+      timeZone: centerTimeZone(center?.settings),
+      attendanceHistory: attendanceRowsData.map((row) => {
+        const status = row.status_id ? statusById.get(row.status_id) : undefined
+        return {
+          id: row.id,
+          startsAt: lessonStartById.get(row.lesson_id) ?? '',
+          statusName: status?.name ?? '—',
+          statusColor: status?.color ?? 'green',
+          comment: row.comment,
+        }
+      }),
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -169,6 +335,34 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           ) : null}
         </CardContent>
       </Card>
+
+      {subscriptionsSection ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Абонементы и посещения</CardTitle>
+            <CardDescription>Продажа, заморозка, возврат — суммы видит только администратор.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SubscriptionsPanel studentId={id} {...subscriptionsSection} />
+          </CardContent>
+        </Card>
+      ) : subscriptionBadge ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Абонемент</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span
+              className={cn(
+                'rounded px-2 py-0.5 text-sm font-medium',
+                subscriptionBadge === 'нет' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground',
+              )}
+            >
+              {subscriptionBadge}
+            </span>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {isAdmin ? (
         <Card>
