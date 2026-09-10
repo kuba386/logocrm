@@ -16,7 +16,7 @@
     "new": "supabase migration new",
     "link": "supabase link --project-ref",
     "push": "supabase db push",
-    "gen:types": "supabase gen types typescript --local --schema public > src/database.types.ts",
+    "gen:types": "supabase gen types typescript --linked --schema public > src/database.types.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

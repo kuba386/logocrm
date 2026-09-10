@@ -1,18 +1,8 @@
-// Сгенерировано: supabase gen types typescript --schema public
-// Проект: logocrm (hiwstqrnxrlfuanvfggq). Перегенерировать после каждой миграции:
-//   pnpm db:types
+// Сгенерировано: supabase gen types typescript --linked --schema public
+// Проект: logocrm (hiwstqrnxrlfuanvfggq). Перегенерировать после каждой
+// миграции — канонический файл кладёт артефактом джоб «База данных» в CI,
+// либо локально: pnpm db:types (по токену, через --linked).
 // Файл коммитится в репозиторий — на него опирается typecheck в CI.
-//
-// Блоки этапа 3 (rooms, services, groups, group_students, lessons,
-// lesson_participants и функции расписания) дописаны вручную: 0006 ещё не
-// применена ни к одной живой базе. После мержа и deploy-staging возьмите
-// канонический файл из артефакта database-types и замените целиком.
-//
-// Канонический вариант производит CLI из миграций (джоб «База данных» в CI
-// выкладывает его артефактом database-types). Генератор из облака даёт тот же
-// набор таблиц, но иначе форматирует дженерики и добавляет __InternalSupabase —
-// при расхождении берите файл из артефакта, а не правьте руками.
-
 export type Json =
   | string
   | number
@@ -131,6 +121,151 @@ export type Database = {
         }
         Relationships: []
       }
+      group_students: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          group_id: string
+          id: string
+          joined_at: string
+          left_at: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          group_id: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          group_id?: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_students_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_students_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_students_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_students_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          max_students: number | null
+          name: string
+          room_id: string | null
+          service_id: string | null
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_students?: number | null
+          name: string
+          room_id?: string | null
+          service_id?: string | null
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_students?: number | null
+          name?: string
+          room_id?: string | null
+          service_id?: string | null
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "groups_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "groups_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "groups_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "groups_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           accepted_at: string | null
@@ -194,6 +329,184 @@ export type Database = {
           },
         ]
       }
+      lesson_participants: {
+        Row: {
+          center_id: string
+          deleted_at: string | null
+          ends_at: string
+          lesson_id: string
+          starts_at: string
+          status: string
+          student_id: string
+        }
+        Insert: {
+          center_id: string
+          deleted_at?: string | null
+          ends_at: string
+          lesson_id: string
+          starts_at: string
+          status?: string
+          student_id: string
+        }
+        Update: {
+          center_id?: string
+          deleted_at?: string | null
+          ends_at?: string
+          lesson_id?: string
+          starts_at?: string
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_participants_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_participants_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_participants_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          cancel_reason: string | null
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          effective_teacher_id: string | null
+          ends_at: string
+          group_id: string | null
+          id: string
+          notes: string | null
+          room_id: string | null
+          series_id: string | null
+          service_id: string | null
+          starts_at: string
+          status: string
+          student_id: string | null
+          substitute_teacher_id: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          effective_teacher_id?: string | null
+          ends_at: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          series_id?: string | null
+          service_id?: string | null
+          starts_at: string
+          status?: string
+          student_id?: string | null
+          substitute_teacher_id?: string | null
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          effective_teacher_id?: string | null
+          ends_at?: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          room_id?: string | null
+          series_id?: string | null
+          service_id?: string | null
+          starts_at?: string
+          status?: string
+          student_id?: string | null
+          substitute_teacher_id?: string | null
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_substitute_teacher_id_fkey"
+            columns: ["substitute_teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           center_id: string
@@ -228,258 +541,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      rooms: {
-        Row: {
-          capacity: number
-          center_id: string
-          created_at: string
-          created_by: string | null
-          custom_fields: Json
-          deleted_at: string | null
-          id: string
-          is_active: boolean
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          capacity?: number
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          capacity?: number
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          name?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      services: {
-        Row: {
-          center_id: string
-          created_at: string
-          created_by: string | null
-          custom_fields: Json
-          default_price_tiyin: number | null
-          deleted_at: string | null
-          duration_min: number
-          id: string
-          is_active: boolean
-          kind: string
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          default_price_tiyin?: number | null
-          deleted_at?: string | null
-          duration_min?: number
-          id?: string
-          is_active?: boolean
-          kind?: string
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          default_price_tiyin?: number | null
-          deleted_at?: string | null
-          duration_min?: number
-          id?: string
-          is_active?: boolean
-          kind?: string
-          name?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      groups: {
-        Row: {
-          center_id: string
-          created_at: string
-          created_by: string | null
-          custom_fields: Json
-          deleted_at: string | null
-          id: string
-          is_active: boolean
-          max_students: number | null
-          name: string
-          room_id: string | null
-          service_id: string | null
-          teacher_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          max_students?: number | null
-          name: string
-          room_id?: string | null
-          service_id?: string | null
-          teacher_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          id?: string
-          is_active?: boolean
-          max_students?: number | null
-          name?: string
-          room_id?: string | null
-          service_id?: string | null
-          teacher_id?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      group_students: {
-        Row: {
-          center_id: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          group_id: string
-          id: string
-          joined_at: string
-          left_at: string | null
-          student_id: string
-          updated_at: string
-        }
-        Insert: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          group_id: string
-          id?: string
-          joined_at?: string
-          left_at?: string | null
-          student_id: string
-          updated_at?: string
-        }
-        Update: {
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          group_id?: string
-          id?: string
-          joined_at?: string
-          left_at?: string | null
-          student_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      lessons: {
-        Row: {
-          cancel_reason: string | null
-          center_id: string
-          created_at: string
-          created_by: string | null
-          custom_fields: Json
-          deleted_at: string | null
-          effective_teacher_id: string | null
-          ends_at: string
-          group_id: string | null
-          id: string
-          notes: string | null
-          room_id: string | null
-          series_id: string | null
-          service_id: string | null
-          starts_at: string
-          status: string
-          student_id: string | null
-          substitute_teacher_id: string | null
-          teacher_id: string
-          updated_at: string
-        }
-        Insert: {
-          cancel_reason?: string | null
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          ends_at: string
-          group_id?: string | null
-          id?: string
-          notes?: string | null
-          room_id?: string | null
-          series_id?: string | null
-          service_id?: string | null
-          starts_at: string
-          status?: string
-          student_id?: string | null
-          substitute_teacher_id?: string | null
-          teacher_id: string
-          updated_at?: string
-        }
-        Update: {
-          cancel_reason?: string | null
-          center_id?: string
-          created_at?: string
-          created_by?: string | null
-          custom_fields?: Json
-          deleted_at?: string | null
-          ends_at?: string
-          group_id?: string | null
-          id?: string
-          notes?: string | null
-          room_id?: string | null
-          series_id?: string | null
-          service_id?: string | null
-          starts_at?: string
-          status?: string
-          student_id?: string | null
-          substitute_teacher_id?: string | null
-          teacher_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      lesson_participants: {
-        Row: {
-          center_id: string
-          deleted_at: string | null
-          ends_at: string
-          lesson_id: string
-          starts_at: string
-          status: string
-          student_id: string
-        }
-        Insert: never
-        Update: never
-        Relationships: []
       }
       payers: {
         Row: {
@@ -530,6 +591,106 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "payers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          capacity: number
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          capacity?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          capacity?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rooms_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          default_price_tiyin: number | null
+          deleted_at: string | null
+          duration_min: number
+          id: string
+          is_active: boolean
+          kind: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          default_price_tiyin?: number | null
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          default_price_tiyin?: number | null
+          deleted_at?: string | null
+          duration_min?: number
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_center_id_fkey"
             columns: ["center_id"]
             isOneToOne: false
             referencedRelation: "centers"
@@ -838,6 +999,15 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       archive_student: { Args: { p_id: string }; Returns: undefined }
+      cancel_lesson: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
+      cancel_series_from: {
+        Args: { p_from: string; p_reason?: string; p_series_id: string }
+        Returns: number
+      }
+      center_timezone: { Args: { p_center_id?: string }; Returns: string }
       change_member_role: {
         Args: { p_role: string; p_user_id: string }
         Returns: undefined
@@ -858,6 +1028,22 @@ export type Database = {
           invitation_id: string
           teacher_id: string
           token: string
+        }[]
+      }
+      create_lesson_series: {
+        Args: { p: Json }
+        Returns: {
+          lesson_id: string
+          starts_at: string
+        }[]
+      }
+      create_lesson_series_preview: {
+        Args: { p: Json }
+        Returns: {
+          conflicts: Json
+          day: string
+          ends_at: string
+          starts_at: string
         }[]
       }
       create_student_with_payer: {
@@ -903,60 +1089,74 @@ export type Database = {
         }[]
       }
       is_member: { Args: { p_center_id: string }; Returns: boolean }
+      lesson_slot_conflicts: {
+        Args: {
+          p_center: string
+          p_ends: string
+          p_exclude_id?: string
+          p_group: string
+          p_room: string
+          p_starts: string
+          p_student: string
+          p_teacher: string
+        }
+        Returns: Json
+      }
+      mark_lesson_status: {
+        Args: { p_lesson_id: string; p_notes?: string; p_status: string }
+        Returns: undefined
+      }
       my_payer_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }
       my_teacher_id: { Args: never; Returns: string }
       normalize_kg_phone: { Args: { p_phone: string }; Returns: string }
+      parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
+      parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      rebuild_lesson_participants: {
+        Args: { p_lesson_id: string }
+        Returns: undefined
+      }
+      reschedule_lesson: {
+        Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
+        Returns: undefined
+      }
       restore_student: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
-      slugify: { Args: { p_text: string }; Returns: string }
-      switch_center: { Args: { p_center_id: string }; Returns: undefined }
-      user_email: { Args: { p_user_id: string }; Returns: string }
-      was_access_revoked: { Args: never; Returns: boolean }
-      teacher_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
-      parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
-      parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
-      teacher_teaches_student: { Args: { p_student_id: string }; Returns: boolean }
-      center_timezone: { Args: { p_center_id?: string }; Returns: string }
       series_dates: {
         Args: { p: Json }
-        Returns: { day: string; starts_at: string; ends_at: string }[]
+        Returns: {
+          day: string
+          ends_at: string
+          starts_at: string
+        }[]
       }
-      create_lesson_series_preview: {
-        Args: { p: Json }
-        Returns: { day: string; starts_at: string; ends_at: string; conflicts: Json }[]
-      }
-      create_lesson_series: {
-        Args: { p: Json }
-        Returns: { lesson_id: string; starts_at: string }[]
-      }
-      cancel_lesson: { Args: { p_id: string; p_reason?: string }; Returns: undefined }
-      cancel_series_from: {
-        Args: { p_series_id: string; p_from: string; p_reason?: string }
-        Returns: number
-      }
+      slugify: { Args: { p_text: string }; Returns: string }
       substitute_teacher: {
         Args: { p_lesson_id: string; p_new_teacher_id: string }
         Returns: undefined
       }
+      switch_center: { Args: { p_center_id: string }; Returns: undefined }
+      teacher_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
+      teacher_teaches_student: {
+        Args: { p_student_id: string }
+        Returns: boolean
+      }
       teacher_vacation: {
-        Args: { p_teacher_id: string; p_from: string; p_to: string }
+        Args: { p_from: string; p_teacher_id: string; p_to: string }
         Returns: number
       }
       teacher_vacation_preview: {
-        Args: { p_teacher_id: string; p_from: string; p_to: string }
-        Returns: { lesson_id: string; starts_at: string; as_substitute: boolean }[]
+        Args: { p_from: string; p_teacher_id: string; p_to: string }
+        Returns: {
+          as_substitute: boolean
+          lesson_id: string
+          starts_at: string
+        }[]
       }
-      mark_lesson_status: {
-        Args: { p_lesson_id: string; p_status: string; p_notes?: string }
-        Returns: undefined
-      }
-      reschedule_lesson: {
-        Args: { p_lesson_id: string; p_starts_at: string; p_ends_at: string }
-        Returns: undefined
-      }
+      user_email: { Args: { p_user_id: string }; Returns: string }
+      was_access_revoked: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
