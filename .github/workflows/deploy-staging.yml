@@ -150,14 +150,19 @@ jobs:
         working-directory: packages/db
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase db push --dry-run $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
+        # --include-all: параллельные PR сливаются в произвольном порядке, и
+        # миграция с меньшим номером может прийти после уже применённой большей
+        # (0010 после 0011 — 10.09.2026). Без флага CLI отказывает: «Found local
+        # migration files to be inserted before the last migration on remote».
+        # Порядок применения при этом остаётся по номеру среди неприменённых.
+        run: supabase db push --dry-run --include-all $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
 
       - name: Применить миграции
         id: push
         working-directory: packages/db
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase db push $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
+        run: supabase db push --include-all $DB_FLAG ${DB_TARGET:+"$DB_TARGET"}
 
       # always(): при падении push картина «что в базе против того, что в
       # файлах» нужна больше всего. Без неё в логе остаётся только сырой
