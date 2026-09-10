@@ -69,7 +69,11 @@ jobs:
           if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
             # Пароль кодируется целиком: спецсимволы из генератора Supabase
             # иначе рвут URL по '@' или '#', и до сервера уезжает мусор.
-            ENCODED=$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD))')
+            # trim() обязателен: GitHub хранит секрет как есть, и перенос строки,
+            # прилипший при вставке, превращается в %0A на конце пароля. Локальный
+            # скрипт проверки пробелы обрезает, поэтому у владельца «ГОТОВО», а
+            # здесь 28P01 — и расхождение невозможно заметить со стороны.
+            ENCODED=$(node -e 'process.stdout.write(encodeURIComponent(process.env.SUPABASE_DB_PASSWORD.trim()))')
 
             # Если переменная не доехала до подпроцесса, encodeURIComponent
             # вернёт строку "undefined", и мы бы молча пошли подключаться с
