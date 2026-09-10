@@ -40,11 +40,60 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Статусы посещения/абонементов — из бейджей на макетах Stitch, не из ролей Material 3.
+        // «Болел» (голубой) ещё не сгенерирован — docs/Design/DESIGN.md, «Пробелы».
+        success: {
+          DEFAULT: 'hsl(var(--status-success))',
+          bg: 'hsl(var(--status-success-bg))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--status-warning))',
+          bg: 'hsl(var(--status-warning-bg))',
+        },
+        danger: {
+          DEFAULT: 'hsl(var(--status-danger))',
+          bg: 'hsl(var(--status-danger-bg))',
+        },
+        'status-neutral': {
+          DEFAULT: 'hsl(var(--status-neutral))',
+          bg: 'hsl(var(--status-neutral-bg))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      // Шкала отступов и типографика из docs/Design/DESIGN.md — доступны как
+      // p-space-16, text-headline-lg и т.д. Ничего из дефолтной шкалы Tailwind
+      // не переопределяет: существующие страницы этапов 0-3 не затронуты.
+      spacing: {
+        'space-2': '2px',
+        'space-4': '4px',
+        'space-6': '6px',
+        'space-8': '8px',
+        'space-12': '12px',
+        'space-16': '16px',
+        'space-20': '20px',
+        'space-24': '24px',
+        'space-32': '32px',
+        'space-40': '40px',
+        'sidebar-width': '240px',
+        'sidebar-collapsed': '64px',
+        'modal-max-width': '540px',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      fontSize: {
+        'headline-lg': ['24px', { lineHeight: '36px', letterSpacing: '-0.015em', fontWeight: '600' }],
+        'headline-md': ['20px', { lineHeight: '30px', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'headline-sm': ['16px', { lineHeight: '24px', letterSpacing: '-0.005em', fontWeight: '600' }],
+        'body-md-medium': ['14px', { lineHeight: '21px', letterSpacing: '0em', fontWeight: '500' }],
+        'body-md': ['14px', { lineHeight: '21px', letterSpacing: '0em', fontWeight: '400' }],
+        'body-sm': ['12px', { lineHeight: '18px', letterSpacing: '0.01em', fontWeight: '400' }],
+        'label-sm': ['12px', { lineHeight: '18px', letterSpacing: '0.015em', fontWeight: '500' }],
+        'label-xs': ['11px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '600' }],
       },
     },
   },
