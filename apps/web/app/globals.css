@@ -4,44 +4,65 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* Material 3, вытащено из партии экранов Stitch 2026-09-10 — docs/Design/DESIGN.md */
+    --background: 18 100% 98%;
+    --foreground: 24 9% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 201 96% 32%;
+    --card-foreground: 24 9% 11%;
+    --primary: 175 77% 26%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 199 95% 94%;
-    --accent-foreground: 201 96% 25%;
-    --destructive: 0 72% 51%;
+    --secondary: 167 55% 83%;
+    --secondary-foreground: 170 25% 34%;
+    --muted: 20 55% 96%;
+    --muted-foreground: 169 8% 26%;
+    --accent: 20 55% 96%;
+    --accent-foreground: 24 9% 11%;
+    --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 201 96% 32%;
-    --radius: 0.6rem;
+    --border: 165 10% 76%;
+    --input: 165 10% 76%;
+    --ring: 175 100% 18%;
+    --radius: 0.5rem;
+
+    /* Статусы — из бейджей на макетах, не из ролей Material 3. «Болел» ещё нет — DESIGN.md, «Пробелы». */
+    --status-success: 142 72% 29%;
+    --status-success-bg: 141 84% 93%;
+    --status-warning: 26 90% 37%;
+    --status-warning-bg: 48 96% 89%;
+    --status-danger: 0 74% 42%;
+    --status-danger-bg: 0 93% 94%;
+    --status-neutral: 215 16% 47%;
+    --status-neutral-bg: 210 40% 96%;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
-    --primary: 199 89% 60%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 20%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 20%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 24%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 24%;
-    --input: 217 33% 24%;
-    --ring: 199 89% 60%;
+    /* Тёмная тема Stitch не присылал — выведена из тех же ролей Material 3 (inverse-*), не сгенерирована. */
+    --background: 30 6% 19%;
+    --foreground: 20 43% 95%;
+    --card: 30 6% 23%;
+    --card-foreground: 20 43% 95%;
+    --primary: 173 50% 67%;
+    --primary-foreground: 174 100% 6%;
+    --secondary: 167 25% 22%;
+    --secondary-foreground: 167 40% 85%;
+    --muted: 24 8% 18%;
+    --muted-foreground: 20 15% 65%;
+    --accent: 24 8% 18%;
+    --accent-foreground: 20 43% 95%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 20 10% 26%;
+    --input: 20 10% 26%;
+    --ring: 173 50% 67%;
+
+    --status-success: 142 60% 45%;
+    --status-success-bg: 142 30% 16%;
+    --status-warning: 32 85% 55%;
+    --status-warning-bg: 32 40% 16%;
+    --status-danger: 0 70% 55%;
+    --status-danger-bg: 0 40% 18%;
+    --status-neutral: 215 16% 65%;
+    --status-neutral-bg: 215 15% 20%;
   }
 
   * {
