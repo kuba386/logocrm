@@ -314,10 +314,15 @@ begin
     raise exception 'Дата окончания заморозки раньше начала' using errcode = '22023';
   end if;
 
-  -- Открытый конец — 'infinity', не NULL: иначе EXCLUDE не поймает
-  -- пересечение двух открытых заморозок.
+  -- Открытый конец — неограниченная граница (NULL), не дата 'infinity'.
+  -- В 0008 стояло 'infinity' с комментарием «иначе EXCLUDE не поймает
+  -- пересечение» — это путаница с NULL-значениями колонок: неограниченный
+  -- диапазон пересекается со всем после своего начала, EXCLUDE его ловит.
+  -- А вот 'infinity' как дата ломала всё остальное: upper_inf() для неё
+  -- false, и unfreeze_subscription не находила открытую заморозку, а
+  -- upper(period) - lower(period) падал на «cannot subtract infinite dates».
   insert into public.subscription_freezes (center_id, subscription_id, period)
-  values (v_center, p_id, daterange(p_from, coalesce(p_to, 'infinity'::date), '[)'));
+  values (v_center, p_id, daterange(p_from, p_to, '[)'));
 
   update public.subscriptions set status = 'frozen' where id = p_id;
 
@@ -351,8 +356,11 @@ begin
     raise exception 'Абонемент не найден' using errcode = '42704';
   end if;
 
+  -- Обе формы открытого конца: неограниченный (с 0010) и дата 'infinity'
+  -- (так писала 0008 — строк в staging нет, но форма должна пониматься).
   select * into v_open from public.subscription_freezes f
-   where f.subscription_id = p_id and f.center_id = v_center and upper_inf(f.period)
+   where f.subscription_id = p_id and f.center_id = v_center
+     and (upper_inf(f.period) or upper(f.period) = 'infinity'::date)
    order by lower(f.period) desc limit 1;
   if not found then
     raise exception 'У абонемента нет открытой заморозки' using errcode = '42704';
@@ -635,7 +643,7 @@ create or replace function public.subscription_freeze_days(p_subscription_id uui
 as $$
   select coalesce((
     select sum(
-      case when upper_inf(f.period) then 0
+      case when upper_inf(f.period) or upper(f.period) = 'infinity'::date then 0
            else (upper(f.period) - lower(f.period))
       end
     )
