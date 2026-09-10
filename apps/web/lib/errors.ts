@@ -40,6 +40,25 @@ type PostgrestLike = {
 const CONFLICT = '23P01'
 const FORBIDDEN = '42501'
 const CHECK_VIOLATION = '23514'
+// Сериализация и deadlock: данные изменились под рукой, повтор обычно проходит.
+const SERIALIZATION_FAILURE = '40001'
+const DEADLOCK_DETECTED = '40P01'
+
+/**
+ * Русские тексты по имени констрейнта. Нативное сообщение Postgres —
+ * английское («new row for relation ... violates check constraint ...»),
+ * и без этой таблицы оно уходило бы пользователю как есть.
+ */
+const CHECK_MESSAGES: Record<string, string> = {
+  subscriptions_not_overdrawn: 'Списание превышает оплаченное количество занятий',
+  subscriptions_lesson_price_consistent: 'Цена занятия не соответствует цене абонемента',
+  subscription_freezes_no_overlap: 'Заморозки пересекаются',
+}
+
+function checkConstraintName(message: string): string | null {
+  const m = /violates check constraint "([a-z0-9_]+)"/i.exec(message)
+  return m?.[1] ?? null
+}
 const UNIQUE_VIOLATION = '23505'
 const NOT_FOUND = '42704'
 const BAD_INPUT = '22023'
@@ -100,7 +119,18 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   }
 
   if (code === CHECK_VIOLATION) {
-    return { message: message || 'Действие нарушает правила центра' }
+    const name = checkConstraintName(message)
+    if (name && CHECK_MESSAGES[name]) return { message: CHECK_MESSAGES[name] }
+    // Исключения из plpgsql с этим кодом уже по-русски; нативный констрейнт —
+    // нет, и его текст пользователю не показывается.
+    return { message: name ? 'Действие нарушает правила центра' : message || 'Действие нарушает правила центра' }
+  }
+
+  if (code === SERIALIZATION_FAILURE || code === DEADLOCK_DETECTED) {
+    return {
+      message: message || 'Данные изменились во время сохранения, попробуйте ещё раз',
+      retryable: true,
+    }
   }
 
   if (code === UNIQUE_VIOLATION) {

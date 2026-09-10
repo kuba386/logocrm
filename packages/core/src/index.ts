@@ -17,6 +17,8 @@ export {
   freezeShift,
   isRunningOut,
   isExhausted,
+  canDeduct,
+  isOverdrawn,
   type SubscriptionKind,
   type SubscriptionSnapshot,
 } from './subscription'

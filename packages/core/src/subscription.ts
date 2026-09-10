@@ -23,6 +23,11 @@ export type SubscriptionSnapshot = {
   lessonsWrittenOff: number
   /** Цена одного занятия, замороженная при продаже. */
   lessonPriceTiyin: number | null
+  /**
+   * Разрешено уйти в минус: списание продолжается в отрицательный баланс,
+   * а не в долг по цене услуги. Зеркало условия выбора в 0010.
+   */
+  allowNegative?: boolean
 }
 
 /**
@@ -72,16 +77,43 @@ export function freezeShift(endsAt: string, days: number): string {
  * Заканчивается ли абонемент: остаток не больше порога.
  *
  * Безлимитный не заканчивается никогда — возвращает false, а не «0 ≤ 2».
+ * С allow_negative порог тоже показывается: родителю полезно знать, что
+ * оплаченное кончилось, даже если списание продолжится.
  */
 export function isRunningOut(sub: SubscriptionSnapshot, threshold = 2): boolean {
   const left = lessonsLeft(sub)
   return left !== null && left <= threshold && left > 0
 }
 
-/** Исчерпан ли абонемент. Безлимитный — никогда. */
+/**
+ * Исчерпан ли абонемент: оплаченных занятий не осталось. Чистая арифметика,
+ * зеркало subscription_state = 'exhausted'. allow_negative здесь НЕ учитывается:
+ * флаг не делает абонемент «не исчерпанным», он разрешает списывать дальше.
+ * Это отдельный вопрос — canDeduct.
+ */
 export function isExhausted(sub: SubscriptionSnapshot): boolean {
   const left = lessonsLeft(sub)
   return left !== null && left <= 0
+}
+
+/**
+ * Можно ли списать ещё одно занятие. Зеркало условия выбора абонемента в
+ * attendance_fill_and_check: безлимит — всегда, allow_negative — всегда,
+ * иначе только при положительном остатке.
+ */
+export function canDeduct(sub: SubscriptionSnapshot): boolean {
+  if (sub.allowNegative) return true
+  const left = lessonsLeft(sub)
+  return left === null || left > 0
+}
+
+/**
+ * Ушёл ли абонемент в минус. Только с allow_negative такое возможно; сумма
+ * перерасхода — в student_balance.overdrawn_tiyin.
+ */
+export function isOverdrawn(sub: SubscriptionSnapshot): boolean {
+  const left = lessonsLeft(sub)
+  return left !== null && left < 0
 }
 
 /**

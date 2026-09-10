@@ -1,8 +1,3 @@
-// Сгенерировано: supabase gen types typescript --linked --schema public
-// Проект: logocrm (hiwstqrnxrlfuanvfggq). Перегенерировать после каждой
-// миграции — канонический файл кладёт артефактом джоб «База данных» в CI,
-// либо локально: pnpm db:types (по токену, через --linked).
-// Файл коммитится в репозиторий — на него опирается typecheck в CI.
 export type Json =
   | string
   | number
@@ -19,6 +14,169 @@ export type Database = {
   }
   public: {
     Tables: {
+      attendance: {
+        Row: {
+          center_id: string
+          comment: string | null
+          counts_absence: boolean
+          created_at: string
+          deducted: boolean
+          id: string
+          lesson_id: string
+          marked_at: string
+          marked_by: string | null
+          price_tiyin: number
+          status_id: string
+          student_id: string
+          subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          comment?: string | null
+          counts_absence?: boolean
+          created_at?: string
+          deducted?: boolean
+          id?: string
+          lesson_id: string
+          marked_at?: string
+          marked_by?: string | null
+          price_tiyin?: number
+          status_id: string
+          student_id: string
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          comment?: string | null
+          counts_absence?: boolean
+          created_at?: string
+          deducted?: boolean
+          id?: string
+          lesson_id?: string
+          marked_at?: string
+          marked_by?: string | null
+          price_tiyin?: number
+          status_id?: string
+          student_id?: string
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_status_fk"
+            columns: ["status_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_statuses"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_subscription_fk"
+            columns: ["subscription_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      attendance_statuses: {
+        Row: {
+          center_id: string
+          code: string
+          color: string
+          counts_absence: boolean
+          created_at: string
+          created_by: string | null
+          deducts_lesson: boolean
+          deleted_at: string | null
+          id: string
+          is_default: boolean
+          name: string
+          notify_parent: boolean
+          pays_teacher: boolean
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          code: string
+          color?: string
+          counts_absence?: boolean
+          created_at?: string
+          created_by?: string | null
+          deducts_lesson?: boolean
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          notify_parent?: boolean
+          pays_teacher?: boolean
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          code?: string
+          color?: string
+          counts_absence?: boolean
+          created_at?: string
+          created_by?: string | null
+          deducts_lesson?: boolean
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          notify_parent?: boolean
+          pays_teacher?: boolean
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_statuses_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -172,6 +330,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "groups"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_students_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "group_students_student_id_fkey"
@@ -369,6 +534,13 @@ export type Database = {
             foreignKeyName: "lesson_participants_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id"]
+          },
+          {
+            foreignKeyName: "lesson_participants_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
           },
@@ -476,6 +648,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "services"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id"]
           },
           {
             foreignKeyName: "lessons_student_id_fkey"
@@ -784,6 +963,230 @@ export type Database = {
           },
         ]
       }
+      subscription_freezes: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          period: unknown
+          reason: string | null
+          subscription_id: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          period: unknown
+          reason?: string | null
+          subscription_id: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          period?: unknown
+          reason?: string | null
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_freezes_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_freezes_sub_fk"
+            columns: ["subscription_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      subscription_types: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          kind: string
+          lessons_count: number | null
+          name: string
+          period_days: number | null
+          price_tiyin: number
+          service_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          lessons_count?: number | null
+          name: string
+          period_days?: number | null
+          price_tiyin: number
+          service_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          lessons_count?: number | null
+          name?: string
+          period_days?: number | null
+          price_tiyin?: number
+          service_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_types_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_types_service_fk"
+            columns: ["service_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          allow_negative: boolean
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          ends_at: string | null
+          id: string
+          lesson_price_tiyin: number | null
+          lessons_total: number | null
+          lessons_used: number
+          lessons_written_off: number
+          notes: string | null
+          payer_id: string
+          price_tiyin: number
+          starts_at: string
+          status: string
+          student_id: string
+          type_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          allow_negative?: boolean
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ends_at?: string | null
+          id?: string
+          lesson_price_tiyin?: number | null
+          lessons_total?: number | null
+          lessons_used?: number
+          lessons_written_off?: number
+          notes?: string | null
+          payer_id: string
+          price_tiyin: number
+          starts_at: string
+          status?: string
+          student_id: string
+          type_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          allow_negative?: boolean
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ends_at?: string | null
+          id?: string
+          lesson_price_tiyin?: number | null
+          lessons_total?: number | null
+          lessons_used?: number
+          lessons_written_off?: number
+          notes?: string | null
+          payer_id?: string
+          price_tiyin?: number
+          starts_at?: string
+          status?: string
+          student_id?: string
+          type_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "student_balance"
+            referencedColumns: ["student_id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_type_fk"
+            columns: ["type_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_types"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       teachers: {
         Row: {
           center_id: string
@@ -940,6 +1343,25 @@ export type Database = {
           },
         ]
       }
+      student_balance: {
+        Row: {
+          active_subscription_id: string | null
+          center_id: string | null
+          debt_tiyin: number | null
+          ends_at: string | null
+          lessons_left: number | null
+          student_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "students_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       students_teacher_view: {
         Row: {
           age_years: number | null
@@ -999,6 +1421,10 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       archive_student: { Args: { p_id: string }; Returns: undefined }
+      calc_lesson_price: {
+        Args: { p_lessons: number; p_price_tiyin: number }
+        Returns: number
+      }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
@@ -1008,8 +1434,13 @@ export type Database = {
         Returns: number
       }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
+      center_today: { Args: { p_center_id?: string }; Returns: string }
       change_member_role: {
         Args: { p_role: string; p_user_id: string }
+        Returns: undefined
+      }
+      check_absent_streak: {
+        Args: { p_center: string; p_lesson: string; p_student: string }
         Returns: undefined
       }
       create_center: {
@@ -1079,6 +1510,10 @@ export type Database = {
           relation: string
         }[]
       }
+      freeze_subscription: {
+        Args: { p_from: string; p_id: string; p_to?: string }
+        Returns: undefined
+      }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       invitation_preview: {
         Args: { p_token: string }
@@ -1102,6 +1537,19 @@ export type Database = {
         }
         Returns: Json
       }
+      mark_attendance: {
+        Args: {
+          p_comment?: string
+          p_lesson_id: string
+          p_status_code?: string
+          p_student_id: string
+        }
+        Returns: string
+      }
+      mark_attendance_bulk: {
+        Args: { p: Json; p_lesson_id: string }
+        Returns: number
+      }
       mark_lesson_status: {
         Args: { p_lesson_id: string; p_notes?: string; p_status: string }
         Returns: undefined
@@ -1117,6 +1565,15 @@ export type Database = {
         Args: { p_lesson_id: string }
         Returns: undefined
       }
+      recalc_subscription_usage: {
+        Args: { p_subscription_id: string }
+        Returns: undefined
+      }
+      refund_calc: { Args: { p_id: string }; Returns: number }
+      refund_subscription: {
+        Args: { p_expected_tiyin: number; p_id: string }
+        Returns: number
+      }
       reschedule_lesson: {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
@@ -1124,6 +1581,19 @@ export type Database = {
       restore_student: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
+      seed_attendance_statuses: {
+        Args: { p_center_id: string }
+        Returns: undefined
+      }
+      sell_subscription: {
+        Args: {
+          p_price_tiyin?: number
+          p_starts_at?: string
+          p_student_id: string
+          p_type_id: string
+        }
+        Returns: string
+      }
       series_dates: {
         Args: { p: Json }
         Returns: {
@@ -1133,6 +1603,22 @@ export type Database = {
         }[]
       }
       slugify: { Args: { p_text: string }; Returns: string }
+      student_subscription_badge: {
+        Args: { p_student_id: string }
+        Returns: string
+      }
+      subscription_freeze_days: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
+      subscription_lessons_left: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
+      subscription_state: {
+        Args: { p_subscription_id: string }
+        Returns: string
+      }
       substitute_teacher: {
         Args: { p_lesson_id: string; p_new_teacher_id: string }
         Returns: undefined
@@ -1154,6 +1640,14 @@ export type Database = {
           lesson_id: string
           starts_at: string
         }[]
+      }
+      transfer_remaining: {
+        Args: { p_from: string; p_to_student: string }
+        Returns: string
+      }
+      unfreeze_subscription: {
+        Args: { p_id: string; p_to?: string }
+        Returns: undefined
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
