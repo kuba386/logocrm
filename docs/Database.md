@@ -348,3 +348,70 @@ set local role authenticated;
 -- запросы
 reset role;
 ```
+
+## Абонементы и посещения (0008–0010)
+
+### Таблицы
+
+| Таблица | Что хранит | Записывают |
+|---|---|---|
+| `attendance_statuses` | статусы посещения центра: списывает / пропуск / уведомлять | owner, admin |
+| `subscription_types` | прайс: занятия, период, безлимит | owner, admin |
+| `subscriptions` | проданный абонемент; `lessons_used` **пересчитывается**, не инкрементируется | только `sell_subscription` / `transfer_remaining`; update — `notes`, `allow_negative`, `deleted_at` |
+| `subscription_freezes` | заморозки как `daterange` с `EXCLUDE` | только `freeze_subscription` / `unfreeze_subscription` |
+| `attendance` | отметка; `deducted`, `counts_absence`, `price_tiyin`, `subscription_id` заморожены триггером | insert — owner/admin/`mark_attendance`; update — только `status_id`, `comment` |
+
+Все таблицы связаны составными FK `(id, center_id)`: обычный FK по `id`
+пропускает ссылку в чужой центр — RLS режет чтение, а не ссылку.
+
+### Инварианты, которые держит база
+
+- **Остаток — производная величина.** `recalc_subscription_usage` считает
+  `lessons_used` из строк `attendance` под `for update`. Инкремент в функции
+  обходили прямой insert, смена статуса задним числом и отмена занятия.
+- **Переполнение** — `CHECK subscriptions_not_overdrawn`, снимается только
+  `allow_negative`. **Согласование цены** — `CHECK subscriptions_lesson_price_consistent`:
+  `lesson_price_tiyin = price_tiyin / lessons_total`.
+- **Абонемент выбирается по дате занятия**, не по «сегодня», и привязывается к
+  отметке один раз — при первом списании. Круг «пришёл → болел → пришёл»
+  остаётся на том же абонементе.
+- **Заморозка** — только через RPC: `EXCLUDE` держит пересечение, но «уже
+  заморожен» и сдвиг `ends_at` живут в функции. Открытый конец — `'infinity'`.
+- **Архив абонемента с остатком запрещён** триггером — сначала возврат или перенос.
+
+### Функции
+
+| Функция | Кому | Что делает |
+|---|---|---|
+| `sell_subscription` / `freeze_subscription` / `unfreeze_subscription` / `refund_subscription` / `transfer_remaining` | owner, admin | все пути записи в абонементы |
+| `mark_attendance` / `mark_attendance_bulk` | owner, admin, teacher (своё занятие) | единственный прикладной путь отметки; статус занятия не трогает |
+| `subscription_summary(uuid)` | owner, admin | остаток, состояние, дни заморозки, сумма возврата; чужой — исключение |
+| `student_subscription_badge(uuid)` | все роли своего центра | «нет / заканчивается / есть», без сумм |
+| `subscription_lessons_left` / `subscription_state` / `subscription_freeze_days` / `refund_calc` | внутренние | `security invoker`: чужой абонемент даёт **NULL**, а NULL у остатка значит и «безлимит». Из приложения не вызывать — только `subscription_summary` |
+
+`student_balance` — `security_invoker`, фильтрует роль сама (специалисту пуста):
+`debt_tiyin` считается по `attendance`, а её специалист видит по своим занятиям.
+
+### События
+
+`subscription.created/frozen/unfrozen/refunded/transferred`, `attendance.marked`,
+`attendance.no_subscription`, `subscription.low_balance` (ровно на остатке 2),
+`subscription.exhausted` (на нуле), `subscription.overdrawn` (первый уход в
+минус при `allow_negative`), `student.absent_streak` (два пропуска подряд по
+времени занятий). Все с дедупликацией по данным в `events`, не по памяти:
+остаток пересчитываемый, и без неё правка статуса слала бы событие второй раз.
+
+### Проверка роли в definer-функциях
+
+```sql
+if coalesce(public.my_role(), '') not in ('owner', 'admin') then
+  raise exception 'Недостаточно прав' using errcode = '42501';
+end if;
+```
+
+`coalesce` обязателен. `NULL not in (...)` — это `NULL`, и `if` молча не
+срабатывает: пользователь с живым JWT и уже отозванным членством проходил любую
+такую проверку (0010 закрыла это в шести RPC этапа 4 и четырёх читающих
+функциях этапов 0–3; остальные RPC этапов 0–3 держит второй рубеж в
+`emit_event`, их черёд — 0011). В RLS-политиках `my_role() in (...)` при NULL
+безопасно: строка просто не видна.

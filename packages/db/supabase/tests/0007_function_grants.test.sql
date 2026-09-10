@@ -36,7 +36,8 @@ from unnest(array[
   'public.attendance_recalc_trigger()',
   'public.lessons_recalc_attendance_trigger()',
   'public.recalc_subscription_usage(uuid)',
-  'public.check_absent_streak(uuid, uuid, uuid)'
+  'public.check_absent_streak(uuid, uuid, uuid)',
+  'public.subscriptions_guard_soft_delete()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -125,6 +126,7 @@ select set_eq(
     ('subscription_freeze_days(uuid)'),
     ('subscription_lessons_left(uuid)'),
     ('subscription_state(uuid)'),
+    ('subscription_summary(uuid)'),
     ('transfer_remaining(uuid,uuid)'),
     ('unfreeze_subscription(uuid,date)')
   $$,

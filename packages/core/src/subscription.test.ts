@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  canDeduct,
   freezeShift,
   isExhausted,
+  isOverdrawn,
   isRunningOut,
   lessonPrice,
   lessonsLeft,
@@ -115,17 +117,30 @@ describe('isRunningOut и isExhausted', () => {
     expect(isExhausted(sub)).toBe(false)
   })
 
-  it('с allow_negative нулевой остаток — не исчерпан: списание идёт в минус', () => {
-    const sub = pack({ lessonsUsed: 8, allowNegative: true })
+})
+
+// Общий набор случаев с pgTAP 0010 (пункт «те же входные данные»):
+// total=8, used/allowNegative варьируются. Меняется одна сторона — меняется обе.
+describe('isExhausted / canDeduct / isOverdrawn — зеркало subscription_state и селектора', () => {
+  it.each([
+    // used, allowNegative, exhausted, canDeduct, overdrawn
+    [0, false, false, true, false],
+    [6, false, false, true, false],
+    [8, false, true, false, false],
+    [8, true, true, true, false],
+    [11, true, true, true, true],
+    [11, false, true, false, true],
+  ])('used=%i allowNegative=%s → exhausted=%s canDeduct=%s overdrawn=%s', (used, allowNegative, ex, cd, od) => {
+    const sub = pack({ lessonsUsed: used, allowNegative })
+    expect(isExhausted(sub)).toBe(ex)
+    expect(canDeduct(sub)).toBe(cd)
+    expect(isOverdrawn(sub)).toBe(od)
+  })
+
+  it('безлимит: не исчерпан, списывать можно, в минусе не бывает', () => {
+    const sub = pack({ lessonsTotal: null, lessonsUsed: 100 })
     expect(isExhausted(sub)).toBe(false)
-    expect(lessonsLeft(sub)).toBe(0)
-  })
-
-  it('с allow_negative отрицательный остаток — тоже не исчерпан', () => {
-    expect(isExhausted(pack({ lessonsUsed: 10, allowNegative: true }))).toBe(false)
-  })
-
-  it('без allow_negative нулевой остаток — исчерпан, как и раньше', () => {
-    expect(isExhausted(pack({ lessonsUsed: 8, allowNegative: false }))).toBe(true)
+    expect(canDeduct(sub)).toBe(true)
+    expect(isOverdrawn(sub)).toBe(false)
   })
 })

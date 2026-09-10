@@ -24,9 +24,8 @@ export type SubscriptionSnapshot = {
   /** Цена одного занятия, замороженная при продаже. */
   lessonPriceTiyin: number | null
   /**
-   * Разрешено уйти в минус. Такой абонемент не считается исчерпанным при
-   * нулевом остатке — списание продолжается в отрицательный баланс, а не в
-   * долг по цене услуги. Зеркало subscription_state в 0010.
+   * Разрешено уйти в минус: списание продолжается в отрицательный баланс,
+   * а не в долг по цене услуги. Зеркало условия выбора в 0010.
    */
   allowNegative?: boolean
 }
@@ -87,15 +86,34 @@ export function isRunningOut(sub: SubscriptionSnapshot, threshold = 2): boolean 
 }
 
 /**
- * Исчерпан ли абонемент. Безлимитный — никогда; с allow_negative — тоже
- * никогда: флаг означает «списывать дальше в минус», и база (subscription_state)
- * продолжает выбирать такой абонемент для списания. Иначе TypeScript показал
- * бы «исчерпан», а SQL списал бы следующее занятие — два источника истины.
+ * Исчерпан ли абонемент: оплаченных занятий не осталось. Чистая арифметика,
+ * зеркало subscription_state = 'exhausted'. allow_negative здесь НЕ учитывается:
+ * флаг не делает абонемент «не исчерпанным», он разрешает списывать дальше.
+ * Это отдельный вопрос — canDeduct.
  */
 export function isExhausted(sub: SubscriptionSnapshot): boolean {
-  if (sub.allowNegative) return false
   const left = lessonsLeft(sub)
   return left !== null && left <= 0
+}
+
+/**
+ * Можно ли списать ещё одно занятие. Зеркало условия выбора абонемента в
+ * attendance_fill_and_check: безлимит — всегда, allow_negative — всегда,
+ * иначе только при положительном остатке.
+ */
+export function canDeduct(sub: SubscriptionSnapshot): boolean {
+  if (sub.allowNegative) return true
+  const left = lessonsLeft(sub)
+  return left === null || left > 0
+}
+
+/**
+ * Ушёл ли абонемент в минус. Только с allow_negative такое возможно; сумма
+ * перерасхода — в student_balance.overdrawn_tiyin.
+ */
+export function isOverdrawn(sub: SubscriptionSnapshot): boolean {
+  const left = lessonsLeft(sub)
+  return left !== null && left < 0
 }
 
 /**

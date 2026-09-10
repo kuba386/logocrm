@@ -237,6 +237,22 @@ export const subscriptionLowBalanceSchema = z.object({
 })
 export type SubscriptionLowBalance = z.infer<typeof subscriptionLowBalanceSchema>
 
+/**
+ * Остаток ушёл в минус — только у абонементов с allow_negative. Шлётся один
+ * раз на первом переходе через ноль: без него такой абонемент списывал бы
+ * молча (no_subscription не шлётся, debt_tiyin не растёт).
+ */
+export const subscriptionOverdrawnSchema = z.object({
+  type: z.literal('subscription.overdrawn'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    lessons_left: z.number().int().negative(),
+  }),
+})
+export type SubscriptionOverdrawn = z.infer<typeof subscriptionOverdrawnSchema>
+
 export const subscriptionExhaustedSchema = z.object({
   type: z.literal('subscription.exhausted'),
   payload: z.object({
@@ -317,6 +333,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionTransferredSchema,
   subscriptionLowBalanceSchema,
   subscriptionExhaustedSchema,
+  subscriptionOverdrawnSchema,
   attendanceMarkedSchema,
   attendanceNoSubscriptionSchema,
   studentAbsentStreakSchema,
