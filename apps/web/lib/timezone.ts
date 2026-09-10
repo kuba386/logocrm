@@ -58,3 +58,37 @@ export function addDays(day: string, days: number): string {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+/** Смещение пояса от UTC в минутах на момент date («360» для Asia/Bishkek, UTC+6). */
+function tzOffsetMinutes(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0)
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return Math.round((asUtc - date.getTime()) / 60000)
+}
+
+/**
+ * Начало календарного дня (ГГГГ-ММ-ДД) в поясе центра — как UTC-момент,
+ * пригодный для `.gte('starts_at', ...)`.
+ *
+ * `dayInZone`/`isoDayInZone` — для показа человеку, где сдвиг на пару часов
+ * не страшен. Здесь сдвиг ломает границу «сегодня»: для Bishkek (UTC+6)
+ * `${day}T00:00:00Z` — это 06:00 по местному, а не полночь, и дашборд
+ * потерял бы первые шесть часов дня и прихватил бы утро следующего.
+ */
+export function startOfDayInZone(day: string, timeZone: string): string {
+  // Смещение берём на полдень того же дня — не на полночь, где при переходе
+  // на летнее время (не наш случай, но пояс настраиваемый) сам момент
+  // неоднозначен.
+  const offsetMin = tzOffsetMinutes(new Date(`${day}T12:00:00Z`), timeZone)
+  return new Date(new Date(`${day}T00:00:00Z`).getTime() - offsetMin * 60000).toISOString()
+}
