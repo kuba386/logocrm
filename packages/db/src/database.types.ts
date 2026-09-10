@@ -1350,6 +1350,7 @@ export type Database = {
           debt_tiyin: number | null
           ends_at: string | null
           lessons_left: number | null
+          overdrawn_tiyin: number | null
           student_id: string | null
         }
         Relationships: [
@@ -1618,6 +1619,16 @@ export type Database = {
       subscription_state: {
         Args: { p_subscription_id: string }
         Returns: string
+      }
+      subscription_summary: {
+        Args: { p_subscription_id: string }
+        Returns: {
+          allow_negative: boolean
+          freeze_days: number
+          lessons_left: number
+          refund_tiyin: number
+          state: string
+        }[]
       }
       substitute_teacher: {
         Args: { p_lesson_id: string; p_new_teacher_id: string }
