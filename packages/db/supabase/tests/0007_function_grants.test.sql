@@ -38,7 +38,10 @@ from unnest(array[
   'public.recalc_subscription_usage(uuid)',
   'public.check_absent_streak(uuid, uuid, uuid)',
   'public.subscriptions_guard_soft_delete()',
-  'public.attendance_statuses_check_default()'
+  'public.attendance_statuses_check_default()',
+  'public.centers_seed_payment_sources()',
+  'public.payments_recalc_trigger()',
+  'public.financial_period_guard()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -79,12 +82,14 @@ select set_eq(
     ('accept_invitation(text)'),
     ('age_years(date)'),
     ('archive_attendance_status(uuid)'),
+    ('archive_payment_source(uuid)'),
     ('archive_student(uuid)'),
     ('archive_subscription_type(uuid)'),
     ('cancel_lesson(uuid,text)'),
     ('cancel_series_from(uuid,date,text)'),
     ('center_timezone(uuid)'),
     ('change_member_role(uuid,text)'),
+    ('close_month(date)'),
     ('create_center(text,text)'),
     ('create_invitation(text,text,text,text,uuid)'),
     ('create_lesson_series(jsonb)'),
@@ -104,8 +109,11 @@ select set_eq(
     ('parent_of_lesson(uuid)'),
     ('parent_of_student(uuid)'),
     ('payer_display_name(uuid)'),
+    ('record_payment(uuid,integer,text,uuid,uuid,uuid,timestamp with time zone,text)'),
+    ('reopen_month(date)'),
     ('reschedule_lesson(uuid,timestamp with time zone,timestamp with time zone)'),
     ('restore_attendance_status(uuid)'),
+    ('restore_payment_source(uuid)'),
     ('restore_student(uuid)'),
     ('restore_subscription_type(uuid)'),
     ('revoke_membership(uuid)'),
