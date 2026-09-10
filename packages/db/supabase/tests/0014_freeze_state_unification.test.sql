@@ -86,6 +86,19 @@ insert into public.students (id, center_id, full_name, payer_id, primary_teacher
 insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at, ends_at) values
   ('88888888-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000001', 8, 400000, 50000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 20, null);
 
+-- Занятия студента 1 нужны здесь, ДО тестов видимости (4-8): teacher_
+-- teaches_student смотрит не на primary_teacher_id, а на реальное участие
+-- в занятии через lesson_participants (0006_schedule.sql:395-402) — без
+-- хотя бы одного занятия бейдж специалиста (тест 6) откажет "этот ребёнок
+-- не на ваших занятиях" ещё до проверки заморозки.
+insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
+  ('44444444-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001')),
+  ('44444444-0001-0000-0000-000000000002','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
+    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
 
@@ -192,14 +205,7 @@ select ok(
 
 
 -- 9-11. Отметка: единственный абонемент заморожен на дату занятия --------------------
-
-insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at) values
-  ('44444444-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '08:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001')),
-  ('44444444-0001-0000-0000-000000000002','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000001',
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
-    ((public.center_today('cccccccc-0001-0000-0000-000000000001') - 40) + time '09:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
+-- (занятия 1 и 2 уже вставлены в самом начале файла, до тестов видимости)
 
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
