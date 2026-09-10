@@ -355,13 +355,21 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
   ('88888888-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000005','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000001', 8, 400000, 50000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 20, null);
 insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin, starts_at, ends_at) values
   ('88888888-0001-0000-0000-000000000007','cccccccc-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000006','bbbbbbbb-0001-0000-0000-000000000001','77777777-0001-0000-0000-000000000001', 8, 400000, 50000, public.center_today('cccccccc-0001-0000-0000-000000000001') - 20, null);
-insert into public.lessons (id, center_id, service_id, teacher_id, starts_at, ends_at) values
-  ('44444444-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001',
+-- lessons.lessons_check1: (group_id is null) <> (student_id is null) —
+-- групповое занятие обязано ссылаться на настоящую группу, "ни то ни
+-- другое" не проходит констрейнт. lesson_participants для группы
+-- заполняет триггер (rebuild_lesson_participants, 0006:222-252) сам из
+-- group_students — вручную вставлять её нельзя (защёлкнута отдельным
+-- гейтом, 0007_lock_down_participant_functions.sql:44-47).
+insert into public.groups (id, center_id, name, teacher_id) values
+  ('dddddddd-0001-0000-0000-000000000001','cccccccc-0001-0000-0000-000000000001','Группа Т','aaaaaaaa-0001-0000-0000-000000000001');
+insert into public.group_students (group_id, student_id, center_id) values
+  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000005','cccccccc-0001-0000-0000-000000000001'),
+  ('dddddddd-0001-0000-0000-000000000001','eeeeeeee-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001');
+insert into public.lessons (id, center_id, service_id, teacher_id, group_id, starts_at, ends_at) values
+  ('44444444-0001-0000-0000-000000000006','cccccccc-0001-0000-0000-000000000001','99999999-0001-0000-0000-000000000001','aaaaaaaa-0001-0000-0000-000000000001','dddddddd-0001-0000-0000-000000000001',
     ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '13:00') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'),
     ((public.center_today('cccccccc-0001-0000-0000-000000000001')) + time '13:45') at time zone public.center_timezone('cccccccc-0001-0000-0000-000000000001'));
-insert into public.lesson_participants (lesson_id, student_id) values
-  ('44444444-0001-0000-0000-000000000006','eeeeeeee-0001-0000-0000-000000000005'),
-  ('44444444-0001-0000-0000-000000000006','eeeeeeee-0001-0000-0000-000000000006');
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0001-0000-0000-000000000001');
 set local role authenticated;
