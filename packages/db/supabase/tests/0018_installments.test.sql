@@ -670,6 +670,9 @@ select throws_ok(
 );
 reset role;
 revoke execute on function public.installment_plans_cancel_live(uuid) from authenticated;
+-- reset role claims не сбрасывает: контрольные вызовы ниже идут от
+-- владельца А, иначе subscription_payment_summary(sub4) → 42704.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 
 
 -- 68. Гранты — белый список 0007 актуален -----------------------------------------
