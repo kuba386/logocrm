@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MAX_INSTALLMENTS,
+  installmentDueDates,
   installmentPaid,
   installmentState,
   paymentState,
@@ -110,6 +111,35 @@ describe('installmentPaid — зеркало installments_view.state = paid', ()
   it('план без аванса: base 0', () => {
     expect(installmentPaid(0, 0, 100_000)).toBe(false)
     expect(installmentPaid(100_000, 0, 100_000)).toBe(true)
+  })
+})
+
+describe('installmentDueDates — зеркало календаря create_installment_plan', () => {
+  it('31 января: февраль прижимается к 28-му, март снова 31-е — без дрейфа цепочкой', () => {
+    expect(installmentDueDates('2026-01-31', 3)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+  })
+
+  it('високосный февраль — 29-е', () => {
+    expect(installmentDueDates('2028-01-31', 2)).toEqual(['2028-01-31', '2028-02-29'])
+  })
+
+  it('те же входные данные, что pgTAP 0018 (sub7): 2030-01-31 на 3', () => {
+    expect(installmentDueDates('2030-01-31', 3)).toEqual(['2030-01-31', '2030-02-28', '2030-03-31'])
+  })
+
+  it('шаг два месяца и переход через год', () => {
+    expect(installmentDueDates('2026-11-15', 3, 2)).toEqual(['2026-11-15', '2027-01-15', '2027-03-15'])
+  })
+
+  it('один платёж — одна дата', () => {
+    expect(installmentDueDates('2026-09-11', 1)).toEqual(['2026-09-11'])
+  })
+
+  it('границы: n вне 1..24, шаг 0, дата не в формате — ошибка', () => {
+    expect(() => installmentDueDates('2026-09-11', 0)).toThrow(RangeError)
+    expect(() => installmentDueDates('2026-09-11', 25)).toThrow(RangeError)
+    expect(() => installmentDueDates('2026-09-11', 2, 0)).toThrow(RangeError)
+    expect(() => installmentDueDates('11.09.2026', 2)).toThrow(RangeError)
   })
 })
 

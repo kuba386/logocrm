@@ -44,6 +44,7 @@ export {
   splitInstallments,
   installmentPaid,
   installmentState,
+  installmentDueDates,
   MAX_INSTALLMENTS,
   type PaymentState,
   type InstallmentState,
