@@ -360,6 +360,79 @@ export const teacherRestoredSchema = z.object({
 })
 export type TeacherRestored = z.infer<typeof teacherRestoredSchema>
 
+// --- Этап 5: платежи, периоды, рассрочка ------------------------------------
+
+/**
+ * Платёж записан (record_payment, 0013). Один payload на received/refunded:
+ * различаются type и знаком amount_tiyin (refund — отрицательный).
+ */
+const paymentPayload = z.object({
+  center_id: z.string().uuid(),
+  payment_id: z.string().uuid(),
+  payer_id: z.string().uuid(),
+  student_id: z.string().uuid().nullable(),
+  subscription_id: z.string().uuid().nullable(),
+  amount_tiyin: z.number().int(),
+  kind: z.enum(['payment', 'refund', 'correction']),
+})
+
+export const paymentReceivedSchema = z.object({
+  type: z.literal('payment.received'),
+  payload: paymentPayload,
+})
+export type PaymentReceived = z.infer<typeof paymentReceivedSchema>
+
+export const paymentRefundedSchema = z.object({
+  type: z.literal('payment.refunded'),
+  payload: paymentPayload,
+})
+export type PaymentRefunded = z.infer<typeof paymentRefundedSchema>
+
+/** Замок месяца (close_month / reopen_month, 0013-0014). month — первое число. */
+const periodPayload = z.object({
+  center_id: z.string().uuid(),
+  month: z.string(),
+})
+
+export const periodClosedSchema = z.object({
+  type: z.literal('period.closed'),
+  payload: periodPayload,
+})
+export type PeriodClosed = z.infer<typeof periodClosedSchema>
+
+export const periodReopenedSchema = z.object({
+  type: z.literal('period.reopened'),
+  payload: periodPayload,
+})
+export type PeriodReopened = z.infer<typeof periodReopenedSchema>
+
+/**
+ * Платёж рассрочки (0018): due — день в день, overdue — после срока. Шлётся
+ * installments_notify по одному разу на каждый переход (*_notified_at).
+ */
+const installmentPayload = z.object({
+  center_id: z.string().uuid(),
+  installment_id: z.string().uuid(),
+  subscription_id: z.string().uuid(),
+  student_id: z.string().uuid(),
+  payer_id: z.string().uuid(),
+  seq: z.number().int().positive(),
+  due_date: z.string(),
+  amount_tiyin: z.number().int().positive(),
+})
+
+export const installmentDueSchema = z.object({
+  type: z.literal('installment.due'),
+  payload: installmentPayload,
+})
+export type InstallmentDue = z.infer<typeof installmentDueSchema>
+
+export const installmentOverdueSchema = z.object({
+  type: z.literal('installment.overdue'),
+  payload: installmentPayload,
+})
+export type InstallmentOverdue = z.infer<typeof installmentOverdueSchema>
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -391,6 +464,12 @@ export const appEventSchema = z.discriminatedUnion('type', [
   salaryAdjustmentRecordedSchema,
   teacherArchivedSchema,
   teacherRestoredSchema,
+  paymentReceivedSchema,
+  paymentRefundedSchema,
+  periodClosedSchema,
+  periodReopenedSchema,
+  installmentDueSchema,
+  installmentOverdueSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -417,6 +496,12 @@ export const appEventTypes = [
   'teacher.restored',
   'salary.calculated',
   'salary.adjustment_recorded',
+  'payment.received',
+  'payment.refunded',
+  'period.closed',
+  'period.reopened',
+  'installment.due',
+  'installment.overdue',
 ] as const
 export type AppEventType = (typeof appEventTypes)[number]
 

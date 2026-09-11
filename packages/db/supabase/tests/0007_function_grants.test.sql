@@ -52,7 +52,11 @@ from unnest(array[
   'public.centers_seed_expense_categories()',
   'public.seed_expense_categories(uuid)',
   'public.teacher_rates_set_created_by()',
-  'public.approved_salary_guard()'
+  'public.approved_salary_guard()',
+  'public.emit_event_unchecked(text,jsonb,uuid)',
+  'public.installments_notify()',
+  'public.installments_cancel_unpaid(uuid)',
+  'public.subscriptions_cancel_installments()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -165,7 +169,11 @@ select set_eq(
     ('record_salary_adjustment(uuid,date,integer,text)'),
     ('calc_salary(uuid,date)'),
     ('approve_salary(uuid,date)'),
-    ('salary_summary(date)')
+    ('salary_summary(date)'),
+    ('create_installment_plan(uuid,integer,date,smallint)'),
+    ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
+    ('cancel_installment_plan(uuid)'),
+    ('subscription_payment_summary(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
