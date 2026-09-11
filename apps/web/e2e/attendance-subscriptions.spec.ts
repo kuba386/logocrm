@@ -139,6 +139,13 @@ test('Заморозка с датой окончания покрывает в�
   await typeSelect.selectOption(optionValue)
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
+  // Без перезагрузки второй actAndAwait подряд на той же странице видит
+  // «Абонемент продан» формы продажи как уже пришедший ответ и никогда не
+  // дожидается своего — та же причина, что у reload в fillLessonDialog
+  // (helpers.ts).
+  await page.reload()
+  await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
+
   // freeze_subscription строит daterange с исключающей верхней границей —
   // без +1 дня на call site (subscription-actions.ts) 05.04.2027 молча
   // осталось бы незамороженным, хотя поле «По» обещает включительно.
