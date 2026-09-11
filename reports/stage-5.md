@@ -336,6 +336,15 @@ empty states, мобильный вид на preview.
   `stages.md`.
 - 0021: `sum(bigint)` даёт `numeric` — `is(numeric, bigint)` не
   резолвится; `reset role` не сбрасывает claims (четвёртый раз за проект).
+- 0024 (ревью плана ролей): DELETE у `authenticated` на 12 таблицах
+  0001–0006 держался на одной `tenant_admin for all`; `accept_invitation`
+  перезаписывала роль по ссылке мимо проверки последнего владельца;
+  табличный `insert` на `invitations` обходил лестницу `create_invitation`.
+- 0025 (при перевыпуске гейтов): `mark_lesson_status` (0006) пропускала
+  NULL-роль — `elsif v_role not in ('owner','admin')` при NULL не
+  срабатывает, а событие пишется только при `cancelled`; пользователь с
+  отозванным членством и старым JWT мог закрывать занятия. 0010/0011 её не
+  тронули. Закрыто предикатом `can_front_desk()`.
 
 ## Что осталось владельцу
 
