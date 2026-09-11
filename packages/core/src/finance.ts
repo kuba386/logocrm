@@ -71,6 +71,31 @@ export function installmentPaid(paidTiyin: number, basePaidTiyin: number, cumula
   return paidTiyin >= basePaidTiyin + cumulativeTiyin
 }
 
+/**
+ * Даты платежей плана: первая — как задана, каждая следующая — «+k месяцев
+ * от первой», не цепочкой (31 января → 28 февраля → 31 марта, без дрейфа).
+ * День сверх длины месяца прижимается к последнему дню — как date +
+ * interval 'N months' в Postgres. Зеркало create_installment_plan;
+ * арифметика в UTC по календарным дням, пояс браузера не участвует.
+ */
+export function installmentDueDates(firstDue: string, n: number, stepMonths = 1): string[] {
+  assertIsoDate(firstDue, 'firstDue')
+  assertInteger(n, 'n')
+  assertInteger(stepMonths, 'stepMonths')
+  if (n < 1 || n > MAX_INSTALLMENTS) throw new RangeError(`Число платежей — от 1 до ${MAX_INSTALLMENTS}`)
+  if (stepMonths < 1) throw new RangeError('Шаг рассрочки — целое число месяцев, не меньше одного')
+
+  const [y, m, d] = firstDue.split('-').map(Number) as [number, number, number]
+  return Array.from({ length: n }, (_, i) => {
+    const months = (m - 1) + i * stepMonths
+    const year = y + Math.floor(months / 12)
+    const month = months % 12 // 0..11
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+    const day = Math.min(d, lastDay)
+    return new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10)
+  })
+}
+
 export type InstallmentState = 'paid' | 'upcoming' | 'due' | 'overdue'
 
 /**
