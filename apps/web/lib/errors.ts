@@ -84,6 +84,7 @@ const CHECK_MESSAGES: Record<string, string> = {
 const UNIQUE_MESSAGES: Record<string, string> = {
   payers_center_phone_uniq: 'Плательщик с таким телефоном уже есть',
   installment_plans_one_live_key: 'По абонементу уже есть рассрочка — сначала отмените её',
+  subscriptions_sale_key_key: 'Эта продажа уже проведена — обновите страницу',
   installments_plan_seq_key: 'Платёж с таким номером в этом плане рассрочки уже есть',
 }
 
