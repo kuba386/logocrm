@@ -72,7 +72,7 @@ const CHECK_MESSAGES: Record<string, string> = {
   salary_adjustments_amount_not_zero: 'Сумма не может быть нулевой',
   salary_runs_month_is_first_of_month: 'Месяц начисления — первое число месяца',
   installments_amount_positive: 'Сумма платежа рассрочки должна быть больше нуля',
-  installments_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
+  installment_plans_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
   installments_seq_positive: 'Номер платежа рассрочки начинается с единицы',
 }
 
@@ -108,6 +108,9 @@ const FK_MESSAGES: Record<string, string> = {
   attendance_paid_teacher_fk: 'Специалист не найден',
   installments_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
   installments_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
+  installments_plan_fk: 'Платёж рассрочки не соответствует своему плану',
+  installment_plans_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
+  installment_plans_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
 }
 
 function checkConstraintName(message: string): string | null {

@@ -11,7 +11,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(79);
+select plan(83);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -200,8 +200,16 @@ select ok(not has_table_privilege('authenticated', 'public.installments', 'INSER
   'authenticated не вставляет в installments напрямую — только create_installment_plan');
 select ok(not has_table_privilege('authenticated', 'public.installments', 'UPDATE'),
   'authenticated не правит installments напрямую');
+select ok(not has_table_privilege('authenticated', 'public.installments', 'DELETE'),
+  'authenticated не удаляет installments');
 select ok(not has_table_privilege('authenticated', 'public.installment_plans', 'INSERT'),
   'authenticated не вставляет в installment_plans напрямую');
+-- tenant_admin от apply_tenant_rls — for all: один grant update в будущей
+-- миграции позволил бы вернуть cancelled_at в null и воскресить мёртвый план.
+select ok(not has_table_privilege('authenticated', 'public.installment_plans', 'UPDATE'),
+  'authenticated не правит installment_plans напрямую');
+select ok(not has_table_privilege('authenticated', 'public.installment_plans', 'DELETE'),
+  'authenticated не удаляет installment_plans');
 
 
 -- 17-31. pay_installment, свободные платежи, календарь -----------------------------
@@ -489,6 +497,14 @@ select is(
   2,
   'installments_view под родителем — security_invoker пропускает свои строки (installments, installment_plans, subscriptions)'
 );
+-- Нарастающий итог считается латеральным подзапросом под RLS вызывающего:
+-- сужение родительской политики иначе занизило бы его молча.
+select is(
+  (select cumulative_tiyin from public.installments_view
+    where subscription_id = '88880000-0000-0000-0000-000000000001' and seq = 2),
+  200000,
+  'Под родителем нарастающий итог второй строки — сумма обеих (200000), не заниженный'
+);
 select is(
   (select payment_state from public.subscription_payment_summary('88880000-0000-0000-0000-000000000001')),
   'overpaid',
@@ -611,12 +627,12 @@ reset role;
 -- 64-67. Хранимый инвариант и service_role ------------------------------------------
 
 -- Прямой insert второго живого плана as postgres — отказ индексом, не тишина.
-select throws_ok(
+select throws_like(
   $q$ insert into public.installment_plans (center_id, subscription_id, student_id, payer_id, base_paid_tiyin)
       values ('cccccccc-0000-0000-0000-00000000000a', '88880000-0000-0000-0000-000000000001',
               'eeeeeeee-0000-0000-0000-000000000001', 'dddddddd-0000-0000-0000-000000000001', 0) $q$,
-  '23505', null,
-  'Второй живой план на абонемент невозможен даже в обход RPC — installment_plans_one_live_key'
+  '%installment_plans_one_live_key%',
+  'Второй живой план на абонемент невозможен даже в обход RPC — именно installment_plans_one_live_key'
 );
 
 select ok(
