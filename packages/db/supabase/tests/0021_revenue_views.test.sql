@@ -431,18 +431,16 @@ select col_type_is('public', 'revenue_by_month', 'revenue_tiyin', 'bigint',
 select col_type_is('public', 'cash_by_source', 'total_tiyin', 'bigint',
   'total_tiyin — bigint');
 
--- Белый список — вью 0004/0005 без revoke … from anon (отдельная задача);
--- всё остальное в public обязано: anon не читает, authenticated не пишет.
+-- Белый список пуст с 0024 (вью 0004/0005 получили revoke … from anon);
+-- каждая вью в public обязана: anon не читает, authenticated не пишет.
 -- Новая вью без решения здесь роняет ассерт на число.
 create temporary table t_view_whitelist (name text primary key);
-insert into t_view_whitelist values ('staff_view'), ('pending_invitations_view'),
-  ('students_teacher_view'), ('payers_with_stats');
 
 select is(
   (select count(*)::int from information_schema.views v
     where v.table_schema = 'public' and v.table_name not in (select name from t_view_whitelist)),
-  6,
-  'Вью public вне белого списка — шесть: student_balance, installments_view и четыре витрины 0021'
+  10,
+  'Вью public — десять: четыре витрины 0004/0005, student_balance, installments_view и четыре витрины 0021'
 );
 select ok(
   (select bool_and(not has_table_privilege('anon', 'public.' || v.table_name, 'SELECT'))
