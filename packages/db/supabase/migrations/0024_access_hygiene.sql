@@ -42,8 +42,16 @@ revoke all on table
 -- revoke_membership (definer).
 grant select, insert, update on
   public.students, public.payers, public.rooms, public.services, public.groups,
-  public.group_students, public.lessons, public.invitations
+  public.group_students, public.lessons
   to authenticated;
+
+-- invitations: табличный insert давал администратору POST с role = 'admin' в
+-- обход лестницы create_invitation (42501 там — единственная проверка), а
+-- табличный update — правку role/token/accepted_at у выданной ссылки.
+-- Приглашение создаёт только create_invitation (definer); единственный
+-- прямой писатель в приложении — cancelInvitation (expires_at = now()).
+grant select on public.invitations to authenticated;
+grant update (expires_at) on public.invitations to authenticated;
 
 -- Только чтение: строки кладут definer-триггеры и emit_event.
 grant select on public.lesson_participants, public.audit_log, public.events to authenticated;
@@ -84,21 +92,41 @@ create or replace function public.memberships_last_owner_guard()
   security definer
   set search_path = ''
 as $$
+declare
+  v_leaving boolean;
 begin
-  if old.role = 'owner'
-     and (tg_op = 'DELETE' or new.role <> 'owner' or new.center_id <> old.center_id)
-     and not exists (
-       select 1 from public.memberships m
-        where m.center_id = old.center_id and m.role = 'owner' and m.user_id <> old.user_id
-     ) then
-    raise exception 'Нельзя понизить последнего владельца центра' using errcode = '23514';
+  if old.role <> 'owner' then
+    return case when tg_op = 'DELETE' then old else new end;
   end if;
-  return coalesce(new, old);
+
+  v_leaving := tg_op = 'DELETE'
+            or new.role <> 'owner'
+            or new.center_id <> old.center_id;
+  if not v_leaving then
+    return new;
+  end if;
+
+  -- Две транзакции, понижающие двух владельцев одновременно, в READ COMMITTED
+  -- видят друг у друга «ещё владелец» и проходят обе. Замок по центру
+  -- сериализует проверку (тот же приём, что sale_key в 0023).
+  perform pg_advisory_xact_lock(hashtextextended('memberships_owner:' || old.center_id::text, 0));
+
+  if not exists (
+    select 1 from public.memberships m
+     where m.center_id = old.center_id and m.role = 'owner' and m.user_id <> old.user_id
+  ) then
+    raise exception 'В центре должен остаться хотя бы один владелец' using errcode = '23514';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
 end;
 $$;
 
 comment on function public.memberships_last_owner_guard() is
-  'В центре всегда есть хотя бы один owner. Проверки в change_member_role и revoke_membership остаются как ранний отказ с понятным текстом; этот триггер — инвариант на любом пути, включая accept_invitation.';
+  'В центре всегда есть хотя бы один owner. change_member_role и revoke_membership отказывают раньше со своими текстами («понизить»/«отключить»); триггер — инвариант на любом пути: прямой update/delete, accept_invitation, каскад из auth.users или centers. Следствие: удалить единственного владельца или его центр нельзя даже service_role — сначала назначается второй владелец.';
 
 drop trigger if exists memberships_last_owner_guard on public.memberships;
 create trigger memberships_last_owner_guard
@@ -108,7 +136,14 @@ create trigger memberships_last_owner_guard
 revoke execute on function public.memberships_last_owner_guard() from public, anon, authenticated;
 
 
--- 4. accept_invitation — существующему участнику отказ, не перезапись роли -------
+-- 4. accept_invitation — существующему участнику: связывание, но не смена роли ---
+
+-- Было: on conflict (user_id, center_id) do update set role = excluded.role —
+-- любая ссылка меняла роль участнику, включая владельца. Теперь:
+--   * та же роль — приглашение только связывает членство с карточкой
+--     (teacher_id/payer_id): единственный путь, которым специалисту без
+--     карточки её выдают (change_member_role умеет только зануля́ть teacher_id);
+--   * другая роль — отказ 23505 с рабочим путём: отключить и пригласить заново.
 
 create or replace function public.accept_invitation(p_token text)
   returns uuid
@@ -117,8 +152,9 @@ create or replace function public.accept_invitation(p_token text)
   set search_path = ''
 as $$
 declare
-  v_uid uuid := auth.uid();
-  v_inv public.invitations;
+  v_uid      uuid := auth.uid();
+  v_inv      public.invitations;
+  v_existing public.memberships;
 begin
   if v_uid is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -138,17 +174,25 @@ begin
     raise exception 'Срок действия приглашения истёк' using errcode = '22023';
   end if;
 
-  -- Было: on conflict (user_id, center_id) do update set role = excluded.role.
-  -- Приглашение — не способ сменить роль по ссылке: роль меняет владелец.
-  if exists (
-    select 1 from public.memberships m
-     where m.user_id = v_uid and m.center_id = v_inv.center_id
-  ) then
-    raise exception 'Вы уже участник этого центра — роль меняет владелец' using errcode = '23505';
+  select m.* into v_existing
+    from public.memberships m
+   where m.user_id = v_uid and m.center_id = v_inv.center_id
+   for update;
+
+  if found and v_existing.role <> v_inv.role then
+    raise exception 'Вы уже участник этого центра с ролью «%». Чтобы сменить роль, владелец отключает участника и отправляет приглашение заново', v_existing.role
+      using errcode = '23505';
   end if;
 
-  insert into public.memberships (user_id, center_id, role, teacher_id, payer_id)
-  values (v_uid, v_inv.center_id, v_inv.role, v_inv.teacher_id, v_inv.payer_id);
+  if found then
+    update public.memberships
+       set teacher_id = coalesce(v_inv.teacher_id, teacher_id),
+           payer_id   = coalesce(v_inv.payer_id, payer_id)
+     where user_id = v_uid and center_id = v_inv.center_id;
+  else
+    insert into public.memberships (user_id, center_id, role, teacher_id, payer_id)
+    values (v_uid, v_inv.center_id, v_inv.role, v_inv.teacher_id, v_inv.payer_id);
+  end if;
 
   if v_inv.teacher_id is not null then
     update public.teachers
