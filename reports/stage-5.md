@@ -15,11 +15,16 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
 **Бэкенд, оставшееся:**
 
 - `0023_sell_subscription_paid.sql` — RPC `sell_subscription_paid(p_type_id,
-  p_student_id, p_price_tiyin, p_starts_at, p_paid_tiyin, p_source_id,
-  p_paid_on date, p_installments, p_first_due, p_step_months)` → uuid:
-  `sell_subscription` + `record_payment` + `create_installment_plan` одной
-  транзакцией. Существующие функции не меняются. Отказ любого шага
-  откатывает всю продажу. 0007 — белый список.
+  p_student_id, p_sale_key, p_price_tiyin, p_starts_at, p_paid_tiyin,
+  p_source_id, p_paid_on date, p_installments, p_first_due, p_step_months,
+  p_expected_remaining_tiyin)` → таблица (subscription_id, payment_id,
+  строки графика): `sell_subscription` + `record_payment` +
+  `create_installment_plan` одной транзакцией. Существующие функции не
+  меняются. Отказ любого шага откатывает всю продажу. Двойной клик —
+  `subscriptions.sale_key` (частичный unique) + advisory-замок, не
+  disabled на кнопке. Оплата без источника, дата в будущем, переплата —
+  отказ. 0007 — белый список; `errors.ts` — `subscriptions_sale_key_key`.
+  Architect по плану — 12 находок, по коду — второй раунд до PR.
 - `0024_roles_registrar_finance.sql` — роли `registrar` и `finance`
   («Доработка» п.1): `memberships.role`/`invitations.role` check;
   `apply_tenant_rls` — решение «расширять `tenant_admin` или отдельные
@@ -156,7 +161,7 @@ empty states, мобильный вид на preview.
 | Unit | core: salary.test (32), finance.test (24) — 144/144 |
 | CI | app / db / Playwright — зелёные на каждом PR; `main` был красным дважды (см. дефекты) |
 | Чек-лист кликом | — (UI не начат) |
-| Advisors | после 0017 и 0018–0020: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса, две permissive-политики) |
+| Advisors | после 0017, 0018–0020 и 0022: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
 
 ## Найденные дефекты
 
