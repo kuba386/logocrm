@@ -173,7 +173,8 @@ select set_eq(
     ('create_installment_plan(uuid,integer,date,smallint,integer)'),
     ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
     ('cancel_installment_plan(uuid)'),
-    ('subscription_payment_summary(uuid)')
+    ('subscription_payment_summary(uuid)'),
+    ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
