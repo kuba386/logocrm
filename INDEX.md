@@ -9,7 +9,7 @@
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | Всегда загружен автоматически — правила процесса, применимые к любому этапу |
 | [docs/Database.md](docs/Database.md) | Перед любой миграцией — конвенции таблиц, `apply_tenant_rls`, `apply_audit`, паттерны RLS |
-| [docs/Roadmap/stages.md](docs/Roadmap/stages.md) | Источник истины по плану. Промт и чек-лист каждого этапа — здесь, не пересказывать по памяти. В шапке — «Перед этапом» (раздел Plan до кода) и Definition of Done |
+| [docs/Roadmap/stages.md](docs/Roadmap/stages.md) | Источник истины по плану. Промт и чек-лист каждого этапа — здесь, не пересказывать по памяти. В шапке — «Перед этапом» (раздел Plan до кода), «Модель и effort», правила по контексту и Definition of Done |
 | [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md) | Что система не даёт сделать и чем это держится — констрейнт, политика или проверка в функции. Читать перед тем, как менять правило, и дополнять по Definition of Done |
 | [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) | Кто что видит и может, по факту кода. Читать перед изменением прав; `registrar` и `finance` там пока план этапа 5 |
 
