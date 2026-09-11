@@ -196,33 +196,38 @@ delete from public.memberships where user_id = '33333333-3333-3333-3333-33333333
 
 
 -- 18-22. lessons: student/group/room/service чужого центра ------------------------
+--
+-- Ожидаем 42704 от BEFORE-триггера lessons_check_center_refs (раздел 3
+-- миграции), не 23503 от составного FK: триггер всегда срабатывает раньше
+-- на insert/update, FK за ним — вторая линия защиты (тест 41 ниже проверяет,
+-- что констрейнты по-прежнему существуют).
 
 select throws_ok(
   format($q$ insert into public.lessons (id, center_id, teacher_id, student_id, starts_at, ends_at)
       values ('40000000-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-00000000000b',%L,%L) $q$,
     '2026-11-03 09:00+06', '2026-11-03 09:45+06'),
-  '23503', null, 'lessons_student_fk: ребёнок центра Б в занятии центра А'
+  '42704', 'Ученик не найден в этом центре', 'lessons_check_center_refs: ребёнок центра Б в занятии центра А'
 );
 
 select throws_ok(
   format($q$ insert into public.lessons (id, center_id, teacher_id, group_id, starts_at, ends_at)
       values ('40000000-0000-0000-0000-000000000002','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','99999999-0000-0000-0000-00000000000b',%L,%L) $q$,
     '2026-11-03 10:00+06', '2026-11-03 10:45+06'),
-  '23503', null, 'lessons_group_fk: группа центра Б в занятии центра А'
+  '42704', 'Группа не найдена в этом центре', 'lessons_check_center_refs: группа центра Б в занятии центра А'
 );
 
 select throws_ok(
   format($q$ insert into public.lessons (id, center_id, teacher_id, student_id, room_id, starts_at, ends_at)
       values ('40000000-0000-0000-0000-000000000003','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001','11111111-0000-0000-0000-00000000000b',%L,%L) $q$,
     '2026-11-03 11:00+06', '2026-11-03 11:45+06'),
-  '23503', null, 'lessons_room_fk: кабинет центра Б в занятии центра А'
+  '42704', 'Кабинет не найден в этом центре', 'lessons_check_center_refs: кабинет центра Б в занятии центра А'
 );
 
 select throws_ok(
   format($q$ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, starts_at, ends_at)
       values ('40000000-0000-0000-0000-000000000004','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001','f1111111-0000-0000-0000-00000000000b',%L,%L) $q$,
     '2026-11-03 12:00+06', '2026-11-03 12:45+06'),
-  '23503', null, 'lessons_service_fk: услуга центра Б в занятии центра А'
+  '42704', 'Услуга не найдена в этом центре', 'lessons_check_center_refs: услуга центра Б в занятии центра А'
 );
 
 select lives_ok(
@@ -234,17 +239,20 @@ select lives_ok(
 
 
 -- 23-25. group_students: group_id/student_id чужого центра -----------------------
+--
+-- Ожидаем 42704 от BEFORE-триггера group_students_check_center_refs
+-- (раздел 3), не 23503 от составного FK — тот же порядок, что у lessons.
 
 select throws_ok(
   $q$ insert into public.group_students (id, center_id, group_id, student_id)
       values ('50000000-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-00000000000b','eeeeeeee-0000-0000-0000-000000000001') $q$,
-  '23503', null, 'group_students_group_fk: группа центра Б в составе центра А'
+  '42704', 'Группа не найдена в этом центре', 'group_students_check_center_refs: группа центра Б в составе центра А'
 );
 
 select throws_ok(
   $q$ insert into public.group_students (id, center_id, group_id, student_id)
       values ('50000000-0000-0000-0000-000000000002','cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-00000000000b') $q$,
-  '23503', null, 'group_students_student_fk: ребёнок центра Б в составе центра А'
+  '42704', 'Ученик не найден в этом центре', 'group_students_check_center_refs: ребёнок центра Б в составе центра А'
 );
 
 select lives_ok(

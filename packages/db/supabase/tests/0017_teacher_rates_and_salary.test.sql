@@ -906,6 +906,13 @@ reset role;
 -- До 0017 FK был только на teachers(id): RLS занятия проверяет center_id
 -- строки, центр специалиста — никто. As postgres — проверяется сам
 -- констрейнт, а не RLS.
+--
+-- 0019 добавила BEFORE-триггер lessons_check_center_refs на ту же проверку
+-- (нужен, чтобы центр проверялся раньше AFTER-триггера синхронизации
+-- участников — детали в 0019_center_scoped_fks.sql, раздел 3). Он всегда
+-- срабатывает раньше составного FK на insert, поэтому строка теперь падает
+-- на читаемых 42704, а не на голых 23503 — дыра изоляции закрыта базой
+-- по-прежнему, просто другим механизмом.
 select throws_ok(
   $q$ insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at, status)
       values ('44440000-0000-0000-0000-000000000030','cccccccc-0000-0000-0000-00000000000a','f1111111-0000-0000-0000-000000000001',
@@ -913,8 +920,8 @@ select throws_ok(
               date_trunc('month', now() - interval '1 month') + interval '20 days' + interval '9 hours',
               date_trunc('month', now() - interval '1 month') + interval '20 days' + interval '9 hours 45 minutes',
               'planned') $q$,
-  '23503', null,
-  'lessons_teacher_fk: специалист центра Б в занятии центра А — 23503, дыра изоляции закрыта базой'
+  '42704', 'Специалист не найден в этом центре',
+  'lessons_check_center_refs (0019): специалист центра Б в занятии центра А — дыра изоляции закрыта базой'
 );
 
 
