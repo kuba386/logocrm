@@ -71,6 +71,18 @@ const CHECK_MESSAGES: Record<string, string> = {
   salary_adjustments_month_is_first_of_month: 'Месяц корректировки — первое число месяца',
   salary_adjustments_amount_not_zero: 'Сумма не может быть нулевой',
   salary_runs_month_is_first_of_month: 'Месяц начисления — первое число месяца',
+  installments_amount_positive: 'Сумма платежа рассрочки должна быть больше нуля',
+  installments_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
+  installments_seq_positive: 'Номер платежа рассрочки начинается с единицы',
+}
+
+/**
+ * Русские тексты по имени уникального ограничения — 23505. Нативный текст
+ * («duplicate key value violates unique constraint ...») на русском
+ * экране появлялся как есть.
+ */
+const UNIQUE_MESSAGES: Record<string, string> = {
+  installments_plan_seq_key: 'Платёж с таким номером в этом плане рассрочки уже есть',
 }
 
 /**
@@ -92,6 +104,8 @@ const FK_MESSAGES: Record<string, string> = {
   salary_adjustments_teacher_fk: 'Специалист не найден',
   salary_runs_teacher_fk: 'Специалист не найден',
   attendance_paid_teacher_fk: 'Специалист не найден',
+  installments_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
+  installments_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
 }
 
 function checkConstraintName(message: string): string | null {
@@ -109,6 +123,11 @@ function exclusionConstraintName(message: string): string | null {
 
 function foreignKeyConstraintName(message: string): string | null {
   const m = /violates foreign key constraint "([a-z0-9_]+)"/i.exec(message)
+  return m?.[1] ?? null
+}
+
+function uniqueConstraintName(message: string): string | null {
+  const m = /violates unique constraint "([a-z0-9_]+)"/i.exec(message)
   return m?.[1] ?? null
 }
 const UNIQUE_VIOLATION = '23505'
@@ -196,7 +215,9 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   }
 
   if (code === UNIQUE_VIOLATION) {
-    return { message: message || 'Такая запись уже есть' }
+    const name = uniqueConstraintName(message)
+    if (name && UNIQUE_MESSAGES[name]) return { message: UNIQUE_MESSAGES[name] }
+    return { message: name ? 'Такая запись уже есть' : message || 'Такая запись уже есть' }
   }
 
   if (code === NOT_FOUND) {

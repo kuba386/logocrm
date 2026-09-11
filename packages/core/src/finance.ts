@@ -2,11 +2,12 @@
  * Оплата абонемента и рассрочка. Зеркало SQL, не вторая реализация.
  *
  * Источник истины — база: subscriptions.paid_tiyin (триггер
- * payments_recalc_paid, 0013), create_installment_plan / installments_notify /
- * subscription_payment_summary (0018). Здесь то же самое для мгновенной
- * подсказки в браузере — деньги в интерфейсе не считаются, суммы и статусы
- * всегда приходят из RPC. Меняешь одну сторону — меняешь обе; общий набор
- * случаев гоняется в Vitest и в pgTAP 0018 с одинаковыми входными данными.
+ * payments_recalc_paid, 0013), installments_view / create_installment_plan /
+ * installments_notify / subscription_payment_summary (0018). Здесь то же
+ * самое для мгновенной подсказки в браузере — деньги в интерфейсе не
+ * считаются, суммы и статусы всегда приходят из RPC. Меняешь одну сторону —
+ * меняешь обе; общий набор случаев гоняется в Vitest и в pgTAP 0018 с
+ * одинаковыми входными данными.
  *
  * Деньги — целые тыйыны. Даты — строки YYYY-MM-DD в поясе центра.
  */
@@ -41,7 +42,8 @@ export const MAX_INSTALLMENTS = 24
 /**
  * Разбивка остатка на n платежей: целочисленно, сумма строго равна остатку,
  * остаток от деления уходит ПЕРВЫМ платежам (100 000 / 3 → 33 334, 33 333,
- * 33 333). Зеркало арифметики create_installment_plan.
+ * 33 333). Платежей больше, чем тыйынов, — ошибка, а не нулевые строки:
+ * SQL отвечает тем же 22023 (create_installment_plan).
  */
 export function splitInstallments(totalTiyin: number, n: number): number[] {
   assertInteger(totalTiyin, 'totalTiyin')
@@ -50,22 +52,36 @@ export function splitInstallments(totalTiyin: number, n: number): number[] {
   if (n < 1 || n > MAX_INSTALLMENTS) {
     throw new RangeError(`Число платежей — от 1 до ${MAX_INSTALLMENTS}`)
   }
+  if (n > totalTiyin) throw new RangeError('Платежей больше, чем тыйынов в остатке')
   const base = Math.trunc(totalTiyin / n)
   const extra = totalTiyin % n
   return Array.from({ length: n }, (_, i) => (i < extra ? base + 1 : base))
 }
 
+/**
+ * Оплачена ли строка плана. Строка не хранит «оплачено»: она оплачена,
+ * когда оплачено по абонементу всего не меньше, чем было оплачено на момент
+ * плана (base) плюс сумма строк плана по эту включительно (cumulative).
+ * Зеркало installments_view.state = 'paid'.
+ */
+export function installmentPaid(paidTiyin: number, basePaidTiyin: number, cumulativeTiyin: number): boolean {
+  assertInteger(paidTiyin, 'paidTiyin')
+  assertInteger(basePaidTiyin, 'basePaidTiyin')
+  assertInteger(cumulativeTiyin, 'cumulativeTiyin')
+  return paidTiyin >= basePaidTiyin + cumulativeTiyin
+}
+
 export type InstallmentState = 'paid' | 'upcoming' | 'due' | 'overdue'
 
 /**
- * Состояние одного платежа рассрочки на дату центра. Зеркало правил
- * installments_notify: due — день в день, overdue — после. Оплаченный —
- * оплаченный независимо от дат.
+ * Состояние неотменённой строки на дату центра. Зеркало installments_view:
+ * due — день в день, overdue — после; оплаченная — оплаченная независимо
+ * от дат. Отменённые строки сюда не попадают — у них своё состояние.
  */
-export function installmentState(dueDate: string, paidAt: string | null, today: string): InstallmentState {
+export function installmentState(dueDate: string, paid: boolean, today: string): InstallmentState {
   assertIsoDate(dueDate, 'dueDate')
   assertIsoDate(today, 'today')
-  if (paidAt !== null) return 'paid'
+  if (paid) return 'paid'
   if (dueDate > today) return 'upcoming'
   if (dueDate === today) return 'due'
   return 'overdue'

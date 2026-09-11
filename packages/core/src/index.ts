@@ -42,6 +42,7 @@ export {
   paymentState,
   remainingTiyin,
   splitInstallments,
+  installmentPaid,
   installmentState,
   MAX_INSTALLMENTS,
   type PaymentState,
