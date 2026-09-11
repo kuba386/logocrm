@@ -10,7 +10,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(42);
+select plan(47);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -292,7 +292,45 @@ select is(
 reset role;
 
 
--- 33-34. Известные ограничения — закреплены, чтобы не изменились молча -------------------
+-- 33-37. Ключ продажи: NULL-дыра, чужой центр, запись в обход, 25 платежей ----------------
+
+insert into t_snap values ('keys', public.tests_snapshot());
+
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+
+-- Частичный unique не видит NULL: без этой проверки две продажи с пустым
+-- ключом прошли бы обе.
+select throws_ok(
+  $q$ select * from public.sell_subscription_paid('77777777-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
+        null, null, null, 200000, (select id from t_src)) $q$,
+  '22004', null, 'Пустой ключ продажи — отказ, а не «уникальный» NULL'
+);
+-- Ключ уже занят абонементом центра NY: тот же 22023, факт существования
+-- чужой строки текстом не выдаётся.
+select throws_ok(
+  $q$ select * from public.sell_subscription_paid('77777777-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
+        '55550000-0000-0000-0000-000000000030', null, null, 200000, (select id from t_src)) $q$,
+  '22023', 'Эта продажа уже проведена — обновите страницу', 'Ключ чужого центра — тот же отказ, без утечки'
+);
+select throws_ok(
+  $q$ update public.subscriptions set sale_key = '55550000-0000-0000-0000-000000000099'
+       where id = (select id from t_ins where name = 'sub2') $q$,
+  '42501', null, 'sale_key не в grant update — владелец не перепишет ключ прямым запросом'
+);
+select throws_ok(
+  $q$ select * from public.sell_subscription_paid('77777777-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
+        '55550000-0000-0000-0000-000000000031', null, null, null, null, null, 25) $q$,
+  '22023', null, '25 платежей — отказ вложенного плана, продажа откатывается'
+);
+
+reset role;
+
+select is(public.tests_snapshot(), (select v from t_snap where name = 'keys'),
+  'После четырёх отказов по ключу и графику — счётчики на месте');
+
+
+-- 38-39. Известные ограничения — закреплены, чтобы не изменились молча -------------------
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
