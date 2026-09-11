@@ -7,15 +7,22 @@
 -- могли бы разъехаться.
 --
 --   В1. ВЫРУЧКА (revenue_*) — начисление: отметки с deducted = true по
---       занятиям в статусе done. Та же база, что у calc_salary (0017):
---       маржа «выручка − зарплата» по специалисту осмысленна. planned
---       (отметили, но не нажали «Проведено») и cancelled (отменили после
---       отметок) в выручку не входят — так же, как не входят в зарплату.
---       Сумма — attendance.price_tiyin, замороженная при отметке.
---   В2. Безлимитный абонемент даёт price_tiyin = 0 (lesson_price_tiyin
---       null → coalesce 0, 0015): такие посещения в revenue_tiyin — ноль,
---       и этот ноль ВИДЕН отдельной колонкой unpriced_visits, а не
---       растворяется в сумме. Кассовый показатель для безлимитов важнее.
+--       занятиям в статусе done. planned (отметили, но не нажали
+--       «Проведено») и cancelled (отменили после отметок) в выручку не
+--       входят — так же, как не входят в зарплату. Сумма —
+--       attendance.price_tiyin, замороженная при отметке.
+--       НЕ одна база с зарплатой: выручка идёт по deducted (списано с
+--       ребёнка), зарплата (0017) — по pays_teacher (обязательство перед
+--       специалистом). Это две галочки статуса посещения, администратор
+--       правит их независимо («Прогул»: списывает, не оплачивается).
+--       «Маржа = выручка − зарплата» — не разность по одному множеству;
+--       тест 0021 фиксирует расхождение как ожидаемое.
+--   В2. Ноль в price_tiyin — два разных случая, две колонки: unlimited_visits
+--       (безлимит: subscription_id есть, lesson_price_tiyin null → 0) и
+--       unpriced_visits (абонемента нет, а у услуги цена не задана или
+--       занятие без услуги — деньги потеряны, не «безлимит»). Оба нуля
+--       ВИДНЫ, а не растворены в сумме. Безлимиты в выручку не входят ни
+--       одной суммой — смотреть кассу; подпись об этом — на экране.
 --   В3. visits ≠ lessons: строка attendance — на ребёнка, групповое занятие
 --       на шестерых даёт 6 visits и 1 lesson. Обе колонки, оба имени.
 --   В4. КАССА (cash_by_source) — платежи И расходы по месяцу paid_at в
@@ -70,7 +77,7 @@ with tz as (
   select public.center_timezone(public.current_center()) as tz
 ),
 base as (
-  select a.center_id, a.lesson_id, a.price_tiyin,
+  select a.center_id, a.lesson_id, a.price_tiyin, a.subscription_id,
          date_trunc('month', (l.starts_at at time zone t.tz))::date as month
     from public.attendance a
     join public.lessons l on l.id = a.lesson_id
@@ -85,15 +92,18 @@ select b.center_id,
        b.month,
        count(*)::integer                                   as visits,
        count(distinct b.lesson_id)::integer                as lessons,
-       (count(*) filter (where b.price_tiyin = 0))::integer as unpriced_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is not null))::integer as unlimited_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is null))::integer     as unpriced_visits,
        coalesce(sum(b.price_tiyin), 0)::bigint             as revenue_tiyin
   from base b
  group by b.center_id, b.month;
 
 comment on view public.revenue_by_month is
   'Выручка по месяцам (начисление): отметки deducted по занятиям done, месяц — по starts_at в поясе центра. Только owner/admin своего центра.';
+comment on column public.revenue_by_month.unlimited_visits is
+  'Посещения по безлимитному абонементу (price_tiyin = 0 при subscription_id): в revenue_tiyin дают ноль — здесь он виден; сумму безлимитов смотреть в кассе.';
 comment on column public.revenue_by_month.unpriced_visits is
-  'Посещения с price_tiyin = 0 (безлимитный абонемент): в revenue_tiyin дают ноль — здесь он виден.';
+  'Посещения без абонемента с ценой 0 — у услуги не задана цена или занятие без услуги: деньги не начислены, это не безлимит.';
 
 create or replace view public.revenue_by_teacher
   with (security_invoker = true)
@@ -102,7 +112,7 @@ with tz as (
   select public.center_timezone(public.current_center()) as tz
 ),
 base as (
-  select a.center_id, a.lesson_id, a.price_tiyin, a.paid_teacher_id,
+  select a.center_id, a.lesson_id, a.price_tiyin, a.subscription_id, a.paid_teacher_id,
          date_trunc('month', (l.starts_at at time zone t.tz))::date as month
     from public.attendance a
     join public.lessons l on l.id = a.lesson_id
@@ -120,7 +130,8 @@ select b.center_id,
        b.paid_teacher_id                                   as teacher_id,
        count(*)::integer                                   as visits,
        count(distinct b.lesson_id)::integer                as lessons,
-       (count(*) filter (where b.price_tiyin = 0))::integer as unpriced_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is not null))::integer as unlimited_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is null))::integer     as unpriced_visits,
        coalesce(sum(b.price_tiyin), 0)::bigint             as revenue_tiyin
   from base b
  group by b.center_id, b.month, b.paid_teacher_id;
@@ -135,7 +146,7 @@ with tz as (
   select public.center_timezone(public.current_center()) as tz
 ),
 base as (
-  select a.center_id, a.lesson_id, a.price_tiyin, l.service_id,
+  select a.center_id, a.lesson_id, a.price_tiyin, a.subscription_id, l.service_id,
          date_trunc('month', (l.starts_at at time zone t.tz))::date as month
     from public.attendance a
     join public.lessons l on l.id = a.lesson_id
@@ -151,7 +162,8 @@ select b.center_id,
        b.service_id,                                        -- null = занятие без услуги
        count(*)::integer                                   as visits,
        count(distinct b.lesson_id)::integer                as lessons,
-       (count(*) filter (where b.price_tiyin = 0))::integer as unpriced_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is not null))::integer as unlimited_visits,
+       (count(*) filter (where b.price_tiyin = 0 and b.subscription_id is null))::integer     as unpriced_visits,
        coalesce(sum(b.price_tiyin), 0)::bigint             as revenue_tiyin
   from base b
  group by b.center_id, b.month, b.service_id;
@@ -194,9 +206,13 @@ select f.center_id,
        coalesce(sum(f.delta) filter (where f.src = 'payment' and f.kind = 'payment'),    0)::bigint as received_tiyin,
        coalesce(sum(f.delta) filter (where f.src = 'payment' and f.kind = 'refund'),     0)::bigint as refunded_tiyin,
        coalesce(sum(f.delta) filter (where f.src = 'payment' and f.kind = 'correction'), 0)::bigint as corrections_tiyin,
-       coalesce(sum(f.delta) filter (where f.src = 'expense'),                           0)::bigint as spent_tiyin,
-       coalesce(sum(f.delta) filter (where f.src = 'payment'
-                                       and f.kind not in ('payment', 'refund', 'correction')), 0)::bigint as other_tiyin,
+       coalesce(sum(f.delta) filter (where f.src = 'expense'
+                                       and f.kind in ('expense', 'refund', 'correction')),  0)::bigint as spent_tiyin,
+       -- Неизвестный kind — и у платежей, и у расходов: громкий, а не
+       -- проглоченный именованной колонкой.
+       coalesce(sum(f.delta) filter (where (f.src = 'payment' and f.kind not in ('payment', 'refund', 'correction'))
+                                        or (f.src = 'expense' and f.kind not in ('expense', 'refund', 'correction'))),
+                0)::bigint as other_tiyin,
        coalesce(sum(f.delta), 0)::bigint                                                            as total_tiyin
   from flows f
  group by f.center_id, f.month, f.source_id;
@@ -208,7 +224,7 @@ comment on column public.cash_by_source.refunded_tiyin is
 comment on column public.cash_by_source.spent_tiyin is
   'Расходы с инвертированным знаком: expense → минус, возврат расхода → плюс.';
 comment on column public.cash_by_source.other_tiyin is
-  'Платежи с kind вне (payment, refund, correction): ноль, пока такого вида нет; ненулевое — сигнал, что витрину не обновили под новый kind.';
+  'Платежи и расходы с kind вне известных витрине: ноль, пока такого вида нет; ненулевое — сигнал, что витрину не обновили под новый kind.';
 
 
 -- Гранты ------------------------------------------------------------------------
