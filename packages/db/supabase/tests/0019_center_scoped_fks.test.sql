@@ -17,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(45);
+select plan(46);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -421,7 +421,31 @@ select is(
 );
 
 
--- 42-43. BEFORE-триггер закрывает саму утечку ФИО через exclusion_violation ------
+-- 42. Старые одноколоночные FK сняты — без этого PostgREST не резолвит
+--     embedded-запросы (students(...,payers(...)) и т.п.): два FK между
+--     одной парой таблиц дают PGRST201 "more than one relationship was
+--     found", а не 42704 (Р6, шапка миграции). Первый прогон CI поймал это
+--     на /app/students Playwright-тестом — здесь то же самое проверяется
+--     на уровне метаданных, быстрее и без браузера.
+
+select is(
+  (select count(*)::int from pg_constraint
+    where conname in (
+      'groups_teacher_id_fkey','groups_room_id_fkey','groups_service_id_fkey',
+      'students_primary_teacher_id_fkey','students_payer_id_fkey',
+      'invitations_teacher_id_fkey',
+      'lessons_teacher_id_fkey','lessons_substitute_teacher_id_fkey',
+      'lessons_student_id_fkey','lessons_group_id_fkey','lessons_room_id_fkey','lessons_service_id_fkey',
+      'group_students_group_id_fkey','group_students_student_id_fkey',
+      'lesson_participants_lesson_id_fkey','lesson_participants_student_id_fkey'
+    )
+    and connamespace = 'public'::regnamespace),
+  0,
+  'Старые одноколоночные FK (включая два из 0017) сняты — ни один embed не увидит два пути к одной таблице'
+);
+
+
+-- 43-44. BEFORE-триггер закрывает саму утечку ФИО через exclusion_violation ------
 --
 -- До 0019 этот insert прошёл бы RLS/грант (owner центра А), дошёл до AFTER-
 -- триггера lessons_sync_participants → rebuild_lesson_participants →
@@ -464,7 +488,7 @@ select ok(
 );
 
 
--- 44. Занятие из probe-теста не осталось в базе (BEFORE-триггер откатил insert) ---
+-- 45. Занятие из probe-теста не осталось в базе (BEFORE-триггер откатил insert) ---
 
 select is(
   (select count(*)::int from public.lessons where id = '40000000-0000-0000-0000-00000000000c'),

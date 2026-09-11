@@ -45,12 +45,38 @@
 --   Р5. memberships.payer_id и invitations.payer_id — та же дыра, что
 --       teacher_id у тех же таблиц, только для родителя, не специалиста.
 --       Упущена в первой версии, закрыта здесь же.
+--   Р6. Первый прогон CI после написания кода уронил /app/students в
+--       Playwright ("Всего: 0", хотя фикстура завела трёх детей): PostgREST
+--       резолвит embedded-запрос (`students(...).select('...,payers(...)')`,
+--       apps/web/app/app/students/page.tsx) по foreign key metadata, а на
+--       students.payer_id теперь ДВА FK на payers — старый одноколоночный
+--       (0005, students_payer_id_fkey) и новый составной (раздел 2). Между
+--       двумя путями PostgREST не выбирает сам (PGRST201, "more than one
+--       relationship was found"), запрос падает, страница молча показывает
+--       пустой список (`const { data } = await ...`, ошибка не проверяется).
+--       Та же неоднозначность — для каждой колонки этой миграции, даже там,
+--       где сегодня никто её не embed'ит: подставить не 42704, а тихо
+--       пустой список — расплата за то, что схема оставляет выбор клиенту
+--       вместо того, чтобы иметь один-единственный путь связи. Раздел 2
+--       поэтому не просто добавляет составные FK, а СНИМАЕТ старые
+--       одноколоночные того же назначения — включая lessons_teacher_id_fkey/
+--       lessons_substitute_teacher_id_fkey из 0006, которые с момента мержа
+--       0017 точно так же дублируют lessons_teacher_fk/lessons_substitute_
+--       teacher_fk и ничем, кроме везения (в apps/web ни разу не
+--       понадобился embed lessons→teachers), не были замечены. Составной FK
+--       при not null center_id строго сильнее одноколоночного — второй не
+--       разрешает ничего, чего не разрешал бы первый, поэтому просто
+--       снимается, а не остаётся "на всякий случай". ON DELETE переносится
+--       на новый констрейнт как явный список колонок для SET NULL
+--       (`on delete set null (col)`, PG15+ — здесь 17) там, где он был:
+--       без списка колонок занулился бы и center_id, а он not null.
 --
 -- Разделы:
 --   0. Недостающие unique (id, center_id) — groups, rooms.
 --   1. Ремонт данных перед add constraint (иначе первая же чужая ссылка на
 --      живой базе роняет весь деплой, а не ловится).
---   2. Составные FK, immediate (как 0017).
+--   2. Составные FK, immediate (как 0017); каждый снимает старый
+--      одноколоночный FK того же назначения (Р6), включая двух из 0017.
 --   3. BEFORE-триггеры на lessons/group_students — единственная гарантия
 --      порядка относительно AFTER-триггера синхронизации участников (Р2).
 --   4. memberships — грант не закрывает прямой PATCH ролью owner/admin;
@@ -156,33 +182,52 @@ select public.repair_center_scoped_refs();
 
 
 -- 2. Составные FK ---------------------------------------------------------------
+--
+-- Имена старых одноколоночных FK — автоматические (Postgres называет их
+-- "<таблица>_<колонка>_fkey" по умолчанию), сверены напрямую в проде через
+-- Supabase MCP (только чтение — pg_constraint/pg_get_constraintdef), а не
+-- предположены: ошибка в имени здесь молча оставила бы дыру embedding (Р6)
+-- незакрытой, ничего не сообщив.
 
+alter table public.groups drop constraint if exists groups_teacher_id_fkey;
 alter table public.groups
   add constraint groups_teacher_fk foreign key (teacher_id, center_id)
-  references public.teachers (id, center_id);
+  references public.teachers (id, center_id) on delete set null (teacher_id);
+
+alter table public.groups drop constraint if exists groups_room_id_fkey;
 alter table public.groups
   add constraint groups_room_fk foreign key (room_id, center_id)
-  references public.rooms (id, center_id);
+  references public.rooms (id, center_id) on delete set null (room_id);
+
+alter table public.groups drop constraint if exists groups_service_id_fkey;
 alter table public.groups
   add constraint groups_service_fk foreign key (service_id, center_id)
-  references public.services (id, center_id);
+  references public.services (id, center_id) on delete set null (service_id);
 
+alter table public.students drop constraint if exists students_primary_teacher_id_fkey;
 alter table public.students
   add constraint students_primary_teacher_fk foreign key (primary_teacher_id, center_id)
-  references public.teachers (id, center_id);
+  references public.teachers (id, center_id) on delete set null (primary_teacher_id);
+
+alter table public.students drop constraint if exists students_payer_id_fkey;
 alter table public.students
   add constraint students_payer_fk foreign key (payer_id, center_id)
-  references public.payers (id, center_id);
+  references public.payers (id, center_id) on delete restrict;
 
+alter table public.invitations drop constraint if exists invitations_teacher_id_fkey;
 alter table public.invitations
   add constraint invitations_teacher_fk foreign key (teacher_id, center_id)
-  references public.teachers (id, center_id);
+  references public.teachers (id, center_id) on delete cascade;
+-- payer_id — без предшественника, добавляется просто.
 alter table public.invitations
   add constraint invitations_payer_fk foreign key (payer_id, center_id)
   references public.payers (id, center_id);
 
--- До сих пор вообще без FK: 0001 писался раньше teachers/payers (0004),
--- «заполняется, когда появится карточка» осталось только комментарием.
+-- memberships.teacher_id/payer_id — до сих пор вообще без FK: 0001 писался
+-- раньше teachers/payers (0004), «заполняется, когда появится карточка»
+-- осталось только комментарием, предшественника нет. Ни cascade, ни set
+-- null: снос карточки специалиста/плательщика не должен молча менять
+-- доступ участника к центру.
 alter table public.memberships
   add constraint memberships_teacher_fk foreign key (teacher_id, center_id)
   references public.teachers (id, center_id);
@@ -190,32 +235,63 @@ alter table public.memberships
   add constraint memberships_payer_fk foreign key (payer_id, center_id)
   references public.payers (id, center_id);
 
+-- lessons.teacher_id/substitute_teacher_id: составной FK уже есть с 0017
+-- (lessons_teacher_fk/lessons_substitute_teacher_fk) — снимается только
+-- старый одноколоночный-дубликат (Р6), составной пересоздаётся с явным
+-- ON DELETE вместо унаследованного NO ACTION, чтобы восстановить исходное
+-- поведение single-column предшественника (restrict/set null), а не просто
+-- то, что случайно осталось после 0017.
+alter table public.lessons drop constraint if exists lessons_teacher_id_fkey;
+alter table public.lessons drop constraint if exists lessons_teacher_fk;
+alter table public.lessons
+  add constraint lessons_teacher_fk foreign key (teacher_id, center_id)
+  references public.teachers (id, center_id) on delete restrict;
+
+alter table public.lessons drop constraint if exists lessons_substitute_teacher_id_fkey;
+alter table public.lessons drop constraint if exists lessons_substitute_teacher_fk;
+alter table public.lessons
+  add constraint lessons_substitute_teacher_fk foreign key (substitute_teacher_id, center_id)
+  references public.teachers (id, center_id) on delete set null (substitute_teacher_id);
+
+alter table public.lessons drop constraint if exists lessons_student_id_fkey;
 alter table public.lessons
   add constraint lessons_student_fk foreign key (student_id, center_id)
-  references public.students (id, center_id);
+  references public.students (id, center_id) on delete cascade;
+
+alter table public.lessons drop constraint if exists lessons_group_id_fkey;
 alter table public.lessons
   add constraint lessons_group_fk foreign key (group_id, center_id)
-  references public.groups (id, center_id);
+  references public.groups (id, center_id) on delete cascade;
+
+alter table public.lessons drop constraint if exists lessons_room_id_fkey;
 alter table public.lessons
   add constraint lessons_room_fk foreign key (room_id, center_id)
-  references public.rooms (id, center_id);
+  references public.rooms (id, center_id) on delete set null (room_id);
+
+alter table public.lessons drop constraint if exists lessons_service_id_fkey;
 alter table public.lessons
   add constraint lessons_service_fk foreign key (service_id, center_id)
-  references public.services (id, center_id);
+  references public.services (id, center_id) on delete set null (service_id);
 
+alter table public.group_students drop constraint if exists group_students_group_id_fkey;
 alter table public.group_students
   add constraint group_students_group_fk foreign key (group_id, center_id)
-  references public.groups (id, center_id);
+  references public.groups (id, center_id) on delete cascade;
+
+alter table public.group_students drop constraint if exists group_students_student_id_fkey;
 alter table public.group_students
   add constraint group_students_student_fk foreign key (student_id, center_id)
-  references public.students (id, center_id);
+  references public.students (id, center_id) on delete cascade;
 
+alter table public.lesson_participants drop constraint if exists lesson_participants_lesson_id_fkey;
 alter table public.lesson_participants
   add constraint lesson_participants_lesson_fk foreign key (lesson_id, center_id)
-  references public.lessons (id, center_id);
+  references public.lessons (id, center_id) on delete cascade;
+
+alter table public.lesson_participants drop constraint if exists lesson_participants_student_id_fkey;
 alter table public.lesson_participants
   add constraint lesson_participants_student_fk foreign key (student_id, center_id)
-  references public.students (id, center_id);
+  references public.students (id, center_id) on delete cascade;
 
 
 -- 3. BEFORE-триггеры: центр проверяется раньше AFTER-синхронизации участников ----
