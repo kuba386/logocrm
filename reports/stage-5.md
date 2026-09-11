@@ -310,7 +310,7 @@ empty states, мобильный вид на preview.
 | Unit | core: salary.test (32), finance.test (24) — 144/144 |
 | CI | app / db / Playwright — зелёные на каждом PR; `main` был красным дважды (см. дефекты) |
 | Чек-лист кликом | — (UI не начат) |
-| Advisors | после 0017, 0018–0020 и 0022: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
+| Advisors | после 0017, 0018–0020, 0022 и 0023: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
 
 ## Найденные дефекты
 

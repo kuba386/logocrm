@@ -185,9 +185,12 @@ begin
   end if;
 
   if found then
+    -- Связывает только пустую привязку: уже привязанную карточку приглашение
+    -- не перецепляет (иначе — teachers_profile_uniq сырым текстом).
+    -- Событие остаётся membership.created — отдельного «linked» в contracts нет.
     update public.memberships
-       set teacher_id = coalesce(v_inv.teacher_id, teacher_id),
-           payer_id   = coalesce(v_inv.payer_id, payer_id)
+       set teacher_id = coalesce(teacher_id, v_inv.teacher_id),
+           payer_id   = coalesce(payer_id, v_inv.payer_id)
      where user_id = v_uid and center_id = v_inv.center_id;
   else
     insert into public.memberships (user_id, center_id, role, teacher_id, payer_id)
