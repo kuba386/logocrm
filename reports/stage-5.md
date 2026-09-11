@@ -126,7 +126,12 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
     lives по всему сценарию стойки (id, которые RPC не возвращает, — от
     postgres; проверки состояния после `reset role`), finance/teacher/
     чужой центр/NULL-роль — отказы, `refund_subscription` от finance 42501.
-  - `0027_roles_finance_rpc.sql` — `can_finance()`: `record_expense`,
+  - `0027_roles_finance_rpc.sql` — заодно долг 0011, который 0026
+    перевыпустила как есть: `cancel_series_from` и `teacher_vacation`
+    приводят `p_from::timestamptz` в поясе сессии, не центра — занятие в
+    Бишкеке раньше 06:00 в граничный день в отмену не попадает (в CI не
+    видно: UTC). Чинится через `center_timezone`, как в `sell_subscription_paid`.
+    `can_finance()`: `record_expense`,
     `archive/restore_expense_category`, `archive/restore_payment_source`,
     `close_month` (`reopen_month` — только owner), `calc_salary` (ветка
     owner/admin + проверка специалиста), `approve_salary`,

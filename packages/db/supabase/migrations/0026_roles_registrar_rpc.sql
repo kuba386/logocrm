@@ -1133,9 +1133,10 @@ begin
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
-  -- Блокировка — ЕДИНСТВЕННОЕ, что не даёт двум одновременным
-  -- freeze_subscription на одном абонементе пройти проверку «нет незакрытой
-  -- заморозки» на одном снимке. Не убирать (0015).
+  -- Почему так — 0015, раздел 6: блокировка — ЕДИНСТВЕННОЕ, что не даёт
+  -- двум одновременным freeze_subscription пройти проверку «нет незакрытой
+  -- заморозки» на одном снимке (не убирать); coalesce у subscription_state;
+  -- защёлка «уже есть незакрытая»; `<=` против пустого daterange(x,x).
   select * into v_sub from public.subscriptions
    where id = p_id and center_id = v_center and deleted_at is null
      for update;
@@ -1198,6 +1199,10 @@ begin
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
+  -- Почему так — 0015, раздел 6: блокировка абонемента; «открытая» — и
+  -- бессрочная, и ещё не начавшаяся (её «разморозить» = отменить целиком,
+  -- схлопнуть в пустой диапазон); разморозить можно только сегодняшним или
+  -- прошлым числом.
   perform 1 from public.subscriptions
    where id = p_id and center_id = v_center and deleted_at is null
      for update;
@@ -1528,8 +1533,10 @@ begin
     raise exception 'Шаг рассрочки — целое число месяцев, не меньше одного' using errcode = '22023';
   end if;
 
-  -- Все ссылки на колонки — с алиасом: имена OUT-параметров returns table
-  -- иначе затеняют их («column reference is ambiguous»).
+  -- Почему так — 0020, раздел 5: алиасы обязательны (OUT-параметры returns
+  -- table затеняют колонки); остаток проверяется РАНЬШЕ живого плана (иначе
+  -- тупик «отмените рассрочку» ↔ «отменять нечего»); p_expected — 23514;
+  -- строки в ответ — интерфейс рисует по ответу сервера.
   select s.* into v_sub from public.subscriptions s
    where s.id = p_subscription_id and s.center_id = v_center and s.deleted_at is null
    for update;
