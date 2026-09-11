@@ -88,6 +88,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # До supabase start: дубль номера роняет db reset на
+      # schema_migrations_pkey уже после двух минут подъёма контейнеров, а
+      # так — за секунду и с внятным текстом. На pull_request шаг видит
+      # merge-коммит с main, то есть ловит ветку, отставшую от занятого
+      # номера.
+      - name: Номера миграций уникальны
+        working-directory: packages/db
+        run: node scripts/check-migration-versions.mjs
+
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
