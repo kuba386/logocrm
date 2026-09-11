@@ -2150,13 +2150,6 @@ export type Database = {
             referencedRelation: "centers"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "lessons_service_id_fkey"
-            columns: ["service_id"]
-            isOneToOne: false
-            referencedRelation: "services"
-            referencedColumns: ["id"]
-          },
         ]
       }
       revenue_by_teacher: {
