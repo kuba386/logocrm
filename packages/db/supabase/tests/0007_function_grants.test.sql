@@ -52,7 +52,7 @@ from unnest(array[
   'public.centers_seed_expense_categories()',
   'public.seed_expense_categories(uuid)',
   'public.teacher_rates_set_created_by()',
-  'public.teacher_rates_guard_approved_month()'
+  'public.approved_salary_guard()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 

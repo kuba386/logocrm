@@ -14,7 +14,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(61);
+select plan(65);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -73,10 +73,18 @@ insert into public.services (id, center_id, name, duration_min, default_price_ti
 insert into public.groups (id, center_id, name, service_id, teacher_id) values
   ('99999999-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','Группа','f1111111-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-000000000005');
 
-insert into public.group_students (center_id, group_id, student_id) values
-  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001'),
-  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002'),
-  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000003');
+-- joined_at — явно и раньше всех занятий фикстуры. Дефолт current_date
+-- (сегодня) позже занятий прошлого месяца, а rebuild_lesson_participants
+-- берёт состав по joined_at <= starts_at::date — состав групповых занятий
+-- был бы пуст, и первая же отметка падала бы на "не участник занятия"
+-- (та же ловушка, что описана в 0015.test; стоила красного db-джоба).
+insert into public.group_students (center_id, group_id, student_id, joined_at) values
+  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
+   (date_trunc('month', now() - interval '2 months'))::date),
+  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002',
+   (date_trunc('month', now() - interval '2 months'))::date),
+  ('cccccccc-0000-0000-0000-00000000000a','99999999-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000003',
+   (date_trunc('month', now() - interval '2 months'))::date);
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -426,7 +434,8 @@ select 'cccccccc-0000-0000-0000-00000000000a', '44440000-0000-0000-0000-00000000
 
 select is(
   (select coalesce(sum(amount_tiyin), 0)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000008',
-     (date_trunc('month', now() - interval '1 month'))::date)),
+     (date_trunc('month', now() - interval '1 month'))::date)
+    where lesson_id = '44440000-0000-0000-0000-000000000014'),
   45000,
   'per_lesson на группе: одна ставка за состоявшееся занятие (45000), а не 0 из-за "болел" на первой позиции'
 );
@@ -480,7 +489,8 @@ select 'cccccccc-0000-0000-0000-00000000000a', '44440000-0000-0000-0000-00000000
 
 select is(
   (select coalesce(sum(amount_tiyin), 0)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000009',
-     (date_trunc('month', now() - interval '1 month'))::date)),
+     (date_trunc('month', now() - interval '1 month'))::date)
+    where lesson_id = '44440000-0000-0000-0000-000000000015'),
   40000,
   'per_hour на группе: 60 минут × 400 сом/час = 40000 один раз, не ×3 по числу детей'
 );
@@ -488,7 +498,7 @@ select is(
 select is(
   (select count(*)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000009',
      (date_trunc('month', now() - interval '1 month'))::date)
-    where amount_tiyin > 0),
+    where lesson_id = '44440000-0000-0000-0000-000000000015' and amount_tiyin > 0),
   1,
   'Платит ровно одна строка занятия, остальные — 0 с причиной'
 );
@@ -908,7 +918,79 @@ select throws_ok(
 );
 
 
--- 60-61. Контрольные суммы за весь файл ------------------------------------------
+-- 60-62. Замена посреди отметок: одна оплата на занятие, не на специалиста ----
+
+-- Ребёнок 1 отмечен при специалисте 8 (paid_teacher_id=8), затем замена на
+-- специалиста 9, затем отмечены дети 2 и 3 (paid_teacher_id=9). До правки
+-- rn_in_lesson считался поверх строк, уже отфильтрованных по специалисту:
+-- 8 платил полную ставку за свою единственную строку, 9 — ещё раз за свою
+-- первую (находка В3 архитектора — за один час работы центр платил дважды).
+insert into public.lessons (id, center_id, service_id, teacher_id, group_id, starts_at, ends_at, status)
+values ('44440000-0000-0000-0000-000000000017','cccccccc-0000-0000-0000-00000000000a','f1111111-0000-0000-0000-000000000002',
+        'aaaaaaaa-0000-0000-0000-000000000008', '99999999-0000-0000-0000-000000000001',
+        date_trunc('month', now() - interval '1 month') + interval '19 days' + interval '10 hours',
+        date_trunc('month', now() - interval '1 month') + interval '19 days' + interval '11 hours', 'done');
+
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+
+insert into public.attendance (center_id, lesson_id, student_id, status_id)
+select 'cccccccc-0000-0000-0000-00000000000a', '44440000-0000-0000-0000-000000000017',
+       'eeeeeeee-0000-0000-0000-000000000001', id
+  from public.attendance_statuses
+ where center_id = 'cccccccc-0000-0000-0000-00000000000a' and code = 'present';
+
+select public.substitute_teacher('44440000-0000-0000-0000-000000000017','aaaaaaaa-0000-0000-0000-000000000009');
+
+insert into public.attendance (center_id, lesson_id, student_id, status_id)
+select 'cccccccc-0000-0000-0000-00000000000a', '44440000-0000-0000-0000-000000000017', s.id, st.id
+  from unnest(array['eeeeeeee-0000-0000-0000-000000000002'::uuid,
+                     'eeeeeeee-0000-0000-0000-000000000003'::uuid]) as s(id),
+       (select id from public.attendance_statuses
+         where center_id = 'cccccccc-0000-0000-0000-00000000000a' and code = 'present') as st(id);
+
+select is(
+  (select coalesce(sum(amount_tiyin), 0)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000008',
+     (date_trunc('month', now() - interval '1 month'))::date)
+    where lesson_id = '44440000-0000-0000-0000-000000000017'),
+  45000,
+  'Замена посреди отметок: занятие оплачено один раз — первой платящей строке (специалист 8, ребёнок 1)'
+);
+
+select is(
+  (select coalesce(sum(amount_tiyin), 0)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000009',
+     (date_trunc('month', now() - interval '1 month'))::date)
+    where lesson_id = '44440000-0000-0000-0000-000000000017'),
+  0,
+  'Специалист 9 за то же занятие не получает ничего — не вторая полная ставка за тот же час'
+);
+
+select is(
+  (select count(*)::int from public.calc_salary('aaaaaaaa-0000-0000-0000-000000000009',
+     (date_trunc('month', now() - interval '1 month'))::date)
+    where lesson_id = '44440000-0000-0000-0000-000000000017' and note = 'оплачено в другой строке занятия'),
+  2,
+  'Обе строки специалиста 9 видны с честной причиной: платящая строка занятия — у другого специалиста'
+);
+
+
+-- 63. Корректировка задним числом в месяц с утверждённой зарплатой ------------
+
+-- approve_salary за прошлый месяц уже прошёл (тест 42). Премия после него
+-- числилась бы в salary_summary.adjustments_tiyin, а total_tiyin брался бы
+-- из снимка — начислено и не выплачено (находка В2 архитектора).
+select throws_like(
+  format($q$ select public.record_salary_adjustment(%L, %L, 10000, 'поздняя премия') $q$,
+    'aaaaaaaa-0000-0000-0000-000000000001',
+    (date_trunc('month', now() - interval '1 month'))::date),
+  '%уже утверждена%',
+  'record_salary_adjustment после approve_salary отбит триггером — тот же замок, что у ставки'
+);
+
+reset role;
+
+
+-- 64-65. Контрольные суммы за весь файл ------------------------------------------
 
 select is(
   (select count(*)::int from public.payments), 0,

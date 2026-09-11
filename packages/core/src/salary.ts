@@ -40,6 +40,8 @@ export type AttendanceRow = {
   priceTiyin: number
   /** ends_at − starts_at в секундах — как extract(epoch …) в SQL. */
   durationSec: number
+  /** attendance.paid_teacher_id — кому заморожена оплата при отметке. */
+  paidTeacherId: string
 }
 
 export type SalaryLine = {
@@ -118,10 +120,17 @@ export function pickRate(
 }
 
 /**
- * Построчная детализация за месяц. Одна строка = одна отметка, sum(amount)
- * по строкам — итог без второй арифметики. Строки не отфильтровываются:
- * непроведённое занятие, неоплачиваемый статус и отсутствие ставки дают
- * amount 0 с причиной.
+ * Построчная детализация специалиста за месяц. Одна строка = одна отметка,
+ * sum(amount) по строкам — итог без второй арифметики. Строки не
+ * отфильтровываются: непроведённое занятие, неоплачиваемый статус и
+ * отсутствие ставки дают amount 0 с причиной.
+ *
+ * `rows` — ВСЕ отметки занятий месяца, где у специалиста есть хоть одна
+ * строка (как lesson_scope в SQL), включая строки с чужим paidTeacherId:
+ * замена посреди отметок замораживает в одном занятии разных специалистов,
+ * а платящая строка per_lesson/per_hour обязана быть одна на занятие, не
+ * одна на специалиста. Чужие строки нужны для нумерации и в результат не
+ * попадают.
  *
  * Кто платит на групповом занятии — по модели:
  *   per_lesson, per_hour — одна строка занятия: первая ПЛАТЯЩАЯ по studentId,
@@ -131,50 +140,55 @@ export function pickRate(
  * Порядок строк — как в SQL: дата, занятие, ребёнок. Месяц не проверяется:
  * строки на вход уже отобраны за нужный месяц.
  */
-export function calcSalary(rows: readonly AttendanceRow[], rates: readonly TeacherRate[]): SalaryLine[] {
+export function calcSalary(
+  teacherId: string,
+  rows: readonly AttendanceRow[],
+  rates: readonly TeacherRate[],
+): SalaryLine[] {
   for (const r of rates) {
     if (!RATE_MODELS.includes(r.model)) {
       throw new RangeError(`Неизвестная модель ставки «${String(r.model)}»`)
     }
   }
 
-  const sorted = [...rows].sort(
-    (a, b) =>
-      compare(a.lessonDate, b.lessonDate) ||
-      compare(a.lessonId, b.lessonId) ||
-      compare(a.studentId, b.studentId),
-  )
-
   const rank = new Map<string, number>()
   const byLesson = new Map<string, AttendanceRow[]>()
-  for (const row of sorted) {
+  for (const row of rows) {
     const group = byLesson.get(row.lessonId) ?? []
     group.push(row)
     byLesson.set(row.lessonId, group)
   }
   for (const group of byLesson.values()) {
     // Платящие строки получают меньший номер — зеркало
-    // order by (not pays_teacher), student_id.
+    // order by (not pays_teacher), student_id, по всем строкам занятия.
     const ordered = [...group].sort(
       (a, b) => Number(!a.paysTeacher) - Number(!b.paysTeacher) || compare(a.studentId, b.studentId),
     )
     ordered.forEach((row, i) => rank.set(row.attendanceId, i + 1))
   }
 
-  return sorted.map((row) => {
-    const rate = pickRate(rates, row.serviceId, row.lessonDate)
-    const rn = rank.get(row.attendanceId) ?? 1
-    return {
-      attendanceId: row.attendanceId,
-      lessonId: row.lessonId,
-      lessonDate: row.lessonDate,
-      studentId: row.studentId,
-      model: rate?.model ?? null,
-      lessonPriceTiyin: row.priceTiyin,
-      amountTiyin: lineAmount(row, rate, rn),
-      note: lineNote(row, rate, rn),
-    }
-  })
+  return rows
+    .filter((row) => row.paidTeacherId === teacherId)
+    .sort(
+      (a, b) =>
+        compare(a.lessonDate, b.lessonDate) ||
+        compare(a.lessonId, b.lessonId) ||
+        compare(a.studentId, b.studentId),
+    )
+    .map((row) => {
+      const rate = pickRate(rates, row.serviceId, row.lessonDate)
+      const rn = rank.get(row.attendanceId) ?? 1
+      return {
+        attendanceId: row.attendanceId,
+        lessonId: row.lessonId,
+        lessonDate: row.lessonDate,
+        studentId: row.studentId,
+        model: rate?.model ?? null,
+        lessonPriceTiyin: row.priceTiyin,
+        amountTiyin: lineAmount(row, rate, rn),
+        note: lineNote(row, rate, rn),
+      }
+    })
 }
 
 /** Итог по строкам детализации — без корректировок (они в salary_summary). */

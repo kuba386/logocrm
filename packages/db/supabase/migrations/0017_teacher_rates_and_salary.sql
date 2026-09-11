@@ -46,10 +46,19 @@
 --       close_month; reopen_salary сознательно не строится (сценария нет).
 --       По занятиям не в статусе done calc_salary отдаёт строку с amount=0
 --       и причиной — фильтр done из спеки ограничивает оплату, не видимость.
---   Р8. Ставка задним числом в месяц с утверждённой зарплатой или в закрытый
---       месяц — отбивается триггерами (append-only без этого закрывал
---       только форму записи, не последствие). lessons получает составные FK
---       на teachers — реальная дыра изоляции, найденная по пути.
+--   Р8. Ставка или корректировка задним числом в месяц с утверждённой
+--       зарплатой — отбивается триггером approved_salary_guard на обеих
+--       таблицах (иначе премия после "Утвердить" числится начисленной, а в
+--       снимок не попадает — и не выплачивается); в закрытый месяц — замком
+--       financial_period_guard. Append-only без этого закрывал только форму
+--       записи. lessons получает составные FK на teachers — реальная дыра
+--       изоляции, найденная по пути.
+--   Р9. Платящая строка per_lesson/per_hour выбирается по ВСЕМ отметкам
+--       занятия, включая строки другого специалиста: замена после части
+--       отметок замораживает в одном занятии разные paid_teacher_id, и без
+--       этого за один час работы центр платил бы дважды. Кому именно —
+--       детерминированно (первая платящая по student_id), но произвольно;
+--       отступление фиксируется в отчёте этапа.
 --
 -- Полный список фактов о существующей схеме, на которые опирается план —
 -- в истории сессии (агент Explore) и в самом architect-ревью. Ключевое:
@@ -470,40 +479,8 @@ create trigger teacher_rates_set_created_by
   before insert on public.teacher_rates
   for each row execute function public.teacher_rates_set_created_by();
 
--- Ставку нельзя завести задним числом в месяц, за который этому специалисту
--- уже утверждена зарплата. Append-only закрывает ФОРМУ записи (update/
--- delete), но новая строка с прошлым valid_from побеждает в calc_salary
--- ровно так же, как победила бы правка — комментарий у грантов ниже объяснял
--- именно этот риск, а не защищал от него. Отдельно от financial_period_guard:
--- тот смотрит на закрытый ПЕРИОД центра, а approve_salary мог пройти и в
--- открытом месяце — snapshot уже есть, расходиться с ним нельзя.
-create or replace function public.teacher_rates_guard_approved_month()
-  returns trigger
-  language plpgsql
-  security definer
-  set search_path = ''
-as $$
-begin
-  if exists (
-    select 1 from public.salary_runs sr
-     where sr.center_id = new.center_id
-       and sr.teacher_id = new.teacher_id
-       and sr.month = date_trunc('month', new.valid_from)::date
-  ) then
-    raise exception 'Зарплата за % уже утверждена — ставка задним числом в этот месяц невозможна',
-      public.ru_month_year(date_trunc('month', new.valid_from)::date)
-      using errcode = '22023';
-  end if;
-  return new;
-end;
-$$;
-
-revoke all on function public.teacher_rates_guard_approved_month() from public, anon, authenticated;
-
-drop trigger if exists teacher_rates_guard_approved_month on public.teacher_rates;
-create trigger teacher_rates_guard_approved_month
-  before insert on public.teacher_rates
-  for each row execute function public.teacher_rates_guard_approved_month();
+-- Замок "зарплата за месяц уже утверждена" — approved_salary_guard в
+-- разделе 4, после salary_runs: общий для teacher_rates и salary_adjustments.
 
 call public.apply_tenant_rls('teacher_rates', false);
 call public.apply_audit('teacher_rates');
@@ -521,8 +498,8 @@ create policy teacher_rates_read_own on public.teacher_rates
 -- Ни update, ни delete — никогда. Новая ставка = новая строка с новым
 -- valid_from; правка старой строки задним числом молча меняла бы зарплату за
 -- уже закрытые и уже выплаченные месяцы. Новая строка с прошлым valid_from
--- сделала бы то же самое — от этого два триггера выше и
--- financial_period_guard_teacher_rates в разделе 5, append-only сам по себе
+-- сделала бы то же самое — от этого approved_salary_guard (раздел 4) и
+-- financial_period_guard_teacher_rates (раздел 5); append-only сам по себе
 -- закрывает только форму записи.
 revoke all on public.teacher_rates from anon, authenticated;
 grant select, insert on public.teacher_rates to authenticated;
@@ -655,6 +632,86 @@ call public.apply_audit('salary_runs');
 -- возвращает вовсе.
 revoke all on public.salary_runs from anon, authenticated;
 grant select on public.salary_runs to authenticated;
+
+-- approved_salary_guard — ничего задним числом в месяц с утверждённой
+-- зарплатой. Снимок неизменяем, reopen нет, а salary_summary отдаёт итог
+-- ИЗ снимка: премия, записанная после "Утвердить", числилась бы
+-- начисленной (adjustments_tiyin) и никогда не выплачивалась (total_tiyin
+-- из snapshot). Та же дыра у ставки: append-only закрывает форму записи,
+-- а новая строка с прошлым valid_from меняет calc_salary как правка.
+-- Триггер, не if внутри record_salary_adjustment: прямого insert сегодня
+-- нет, но grant insert в будущей миграции открыл бы обход (CLAUDE.md,
+-- "инвариант — это констрейнт или триггер"). Отдельно от
+-- financial_period_guard: "утверждено" и "закрыто" — независимые факты,
+-- бывает любое без другого.
+create or replace function public.approved_salary_guard()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_new_month date;
+  v_old_month date;
+  v_blocked   date;
+begin
+  if tg_table_name = 'teacher_rates' then
+    -- Только insert: update/delete гранта у teacher_rates нет.
+    v_new_month := date_trunc('month', new.valid_from)::date;
+
+  elsif tg_table_name = 'salary_adjustments' then
+    if tg_op <> 'DELETE' then
+      v_new_month := new.month;
+    end if;
+    if tg_op <> 'INSERT' then
+      v_old_month := old.month;
+    end if;
+
+  else
+    raise exception 'approved_salary_guard: неизвестная таблица %', tg_table_name
+      using errcode = '42704';
+  end if;
+
+  if v_new_month is not null and exists (
+       select 1 from public.salary_runs sr
+        where sr.center_id = new.center_id
+          and sr.teacher_id = new.teacher_id
+          and sr.month = v_new_month
+     ) then
+    v_blocked := v_new_month;
+  elsif v_old_month is not null and exists (
+       select 1 from public.salary_runs sr
+        where sr.center_id = old.center_id
+          and sr.teacher_id = old.teacher_id
+          and sr.month = v_old_month
+     ) then
+    v_blocked := v_old_month;
+  end if;
+
+  if v_blocked is not null then
+    raise exception 'Зарплата за % уже утверждена — изменения задним числом невозможны',
+      public.ru_month_year(v_blocked)
+      using errcode = '22023';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.approved_salary_guard() from public, anon, authenticated;
+
+drop trigger if exists approved_salary_guard_teacher_rates on public.teacher_rates;
+create trigger approved_salary_guard_teacher_rates
+  before insert on public.teacher_rates
+  for each row execute function public.approved_salary_guard();
+
+drop trigger if exists approved_salary_guard_salary_adjustments on public.salary_adjustments;
+create trigger approved_salary_guard_salary_adjustments
+  before insert or update or delete on public.salary_adjustments
+  for each row execute function public.approved_salary_guard();
 
 
 -- 5. financial_period_guard — ветки salary_adjustments и teacher_rates ----------
@@ -790,7 +847,10 @@ create trigger financial_period_guard_teacher_rates
 --                            Платящая строка — первая ПЛАТЯЩАЯ по student_id,
 --                            не первая вообще: "болел" на наименьшем id не
 --                            должен съедать оплату за занятие, которое
---                            состоялось.
+--                            состоялось. Нумерация — по всем отметкам
+--                            занятия, в том числе с чужим paid_teacher_id
+--                            (замена посреди отметок): одна оплата на
+--                            занятие, а не на специалиста.
 --   per_student, percent_payment — каждая строка отдельно (величина от
 --                            ребёнка: его присутствие / цена его абонемента).
 --
@@ -852,10 +912,9 @@ begin
   end if;
 
   return query
-  with candidate as (
-    select a.id as attendance_id, a.lesson_id, a.student_id, a.pays_teacher, a.price_tiyin,
-           (l.starts_at at time zone public.center_timezone(v_center))::date as lesson_date,
-           l.starts_at, l.ends_at, l.service_id, l.status as lesson_status
+  with lesson_scope as (
+    -- Занятия месяца, где у специалиста есть хоть одна отметка.
+    select distinct a.lesson_id
       from public.attendance a
       join public.lessons l on l.id = a.lesson_id
      where a.center_id = v_center
@@ -863,6 +922,21 @@ begin
        and l.deleted_at is null
        and (l.starts_at at time zone public.center_timezone(v_center))::date >= v_month
        and (l.starts_at at time zone public.center_timezone(v_center))::date < (v_month + interval '1 month')::date
+  ),
+  candidate as (
+    -- ВСЕ отметки этих занятий, не только свои: замена посреди отметок
+    -- замораживает в одном занятии разные paid_teacher_id, а платящая
+    -- строка per_lesson/per_hour обязана быть одна на ЗАНЯТИЕ, не одна на
+    -- специалиста — иначе за один час работы центр платит дважды. Чужие
+    -- строки отсекаются в самом конце, уже после нумерации.
+    select a.id as attendance_id, a.lesson_id, a.student_id, a.pays_teacher, a.price_tiyin,
+           a.paid_teacher_id,
+           (l.starts_at at time zone public.center_timezone(v_center))::date as lesson_date,
+           l.starts_at, l.ends_at, l.service_id, l.status as lesson_status
+      from public.attendance a
+      join public.lessons l on l.id = a.lesson_id
+     where a.center_id = v_center
+       and a.lesson_id in (select ls.lesson_id from lesson_scope ls)
   ),
   rated as (
     select c.*,
@@ -920,6 +994,7 @@ begin
       else null
     end as note
   from rated r
+  where r.paid_teacher_id = p_teacher_id
   order by r.lesson_date, r.lesson_id, r.student_id;
 end;
 $$;

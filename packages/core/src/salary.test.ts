@@ -17,6 +17,8 @@ import {
 // Общий набор случаев с pgTAP 0017: те же ставки, длительности и цены.
 // Меняется одна сторона — меняется обе.
 
+const T1 = 'aaaaaaaa-0000-0000-0000-000000000001'
+const T2 = 'aaaaaaaa-0000-0000-0000-000000000002'
 const SERVICE_1 = 'f1111111-0000-0000-0000-000000000001'
 const SERVICE_2 = 'f1111111-0000-0000-0000-000000000002'
 const SERVICE_3 = 'f1111111-0000-0000-0000-000000000003'
@@ -32,6 +34,7 @@ const row = (over: Partial<AttendanceRow> & Pick<AttendanceRow, 'attendanceId' |
   paysTeacher: true,
   priceTiyin: 50_000,
   durationSec: 45 * 60,
+  paidTeacherId: T1,
   ...over,
 })
 
@@ -137,19 +140,19 @@ describe('calcSalary — чек-лист этапа (тесты 1-3, 6 pgTAP)', 
   )
 
   it('300 сом × 5 «пришёл» + 1 «болел» = 1500 сом, шесть строк', () => {
-    const lines = calcSalary(rows, rates)
+    const lines = calcSalary(T1, rows, rates)
     expect(lines).toHaveLength(6)
     expect(salaryTotal(lines)).toBe(150_000)
   })
 
   it('«болел» — строка на месте, amount 0, причина явная', () => {
-    const sick = calcSalary(rows, rates).find((l) => l.attendanceId === 'a5')
+    const sick = calcSalary(T1, rows, rates).find((l) => l.attendanceId === 'a5')
     expect(sick?.amountTiyin).toBe(0)
     expect(sick?.note).toBe(NOTE_NOT_PAID_STATUS)
   })
 
   it('модель в строке — per_lesson', () => {
-    expect(calcSalary(rows, rates)[0]?.model).toBe('per_lesson')
+    expect(calcSalary(T1, rows, rates)[0]?.model).toBe('per_lesson')
   })
 })
 
@@ -159,6 +162,7 @@ describe('calcSalary — групповое занятие', () => {
 
   it('per_student: каждая строка платит — 100 сом × 3 = 300 сом (тесты 13-14)', () => {
     const lines = calcSalary(
+      T1,
       [groupRow('a1', CHILD_1), groupRow('a2', CHILD_2), groupRow('a3', CHILD_3)],
       [rate({ model: 'per_student', value: 10_000 })],
     )
@@ -169,6 +173,7 @@ describe('calcSalary — групповое занятие', () => {
 
   it('per_lesson: «болел» на наименьшем id не съедает оплату — платит первая ПЛАТЯЩАЯ (тесты 15-18)', () => {
     const lines = calcSalary(
+      T1,
       [groupRow('a1', CHILD_1, false), groupRow('a2', CHILD_2), groupRow('a3', CHILD_3)],
       [rate({ model: 'per_lesson', value: 45_000 })],
     )
@@ -182,6 +187,7 @@ describe('calcSalary — групповое занятие', () => {
 
   it('per_lesson: все «болели» — ни одной строки «оплачено в другой строке»', () => {
     const lines = calcSalary(
+      T1,
       [groupRow('a1', CHILD_1, false), groupRow('a2', CHILD_2, false)],
       [rate({ model: 'per_lesson', value: 45_000 })],
     )
@@ -191,6 +197,7 @@ describe('calcSalary — групповое занятие', () => {
 
   it('per_hour: час работы один, детей трое — 400 сом, не 1200 (тесты 19-20)', () => {
     const lines = calcSalary(
+      T1,
       [groupRow('a1', CHILD_1), groupRow('a2', CHILD_2), groupRow('a3', CHILD_3)],
       [rate({ model: 'per_hour', value: 40_000 })],
     )
@@ -201,6 +208,7 @@ describe('calcSalary — групповое занятие', () => {
 
   it('percent_payment: каждая строка — процент от цены своего абонемента', () => {
     const lines = calcSalary(
+      T1,
       [
         groupRow('a1', CHILD_1),
         { ...groupRow('a2', CHILD_2), priceTiyin: 0 },
@@ -210,11 +218,41 @@ describe('calcSalary — групповое занятие', () => {
     )
     expect(lines.map((l) => l.amountTiyin)).toEqual([15_000, 0, 9_000])
   })
+
+  it('замена посреди отметок: одна оплата на занятие, не на специалиста (тесты 60-62)', () => {
+    // Ребёнок 1 отмечен при T1, затем замена на T2, затем дети 2 и 3.
+    const rows = [
+      groupRow('a1', CHILD_1),
+      { ...groupRow('a2', CHILD_2), paidTeacherId: T2 },
+      { ...groupRow('a3', CHILD_3), paidTeacherId: T2 },
+    ]
+    const rates = [rate({ model: 'per_lesson', value: 45_000 })]
+
+    const mine = calcSalary(T1, rows, rates)
+    const theirs = calcSalary(T2, rows, rates)
+
+    expect(mine.map((l) => l.attendanceId)).toEqual(['a1'])
+    expect(salaryTotal(mine)).toBe(45_000)
+    expect(theirs.map((l) => l.attendanceId)).toEqual(['a2', 'a3'])
+    expect(salaryTotal(theirs)).toBe(0)
+    expect(theirs.every((l) => l.note === NOTE_PAID_ELSEWHERE)).toBe(true)
+  })
+
+  it('чужие строки в результат не попадают, даже если платящая — среди них', () => {
+    const rows = [
+      { ...groupRow('a1', CHILD_1), paidTeacherId: T2 },
+      groupRow('a2', CHILD_2),
+    ]
+    const mine = calcSalary(T1, rows, [rate({ model: 'per_hour', value: 40_000 })])
+    expect(mine).toHaveLength(1)
+    expect(mine[0]?.amountTiyin).toBe(0)
+    expect(mine[0]?.note).toBe(NOTE_PAID_ELSEWHERE)
+  })
 })
 
 describe('calcSalary — нулевые строки не исчезают (тесты 21-25 pgTAP)', () => {
   it('без ставки — строка есть, amount 0, «ставка не задана»', () => {
-    const [line] = calcSalary([row({ attendanceId: 'a1', lessonId: 'l1' })], [])
+    const [line] = calcSalary(T1, [row({ attendanceId: 'a1', lessonId: 'l1' })], [])
     expect(line?.amountTiyin).toBe(0)
     expect(line?.model).toBeNull()
     expect(line?.note).toBe(NOTE_NO_RATE)
@@ -222,6 +260,7 @@ describe('calcSalary — нулевые строки не исчезают (те
 
   it('занятие не в статусе done — amount 0, «занятие не проведено», даже при ставке и «пришёл»', () => {
     const [line] = calcSalary(
+      T1,
       [row({ attendanceId: 'a1', lessonId: 'l1', lessonStatus: 'planned' })],
       [rate({ model: 'per_lesson', value: 30_000 })],
     )
@@ -231,6 +270,7 @@ describe('calcSalary — нулевые строки не исчезают (те
 
   it('порядок причин — как в SQL: непроведённое занятие раньше статуса и ставки', () => {
     const [line] = calcSalary(
+      T1,
       [row({ attendanceId: 'a1', lessonId: 'l1', lessonStatus: 'planned', paysTeacher: false })],
       [],
     )
@@ -241,6 +281,7 @@ describe('calcSalary — нулевые строки не исчезают (те
 describe('calcSalary — порядок и ошибки', () => {
   it('строки отсортированы по дате, занятию, ребёнку — как order by в SQL', () => {
     const lines = calcSalary(
+      T1,
       [
         row({ attendanceId: 'b', lessonId: 'l2', lessonDate: '2026-08-12', studentId: CHILD_2 }),
         row({ attendanceId: 'a', lessonId: 'l2', lessonDate: '2026-08-12', studentId: CHILD_1 }),
@@ -253,12 +294,12 @@ describe('calcSalary — порядок и ошибки', () => {
 
   it('неизвестная модель — громкая ошибка, а не молчаливый ноль (зеркало 22023)', () => {
     expect(() =>
-      calcSalary([row({ attendanceId: 'a1', lessonId: 'l1' })], [rate({ model: 'per_day' as never, value: 1 })]),
+      calcSalary(T1, [row({ attendanceId: 'a1', lessonId: 'l1' })], [rate({ model: 'per_day' as never, value: 1 })]),
     ).toThrow(RangeError)
   })
 
   it('пустой месяц — пустая детализация и нулевой итог', () => {
-    expect(calcSalary([], [rate({ model: 'per_lesson', value: 30_000 })])).toEqual([])
+    expect(calcSalary(T1, [], [rate({ model: 'per_lesson', value: 30_000 })])).toEqual([])
     expect(salaryTotal([])).toBe(0)
   })
 })
