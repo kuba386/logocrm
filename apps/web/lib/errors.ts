@@ -62,6 +62,9 @@ const CHECK_MESSAGES: Record<string, string> = {
   subscription_types_lessons_no_period_check: 'У типа абонемента на количество занятий срок действия не указывается',
   payments_amount_not_zero: 'Сумма не может быть нулевой',
   payments_kind_known: 'Неизвестный тип операции',
+  expenses_amount_not_zero: 'Сумма не может быть нулевой',
+  expenses_kind_known: 'Неизвестный тип операции',
+  expenses_sign_matches_kind: 'Сумма не соответствует типу операции',
 }
 
 /**
@@ -76,6 +79,8 @@ const FK_MESSAGES: Record<string, string> = {
   payments_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
   payments_source_fk: 'Источник оплаты не найден',
   payments_payer_fk: 'Плательщик не найден',
+  expenses_category_fk: 'Статья расхода не найдена — возможно, она из другого центра',
+  expenses_source_fk: 'Источник оплаты не найден',
 }
 
 function checkConstraintName(message: string): string | null {
@@ -100,6 +105,7 @@ const FOREIGN_KEY_VIOLATION = '23503'
 const NOT_FOUND = '42704'
 const BAD_INPUT = '22023'
 const MISSING_INPUT = '22004'
+const NOT_NULL_VIOLATION = '23502'
 
 function parseConflicts(details: string | null | undefined): ConflictDay[] | undefined {
   if (!details) return undefined
@@ -186,8 +192,8 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
     return { message: message || 'Запись не найдена' }
   }
 
-  if (code === BAD_INPUT || code === MISSING_INPUT) {
-    return { message: message || 'Проверьте введённые данные' }
+  if (code === BAD_INPUT || code === MISSING_INPUT || code === NOT_NULL_VIOLATION) {
+    return { message: message || 'Проверьте введённые данные — не хватает обязательного поля' }
   }
 
   return { message: message || fallback }
