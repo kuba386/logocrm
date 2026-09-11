@@ -152,10 +152,13 @@ select throws_ok(
   'Аноним не может вызвать create_center'
 );
 
-select is(
-  (select count(*) from public.centers)::int,
-  0,
-  'Аноним не видит ни одного центра'
+-- До 0024 anon имел SELECT по default privileges и получал 0 строк от RLS;
+-- теперь гранта нет вовсе — отказ раньше политики.
+select throws_ok(
+  $q$ select count(*) from public.centers $q$,
+  '42501',
+  null,
+  'Аноним не читает centers вовсе — ни гранта, ни строк'
 );
 
 reset role;
