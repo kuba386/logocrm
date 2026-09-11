@@ -103,6 +103,11 @@ select is(public.subscription_state('88888888-0000-0000-0000-000000000002'), nul
   'Состояние чужого абонемента не читается: NULL');
 select is(public.refund_calc('88888888-0000-0000-0000-000000000002'), null::integer,
   'Сумма возврата чужого абонемента не читается: NULL');
+-- 0014: subscription_freeze_days стала definer (см. 0014_freeze_state_
+-- unification.sql, раздел 5) — грант на authenticated остался (роль в
+-- Postgres одна на owner/admin/parent, отзывать нечем), видимость теперь
+-- проверяет сама функция через subscription_visible_to_caller: чужой
+-- центр получает NULL этим же путём, что раньше давала RLS.
 select is(public.subscription_freeze_days('88888888-0000-0000-0000-000000000002'), null::integer,
   'Дни заморозки чужого абонемента — NULL, а не «0 дней»');
 

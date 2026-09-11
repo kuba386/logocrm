@@ -1595,6 +1595,7 @@ export type Database = {
           ends_at: string | null
           lessons_left: number | null
           overdrawn_tiyin: number | null
+          state: string | null
           student_id: string | null
         }
         Relationships: [
@@ -1884,11 +1885,28 @@ export type Database = {
         Returns: undefined
       }
       slugify: { Args: { p_text: string }; Returns: string }
+      student_balance_pick: {
+        Args: { p_student_id: string }
+        Returns: {
+          ends_at: string
+          lesson_price_tiyin: number
+          state: string
+          subscription_id: string
+        }[]
+      }
       student_subscription_badge: {
         Args: { p_student_id: string }
         Returns: string
       }
+      subscription_current_freeze: {
+        Args: { p_on_date?: string; p_subscription_id: string }
+        Returns: unknown
+      }
       subscription_freeze_days: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
+      subscription_freeze_days_unchecked: {
         Args: { p_subscription_id: string }
         Returns: number
       }
@@ -1900,15 +1918,25 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: string
       }
+      subscription_state_unchecked: {
+        Args: { p_subscription_id: string }
+        Returns: string
+      }
       subscription_summary: {
         Args: { p_subscription_id: string }
         Returns: {
           allow_negative: boolean
           freeze_days: number
+          freeze_from: string
+          freeze_to: string
           lessons_left: number
           refund_tiyin: number
           state: string
         }[]
+      }
+      subscription_visible_to_caller: {
+        Args: { p_subscription_id: string }
+        Returns: boolean
       }
       substitute_teacher: {
         Args: { p_lesson_id: string; p_new_teacher_id: string }

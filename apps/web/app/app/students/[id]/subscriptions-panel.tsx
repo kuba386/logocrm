@@ -313,22 +313,38 @@ function SubscriptionCard({
         </div>
       </div>
 
-      {subscription.state === 'frozen' && subscription.freezeFrom ? (
+      {/* freezeFrom, не state === 'frozen': subscription_summary отдаёт
+          диапазон и для заморозки, идущей сейчас, и для ещё не начавшейся
+          (state тогда 'active' — period не покрывает сегодня), и для
+          исчерпанного/expired-под-заморозкой (state там не 'frozen', но
+          пауза реальна) — карточка не должна выглядеть пустой в этих
+          случаях. */}
+      {subscription.freezeFrom ? (
         <p className="text-sm text-muted-foreground">
-          Заморожен с {calendarDate(subscription.freezeFrom, timeZone)}
+          {subscription.state === 'frozen' ? 'Заморожен с ' : 'Будет заморожен с '}
+          {calendarDate(subscription.freezeFrom, timeZone)}
           {subscription.freezeTo ? ` по ${calendarDate(subscription.freezeTo, timeZone)}` : ', пока не разморозят'}
           {subscription.freezeDays > 0 ? ` · ${subscription.freezeDays} дн.` : ''}
         </p>
       ) : null}
 
-      {subscription.state === 'active' || subscription.state === 'exhausted' ? (
+      {/* !freezeFrom: пока есть незакрытая заморозка (текущая или ещё не
+          начавшаяся), freeze_subscription всё равно откажет «уже есть
+          незакрытая заморозка» — кнопка не должна предлагать заведомо
+          проигрышное действие. */}
+      {(subscription.state === 'active' || subscription.state === 'exhausted') && !subscription.freezeFrom ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           <FreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>
       ) : null}
-      {/* Разморозить можно только открытую заморозку: у закрытой RPC откажет
-          «У абонемента нет открытой заморозки», и кнопка обещала бы несбыточное. */}
-      {subscription.state === 'frozen' && subscription.freezeFrom && !subscription.freezeTo ? (
+      {/* Разморозить можно открытую (без даты конца) заморозку и любую ещё
+          не начавшуюся (freezeFrom в будущем, state ещё не 'frozen') — обе
+          unfreeze_subscription закрывает или отменяет целиком. Закрытую
+          датированную, уже идущую (freezeTo есть И state === 'frozen'),
+          снять раньше срока нельзя — RPC откажет «У абонемента нет
+          открытой заморозки», и кнопка обещала бы несбыточное
+          (продуктовое решение 2, см. заголовок миграции 0015). */}
+      {subscription.freezeFrom && !(subscription.freezeTo && subscription.state === 'frozen') ? (
         <div className="border-t border-border pt-3">
           <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>

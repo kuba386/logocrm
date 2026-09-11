@@ -132,7 +132,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ] = await Promise.all([
         supabase
           .from('subscriptions')
-          .select('id, type_id, price_tiyin, starts_at, ends_at, status')
+          .select('id, type_id, price_tiyin, starts_at, ends_at')
           .eq('student_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
@@ -161,42 +161,19 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       ])
 
     const typeNameById = new Map((typeRows ?? []).map((t) => [t.id, t.name]))
-    const subscriptionIds = (subsRows ?? []).map((row) => row.id)
 
-    const [summaries, { data: freezeRows }] = await Promise.all([
-      Promise.all((subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id }))),
-      subscriptionIds.length
-        ? supabase.from('subscription_freezes').select('subscription_id, period').in('subscription_id', subscriptionIds)
-        : Promise.resolve({ data: [] as { subscription_id: string; period: unknown }[] }),
-    ])
-
-    // period приходит текстом daterange: «[2026-09-12,2026-09-15)» или
-    // «[2026-09-12,)» у открытой. Верхняя граница исключающая, поэтому
-    // последний замороженный день — на сутки раньше: человеку показываем
-    // «по 14.09», а не «по 15.09», иначе он насчитает лишний день.
-    const freezeBySubscription = new Map<string, { from: string | null; to: string | null }>()
-    for (const row of freezeRows ?? []) {
-      const raw = typeof row.period === 'string' ? row.period : ''
-      const match = /^[[(]([^,]*),([^)\]]*)[)\]]$/.exec(raw)
-      if (!match) continue
-
-      const from = (match[1] ?? '').replaceAll('"', '').trim()
-      const upper = (match[2] ?? '').replaceAll('"', '').trim()
-      const isOpen = upper === '' || upper === 'infinity'
-
-      let to: string | null = null
-      if (!isOpen) {
-        const lastDay = new Date(`${upper}T00:00:00Z`)
-        lastDay.setUTCDate(lastDay.getUTCDate() - 1)
-        to = lastDay.toISOString().slice(0, 10)
-      }
-
-      freezeBySubscription.set(row.subscription_id, { from: from || null, to })
-    }
+    // Границы текущей заморозки — из subscription_summary (freeze_from/
+    // freeze_to, последний замороженный день уже посчитан на сервере как
+    // upper(period) - 1), а не разбором daterange-текста на клиенте: тот
+    // разбор был вторым источником правды о заморозке рядом с subscription_
+    // state и мог показать не ту же дату, что называет исключение при
+    // отметке (0015_freeze_state_unification.sql, раздел 8).
+    const summaries = await Promise.all(
+      (subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id })),
+    )
 
     const subscriptions: SubscriptionView[] = (subsRows ?? []).map((row, index) => {
       const summary = summaries[index]?.data?.[0]
-      const freeze = freezeBySubscription.get(row.id)
       return {
         id: row.id,
         typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
@@ -204,11 +181,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         startsAt: row.starts_at,
         endsAt: row.ends_at,
         lessonsLeft: summary?.lessons_left ?? null,
-        state: summary?.state ?? row.status,
+        // '' — не значение state, честный "неизвестно" на случай отказа
+        // RPC: подстановка 'active' сюда показала бы "Действует" для,
+        // например, отменённого абонемента. SUBSCRIPTION_STATE_LABELS/
+        // _CLASSES в subscriptions-panel.tsx уже падают на нейтральный
+        // вид при неизвестном ключе (?? в обоих лукапах).
+        state: summary?.state ?? '',
         freezeDays: summary?.freeze_days ?? 0,
         refundTiyin: summary?.refund_tiyin ?? 0,
-        freezeFrom: freeze?.from ?? null,
-        freezeTo: freeze?.to ?? null,
+        freezeFrom: summary?.freeze_from ?? null,
+        freezeTo: summary?.freeze_to ?? null,
       }
     })
 

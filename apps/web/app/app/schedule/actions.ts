@@ -271,15 +271,24 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
     if (isAdmin) {
       const { data } = await supabase
         .from('student_balance')
-        .select('student_id, active_subscription_id, lessons_left')
+        .select('student_id, active_subscription_id, lessons_left, state')
         .in('student_id', studentIds)
       return (data ?? []).map((row) => {
         // lessons_left = null неоднозначен сам по себе: у student_balance
         // это и «абонемент безлимитный», и «абонемента нет вовсе» —
         // отличает только active_subscription_id. DESIGN.md уже наступал
         // на этот же null в другом месте (0010, «Пробелы» по subscription_lessons_left).
+        //
+        // state считается на СЕГОДНЯ, а отметка в этой же панели — на дату
+        // ЗАНЯТИЯ (attendance_fill_and_check, v_lesson_date). Для занятия
+        // из другого дня рядом с границей заморозки метка может разойтись
+        // с тем, что ответит клик «Пришёл» — известный, не устранённый в
+        // этой миграции пробел (0015_freeze_state_unification.sql, раздел
+        // 11 в шапке файла); для сегодняшних занятий, подавляющего
+        // большинства отметок, метка точна.
         let label: string
         if (!row.active_subscription_id) label = 'нет абонемента'
+        else if (row.state === 'frozen') label = 'заморожен'
         else if (row.lessons_left == null) label = 'без лимита'
         else label = `${row.lessons_left} зан.`
         return { studentId: row.student_id ?? '', label }
