@@ -123,6 +123,10 @@ describe('installmentDueDates — зеркало календаря create_insta
     expect(installmentDueDates('2028-01-31', 2)).toEqual(['2028-01-31', '2028-02-29'])
   })
 
+  it('те же входные данные, что pgTAP 0018 (sub7): 2030-01-31 на 3', () => {
+    expect(installmentDueDates('2030-01-31', 3)).toEqual(['2030-01-31', '2030-02-28', '2030-03-31'])
+  })
+
   it('шаг два месяца и переход через год', () => {
     expect(installmentDueDates('2026-11-15', 3, 2)).toEqual(['2026-11-15', '2027-01-15', '2027-03-15'])
   })

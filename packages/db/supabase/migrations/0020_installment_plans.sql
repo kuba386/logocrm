@@ -74,20 +74,30 @@ select i.plan_id, i.center_id, i.subscription_id, i.student_id, i.payer_id, i.ba
 
 -- В 0018 оплаченный целиком старый план оставался «живым» рядом с новым —
 -- до частичного индекса такие старые планы гасятся: живым остаётся самый
--- поздний.
+-- поздний. Тай-брейк по id: у планов одной транзакции created_at равны,
+-- строгое «позже» оставило бы оба живыми и уронило бы индекс ниже.
 update public.installment_plans p
    set cancelled_at = now()
- where p.cancelled_at is null
-   and exists (
-     select 1 from public.installment_plans q
-      where q.subscription_id = p.subscription_id
-        and q.cancelled_at is null
-        and q.created_at > p.created_at
-   );
+  from (
+    select q.id,
+           row_number() over (partition by q.subscription_id order by q.created_at desc, q.id desc) as rn
+      from public.installment_plans q
+     where q.cancelled_at is null
+  ) d
+ where d.id = p.id and d.rn > 1;
 
 -- Хранимый инвариант «один живой план на абонемент» (Р7).
 create unique index if not exists installment_plans_one_live_key
   on public.installment_plans (subscription_id) where cancelled_at is null;
+
+-- Для составного FK со строки: «строка принадлежит плану того же
+-- абонемента, ребёнка и плательщика» — хранимый факт, а не следствие того,
+-- что единственный RPC подставляет v_sub.* в оба insert. Иначе запись мимо
+-- RPC (service_role, будущий бэкфилл) сдвинула бы нарастающие итоги чужого
+-- плана — и pay_installment провёл бы неверную сумму.
+alter table public.installment_plans
+  add constraint installment_plans_identity_key
+  unique (id, subscription_id, student_id, payer_id, center_id);
 
 create index if not exists installment_plans_center_idx on public.installment_plans (center_id);
 create index if not exists installment_plans_subscription_idx on public.installment_plans (subscription_id);
@@ -119,7 +129,8 @@ drop view if exists public.installments_view;
 
 alter table public.installments
   add constraint installments_plan_fk
-  foreign key (plan_id, center_id) references public.installment_plans (id, center_id);
+  foreign key (plan_id, subscription_id, student_id, payer_id, center_id)
+  references public.installment_plans (id, subscription_id, student_id, payer_id, center_id);
 
 -- Частичный индекс 0018 зависел от cancelled_at.
 drop index if exists public.installments_center_due_idx;
@@ -168,7 +179,9 @@ grant select on public.installments_view to authenticated;
 drop function if exists public.installments_cancel_unpaid(uuid);
 
 -- Гасит ВСЕ живые планы абонемента (Р7). Без грантов ни у кого, включая
--- service_role: зовётся только из definer-функций ниже.
+-- service_role: зовётся только из definer-функций ниже. Плюс проверка
+-- внутри, не зависящая от ACL: живой пользователь — только owner/admin
+-- центра абонемента (триггерный путь без uid проходит).
 create or replace function public.installment_plans_cancel_live(p_subscription_id uuid)
   returns integer
   language plpgsql
@@ -176,8 +189,18 @@ create or replace function public.installment_plans_cancel_live(p_subscription_i
   set search_path = ''
 as $$
 declare
-  v_count integer;
+  v_center uuid;
+  v_count  integer;
 begin
+  select s.center_id into v_center from public.subscriptions s where s.id = p_subscription_id;
+  if v_center is null then
+    return 0;
+  end if;
+  if auth.uid() is not null
+     and coalesce(public.role_in(v_center), '') not in ('owner', 'admin') then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
   update public.installment_plans p
      set cancelled_at = now()
    where p.subscription_id = p_subscription_id
@@ -232,11 +255,14 @@ begin
   perform public.emit_event('installment_plan.cancelled',
     jsonb_build_object(
       'center_id', v_center, 'plan_id', v_plan.id, 'subscription_id', p_subscription_id,
-      'student_id', v_plan.student_id, 'payer_id', v_plan.payer_id
+      'student_id', v_plan.student_id, 'payer_id', v_plan.payer_id,
+      'unpaid', v_unpaid
     ),
     v_center);
 
-  return v_rows;
+  -- Сколько платежей перестало ожидаться — для «Отменено N платежей»;
+  -- оплаченные строки плана в это число не входят.
+  return v_unpaid;
 end;
 $$;
 
@@ -275,7 +301,30 @@ create or replace function public.create_installment_plan(
   -- 23514, как refund_subscription(p_expected_tiyin). null — без сверки.
   p_expected_remaining_tiyin integer  default null
 )
-  returns setof public.installments_view
+  -- Явный returns table, не setof installments_view: тип вью в сигнатуре
+  -- цементирует вью (drop view упал бы на зависимости), а её ещё будут
+  -- править. Колонки — те же, что у вью, в том же порядке.
+  returns table (
+    id                  uuid,
+    center_id           uuid,
+    subscription_id     uuid,
+    student_id          uuid,
+    payer_id            uuid,
+    plan_id             uuid,
+    base_paid_tiyin     integer,
+    cancelled_at        timestamptz,
+    seq                 smallint,
+    due_date            date,
+    amount_tiyin        integer,
+    due_notified_at     timestamptz,
+    overdue_notified_at timestamptz,
+    created_at          timestamptz,
+    updated_at          timestamptz,
+    price_tiyin         integer,
+    paid_tiyin          integer,
+    cumulative_tiyin    integer,
+    state               text
+  )
   language plpgsql
   security definer
   set search_path = ''
@@ -301,8 +350,10 @@ begin
     raise exception 'Шаг рассрочки — целое число месяцев, не меньше одного' using errcode = '22023';
   end if;
 
-  select * into v_sub from public.subscriptions
-   where id = p_subscription_id and center_id = v_center and deleted_at is null
+  -- Все ссылки на колонки — с алиасом: имена OUT-параметров returns table
+  -- (id, subscription_id, …) иначе затеняют их («column reference is ambiguous»).
+  select s.* into v_sub from public.subscriptions s
+   where s.id = p_subscription_id and s.center_id = v_center and s.deleted_at is null
    for update;
   if not found then
     raise exception 'Абонемент не найден' using errcode = '42704';
@@ -310,16 +361,18 @@ begin
   if v_sub.status = 'cancelled' then
     raise exception 'Абонемент отменён — рассрочка невозможна' using errcode = '22023';
   end if;
+
+  -- Остаток раньше живого плана: у оплаченного абонемента с живым планом
+  -- иначе получался тупик «отмените рассрочку» ↔ «отменять нечего».
+  v_remaining := v_sub.price_tiyin - v_sub.paid_tiyin;
+  if v_remaining <= 0 then
+    raise exception 'Абонемент оплачен — рассрочивать нечего' using errcode = '22023';
+  end if;
   if exists (
     select 1 from public.installment_plans p
      where p.subscription_id = v_sub.id and p.cancelled_at is null
   ) then
     raise exception 'По абонементу уже есть рассрочка — сначала отмените её' using errcode = '22023';
-  end if;
-
-  v_remaining := v_sub.price_tiyin - v_sub.paid_tiyin;
-  if v_remaining <= 0 then
-    raise exception 'Абонемент оплачен — рассрочивать нечего' using errcode = '22023';
   end if;
   if p_expected_remaining_tiyin is not null and p_expected_remaining_tiyin <> v_remaining then
     raise exception 'Остаток изменился, пока готовили рассрочку: сейчас % тыйын. Проверьте расчёт.', v_remaining
@@ -338,7 +391,7 @@ begin
   insert into public.installment_plans
     (center_id, subscription_id, student_id, payer_id, base_paid_tiyin, created_by)
   values (v_center, v_sub.id, v_sub.student_id, v_sub.payer_id, v_sub.paid_tiyin, auth.uid())
-  returning id into v_plan;
+  returning installment_plans.id into v_plan;
 
   v_base  := v_remaining / p_n;
   v_extra := v_remaining % p_n;
@@ -364,7 +417,11 @@ begin
   -- Строки — в ответ: интерфейс перерисовывается по ответу сервера, не по
   -- предпросмотру из браузера.
   return query
-    select * from public.installments_view v
+    select v.id, v.center_id, v.subscription_id, v.student_id, v.payer_id, v.plan_id,
+           v.base_paid_tiyin, v.cancelled_at, v.seq, v.due_date, v.amount_tiyin,
+           v.due_notified_at, v.overdue_notified_at, v.created_at, v.updated_at,
+           v.price_tiyin, v.paid_tiyin, v.cumulative_tiyin, v.state
+      from public.installments_view v
      where v.plan_id = v_plan
      order by v.seq;
 end;

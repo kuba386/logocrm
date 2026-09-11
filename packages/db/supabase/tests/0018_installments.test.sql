@@ -11,7 +11,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(73);
+select plan(79);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -68,7 +68,8 @@ select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000
 -- sub1 — чек-лист (4 000 сом, аванс 2 000, рассрочка 2×1 000);
 -- sub2 — остаток 100 000 на 3 и отмена триггером; sub3 — 2 тыйына (n > остатка);
 -- sub4 — уведомления, отмена плана целиком, возврат; sub5 — архивный ученик;
--- sub6 — гонка предпросмотра, окно просрочки, null-дата.
+-- sub6 — гонка предпросмотра, окно просрочки, null-дата; sub7 — календарь
+-- с фиксированной датой (те же входные данные, что finance.test.ts).
 insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, lessons_total, price_tiyin,
                                    lesson_price_tiyin, starts_at) values
   ('88880000-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a',
@@ -88,6 +89,9 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, type_id, 
    (date_trunc('month', now() - interval '1 month'))::date),
   ('88880000-0000-0000-0000-000000000006','cccccccc-0000-0000-0000-00000000000a',
    'eeeeeeee-0000-0000-0000-000000000002','dddddddd-0000-0000-0000-000000000002', null, 2, 60000, 30000,
+   (date_trunc('month', now() - interval '1 month'))::date),
+  ('88880000-0000-0000-0000-000000000007','cccccccc-0000-0000-0000-00000000000a',
+   'eeeeeeee-0000-0000-0000-000000000002','dddddddd-0000-0000-0000-000000000002', null, 3, 90000, 30000,
    (date_trunc('month', now() - interval '1 month'))::date);
 
 
@@ -299,6 +303,14 @@ select is(
   'summary: переплата — overpaid, не paid'
 );
 
+-- Оплаченный абонемент с живым (оплаченным) планом: остаток проверяется
+-- раньше живого плана — иначе тупик «отмените рассрочку» ↔ «отменять нечего».
+select throws_ok(
+  $q$ select * from public.create_installment_plan('88880000-0000-0000-0000-000000000001', 2) $q$,
+  '22023', 'Абонемент оплачен — рассрочивать нечего',
+  'Оплаченный абонемент: «рассрочивать нечего», а не «сначала отмените рассрочку»'
+);
+
 -- sub5 — план из одной строки со сроком сегодня, ученик уходит в архив.
 select count(*) from public.create_installment_plan('88880000-0000-0000-0000-000000000005', 1,
   public.center_today('cccccccc-0000-0000-0000-00000000000a'));
@@ -323,6 +335,17 @@ select is(
   'Календарь: каждая дата — «первая + k месяцев», не цепочкой (finance.ts::installmentDueDates — те же правила)'
 );
 
+-- Фиксированная дата — те же входные данные, что в finance.test.ts:
+-- 31 января → 28 февраля (прижим) → 31 марта (не дрейф цепочкой).
+select count(*) from public.create_installment_plan('88880000-0000-0000-0000-000000000007', 3, '2030-01-31');
+
+select is(
+  (select array_agg(due_date order by seq) from public.installments
+    where subscription_id = '88880000-0000-0000-0000-000000000007'),
+  array['2030-01-31'::date, '2030-02-28'::date, '2030-03-31'::date],
+  'Календарь на фиксированной дате: 2030-01-31 → 02-28 → 03-31 (общий набор с Vitest)'
+);
+
 reset role;
 
 
@@ -342,20 +365,27 @@ select is(
 
 -- 33-45. installments_notify — due / overdue, окно, идемпотентность, null-дата ------
 
--- Имитация хода времени: вторая строка sub4 просрочена на день, первая
--- строка sub6 — на 400 дней (вне окна уведомлений).
+-- Имитация хода времени: sub4 seq 2 просрочена на день, seq 3 — ровно на
+-- 30 (граница окна, внутри); sub6 seq 1 — на 31 (вне окна), seq 2 — сегодня
+-- (второй абонемент в due: CTE today не должна схлопывать выборку).
 update public.installments
    set due_date = public.center_today('cccccccc-0000-0000-0000-00000000000a') - 1
  where subscription_id = '88880000-0000-0000-0000-000000000004' and seq = 2;
 update public.installments
-   set due_date = public.center_today('cccccccc-0000-0000-0000-00000000000a') - 400
+   set due_date = public.center_today('cccccccc-0000-0000-0000-00000000000a') - 30
+ where subscription_id = '88880000-0000-0000-0000-000000000004' and seq = 3;
+update public.installments
+   set due_date = public.center_today('cccccccc-0000-0000-0000-00000000000a') - 31
  where subscription_id = '88880000-0000-0000-0000-000000000006' and seq = 1;
+update public.installments
+   set due_date = public.center_today('cccccccc-0000-0000-0000-00000000000a')
+ where subscription_id = '88880000-0000-0000-0000-000000000006' and seq = 2;
 
 select is(
   (select array_agg(state order by seq) from public.installments_view
     where subscription_id = '88880000-0000-0000-0000-000000000004'),
-  array['due', 'overdue', 'upcoming'],
-  'installments_view: состояния sub4 — due / overdue / upcoming от center_today центра'
+  array['due', 'overdue', 'overdue'],
+  'installments_view: состояния sub4 — due / overdue / overdue от center_today центра'
 );
 
 -- Cron-контекст: без auth.uid().
@@ -363,16 +393,16 @@ select public.tests_claims(null, null);
 
 create temporary table t_notify as select * from public.installments_notify();
 
-select is((select due_count from t_notify), 2, 'installments_notify: два due (sub4 seq 1, sub6 seq 2)');
-select is((select overdue_count from t_notify), 1, 'installments_notify: одно overdue (sub4 seq 2); sub6 seq 1 — вне окна 30 дней');
+select is((select due_count from t_notify), 2, 'installments_notify: два due (sub4 seq 1, sub6 seq 2) — два абонемента в одной выборке');
+select is((select overdue_count from t_notify), 2, 'installments_notify: два overdue (sub4 seq 2 — вчера, seq 3 — ровно 30 дней, внутри окна)');
 
 select is(
   (select count(*)::int from public.events where type = 'installment.due'), 2,
   'События installment.due — ровно два'
 );
 select is(
-  (select count(*)::int from public.events where type = 'installment.overdue'), 1,
-  'Событие installment.overdue — ровно одно'
+  (select count(*)::int from public.events where type = 'installment.overdue'), 2,
+  'События installment.overdue — ровно два'
 );
 select is(
   (select payload->>'amount_tiyin' from public.events
@@ -390,7 +420,12 @@ select is(
 select ok(
   (select overdue_notified_at is null from public.installments
     where subscription_id = '88880000-0000-0000-0000-000000000006' and seq = 1),
-  'Просрочка старше 30 дней не уведомляется — первый запуск планировщика не даёт залп'
+  'Просрочка на 31 день — вне окна, не уведомляется: первый запуск планировщика не даёт залп'
+);
+select ok(
+  (select overdue_notified_at is not null from public.installments
+    where subscription_id = '88880000-0000-0000-0000-000000000004' and seq = 3),
+  'Просрочка ровно на 30 дней — граница окна включительно, уведомлена'
 );
 
 select is(
@@ -494,6 +529,11 @@ select throws_ok(
   '42704', null,
   'Владелец центра Б по uuid абонемента центра А — 42704, не суммы чужого ребёнка'
 );
+select throws_ok(
+  $q$ select public.cancel_installment_plan('88880000-0000-0000-0000-000000000001') $q$,
+  '42704', null,
+  'Владелец центра Б не отменяет план центра А — 42704'
+);
 
 reset role;
 
@@ -532,8 +572,8 @@ select 'p_b1', public.pay_installment(
     where v.subscription_id = '88880000-0000-0000-0000-000000000004' and v.state <> 'cancelled' and v.seq = 1));
 
 select is(
-  public.cancel_installment_plan('88880000-0000-0000-0000-000000000004'), 2,
-  'Отмена плана с оплаченной первой строкой — обе строки плана (вернулось 2)'
+  public.cancel_installment_plan('88880000-0000-0000-0000-000000000004'), 1,
+  'Отмена плана с оплаченной первой строкой — возвращает число неоплаченных (1), для «Отменено N платежей»'
 );
 select is(
   (select count(*)::int from public.installments_view
@@ -592,6 +632,29 @@ select ok(
   'installments_notify открыта service_role — вход планировщика этапа 6 (сознательно)'
 );
 
+-- Строка принадлежит плану того же абонемента: sub3 — тот же ребёнок и
+-- плательщик, что у sub1, так что остальные FK проходят, отбивает именно
+-- installments_plan_fk по пяти колонкам.
+select throws_ok(
+  $q$ update public.installments set subscription_id = '88880000-0000-0000-0000-000000000003'
+       where subscription_id = '88880000-0000-0000-0000-000000000001' and seq = 1 $q$,
+  '23503', null,
+  'Строку нельзя перевесить на другой абонемент, оставив plan_id чужого плана — 23503, а не тихий пересчёт порогов'
+);
+
+-- Внутренняя проверка installment_plans_cancel_live: даже с выданным
+-- грантом живой пользователь чужого центра получает 42501.
+grant execute on function public.installment_plans_cancel_live(uuid) to authenticated;
+select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000b');
+set local role authenticated;
+select throws_ok(
+  $q$ select public.installment_plans_cancel_live('88880000-0000-0000-0000-000000000001') $q$,
+  '42501', null,
+  'installment_plans_cancel_live от владельца чужого центра — 42501 внутри функции, даже с грантом'
+);
+reset role;
+revoke execute on function public.installment_plans_cancel_live(uuid) from authenticated;
+
 
 -- 68. Гранты — белый список 0007 актуален -----------------------------------------
 
@@ -625,8 +688,8 @@ select is(
   'summary sub4: отменённые планы в installments_total не считаются'
 );
 select is(
-  (select count(*)::int from public.events where type = 'installment_plan.created'), 6,
-  'installment_plan.created — по одному на каждый созданный план (sub1, sub2, sub6, sub5, sub4 A, sub4 B)'
+  (select count(*)::int from public.events where type = 'installment_plan.created'), 7,
+  'installment_plan.created — по одному на каждый созданный план (sub1, sub2, sub6, sub5, sub4 A, sub7, sub4 B)'
 );
 
 select * from finish();

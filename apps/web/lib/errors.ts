@@ -219,9 +219,9 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   if (code === UNIQUE_VIOLATION) {
     const name = uniqueConstraintName(message)
     if (name && UNIQUE_MESSAGES[name]) return { message: UNIQUE_MESSAGES[name] }
-    // Неизвестное имя — нативный текст как есть: в нём хотя бы названо
-    // ограничение, «Такая запись уже есть» без него менее полезно.
-    return { message: message || 'Такая запись уже есть' }
+    // Нативный констрейнт без текста в карте — русский фолбэк, как у CHECK и
+    // FK: английский текст с именем объекта схемы пользователю не показывается.
+    return { message: name ? 'Такая запись уже есть' : message || 'Такая запись уже есть' }
   }
 
   if (code === NOT_FOUND) {
