@@ -1,4 +1,4 @@
--- pgTAP: составные FK (id, center_id) на границах тенанта (миграция 0019).
+-- pgTAP: составные FK (id, center_id) на границах тенанта (миграция 0021).
 --
 -- Все новые FK — обычные, immediate (не deferred, см. шапку миграции, Р3):
 -- нарушение всплывает сразу в момент insert/update, поэтому throws_ok ниже
@@ -6,7 +6,7 @@
 --
 -- Отдельный блок (раздел «BEFORE-триггер») воспроизводит саму утечку, ради
 -- которой писалась миграция: занятие центра А со student_id ребёнка центра Б,
--- у которого уже есть реальное занятие в центре Б на то же время. До 0019 это
+-- у которого уже есть реальное занятие в центре Б на то же время. До 0021 это
 -- дошло бы до AFTER-триггера lessons_sync_participants → exclusion_violation
 -- → текст ошибки с ФИО чужого ребёнка. Проверяется и то, что ошибка теперь
 -- читаемая (BEFORE-триггер раздела 3), и то, что в её тексте ФИО ребёнка Б
@@ -143,7 +143,7 @@ select throws_ok(
 select throws_ok(
   $q$ insert into public.invitations (id, center_id, role, payer_id)
       values ('30000000-0000-0000-0000-000000000007','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-00000000000b') $q$,
-  '23503', null, 'invitations_payer_fk: плательщик центра Б в приглашении центра А (FK не существовал до 0019)'
+  '23503', null, 'invitations_payer_fk: плательщик центра Б в приглашении центра А (FK не существовал до 0021)'
 );
 
 select lives_ok(
@@ -169,13 +169,13 @@ select lives_ok(
 select throws_ok(
   $q$ insert into public.memberships (user_id, center_id, role, teacher_id)
       values ('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-00000000000a','teacher','aaaaaaaa-0000-0000-0000-00000000000b') $q$,
-  '23503', null, 'memberships_teacher_fk: специалист центра Б в членстве центра А (FK не существовал до 0019)'
+  '23503', null, 'memberships_teacher_fk: специалист центра Б в членстве центра А (FK не существовал до 0021)'
 );
 
 select throws_ok(
   $q$ insert into public.memberships (user_id, center_id, role, payer_id)
       values ('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-00000000000b') $q$,
-  '23503', null, 'memberships_payer_fk: плательщик центра Б в членстве центра А (FK не существовал до 0019)'
+  '23503', null, 'memberships_payer_fk: плательщик центра Б в членстве центра А (FK не существовал до 0021)'
 );
 
 select lives_ok(
@@ -447,7 +447,7 @@ select is(
 
 -- 43-44. BEFORE-триггер закрывает саму утечку ФИО через exclusion_violation ------
 --
--- До 0019 этот insert прошёл бы RLS/грант (owner центра А), дошёл до AFTER-
+-- До 0021 этот insert прошёл бы RLS/грант (owner центра А), дошёл до AFTER-
 -- триггера lessons_sync_participants → rebuild_lesson_participants →
 -- exclusion_violation с реальным занятием ребёнка Б (фикстура выше) →
 -- текст ошибки с его ФИО. Составной FK (раздел 2) — даже немедленный — не
