@@ -310,6 +310,56 @@ export const studentAbsentStreakSchema = z.object({
 })
 export type StudentAbsentStreak = z.infer<typeof studentAbsentStreakSchema>
 
+/**
+ * Снимок начисленной зарплаты специалиста за месяц (0017) — эмитится вместе
+ * со строкой salary_runs, не самим calc_salary: тот читает живые данные
+ * (ставка, статус отметки, замена специалиста могут поменяться позже),
+ * снимок — единственный источник "сколько заплатили в этом месяце".
+ */
+export const salaryCalculatedSchema = z.object({
+  type: z.literal('salary.calculated'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    salary_run_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    month: z.string(),
+    total_tiyin: z.number().int(),
+  }),
+})
+export type SalaryCalculated = z.infer<typeof salaryCalculatedSchema>
+
+/** Бонус или штраф к зарплате за месяц (0017, record_salary_adjustment). */
+export const salaryAdjustmentRecordedSchema = z.object({
+  type: z.literal('salary.adjustment_recorded'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    adjustment_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    month: z.string(),
+    /** Отрицательное — штраф. Ноль запрещён констрейнтом. */
+    amount_tiyin: z.number().int(),
+  }),
+})
+export type SalaryAdjustmentRecorded = z.infer<typeof salaryAdjustmentRecordedSchema>
+
+export const teacherArchivedSchema = z.object({
+  type: z.literal('teacher.archived'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+  }),
+})
+export type TeacherArchived = z.infer<typeof teacherArchivedSchema>
+
+export const teacherRestoredSchema = z.object({
+  type: z.literal('teacher.restored'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+  }),
+})
+export type TeacherRestored = z.infer<typeof teacherRestoredSchema>
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -337,6 +387,10 @@ export const appEventSchema = z.discriminatedUnion('type', [
   attendanceMarkedSchema,
   attendanceNoSubscriptionSchema,
   studentAbsentStreakSchema,
+  salaryCalculatedSchema,
+  salaryAdjustmentRecordedSchema,
+  teacherArchivedSchema,
+  teacherRestoredSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -359,6 +413,10 @@ export const appEventTypes = [
   'lesson.substituted',
   'lesson.rescheduled',
   'teacher.vacation',
+  'teacher.archived',
+  'teacher.restored',
+  'salary.calculated',
+  'salary.adjustment_recorded',
 ] as const
 export type AppEventType = (typeof appEventTypes)[number]
 

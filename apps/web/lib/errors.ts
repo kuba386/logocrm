@@ -65,6 +65,12 @@ const CHECK_MESSAGES: Record<string, string> = {
   expenses_amount_not_zero: 'Сумма не может быть нулевой',
   expenses_kind_known: 'Неизвестный тип операции',
   expenses_sign_matches_kind: 'Сумма не соответствует типу операции',
+  teacher_rates_model_known: 'Неизвестная модель ставки',
+  teacher_rates_value_not_negative: 'Значение ставки не может быть отрицательным',
+  teacher_rates_percent_bounded: 'Процент не может превышать 100',
+  salary_adjustments_month_is_first_of_month: 'Месяц корректировки — первое число месяца',
+  salary_adjustments_amount_not_zero: 'Сумма не может быть нулевой',
+  salary_runs_month_is_first_of_month: 'Месяц начисления — первое число месяца',
 }
 
 /**
@@ -81,6 +87,11 @@ const FK_MESSAGES: Record<string, string> = {
   payments_payer_fk: 'Плательщик не найден',
   expenses_category_fk: 'Статья расхода не найдена — возможно, она из другого центра',
   expenses_source_fk: 'Источник оплаты не найден',
+  teacher_rates_teacher_fk: 'Специалист не найден',
+  teacher_rates_service_fk: 'Услуга не найдена — возможно, она из другого центра',
+  salary_adjustments_teacher_fk: 'Специалист не найден',
+  salary_runs_teacher_fk: 'Специалист не найден',
+  attendance_paid_teacher_fk: 'Специалист не найден',
 }
 
 function checkConstraintName(message: string): string | null {
