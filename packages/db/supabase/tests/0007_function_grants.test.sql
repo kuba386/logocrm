@@ -56,7 +56,8 @@ from unnest(array[
   'public.emit_event_unchecked(text,jsonb,uuid)',
   'public.installments_notify()',
   'public.installment_plans_cancel_live(uuid)',
-  'public.subscriptions_cancel_installments()'
+  'public.subscriptions_cancel_installments()',
+  'public.memberships_last_owner_guard()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 

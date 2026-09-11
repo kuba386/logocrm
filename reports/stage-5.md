@@ -25,13 +25,140 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
   disabled на кнопке. Оплата без источника, дата в будущем, переплата —
   отказ. 0007 — белый список; `errors.ts` — `subscriptions_sale_key_key`.
   Architect по плану — 12 находок, по коду — второй раунд до PR.
-- `0024_roles_registrar_finance.sql` — роли `registrar` и `finance`
-  («Доработка» п.1): `memberships.role`/`invitations.role` check;
-  `apply_tenant_rls` — решение «расширять `tenant_admin` или отдельные
-  политики по таблицам» принимается в Plan этой миграции (склоняюсь к
-  отдельным политикам: бухгалтер не должен получить таблицы этапа 7
-  автоматически); `change_member_role` — лестница назначений;
-  `FEATURE_MATRIX.md` — колонки перестают быть планом.
+- `0024_access_hygiene.sql` — долг грантов, найденный Advisors и ревью
+  плана ролей (architect, 12 находок — учтены ниже):
+  - **DELETE у `authenticated` так и висит** на таблицах 0001/0004/0005/
+    0006 (`students`, `payers`, `rooms`, `services`, `groups`,
+    `group_students`, `lessons`, `invitations`, `lesson_participants`,
+    `audit_log`, `events`, `centers`) — default privileges Supabase, снимали
+    только с таблиц 0008+. Сегодня его держит одна RLS (`tenant_admin` —
+    `for all`): владелец прямым `DELETE /rest/v1/students` уносит ребёнка с
+    каскадом по занятиям и посещениям без `deleted_at`. `revoke all … from
+    anon, authenticated` + точечные `grant` в объёме исходных миграций
+    (`select, insert, update` там, где было; `lesson_participants`,
+    `audit_log`, `events`, `memberships` — только `select`; `centers` —
+    `select, update`).
+  - anon: `SELECT` по грантам на 17 объектах, включая `memberships` — не
+    утечка (все политики `to authenticated`, вью `security_invoker`), а
+    отсутствующий второй слой на случай будущей политики `to public`.
+    Снимается вместе с DELETE; 4 вью 0004/0005 — `revoke all from anon,
+    authenticated; grant select to authenticated`.
+  - `memberships_select_self_or_admin` — `(select auth.uid())` (WARN
+    `auth_rls_initplan`); остальные политики зовут `role_in(center_id)` по
+    колонке строки — обернуть нельзя и не нужно.
+  - **Последний владелец — триггер, не две функции.** `change_member_role` и
+    `revoke_membership` считают владельцев в plpgsql, а `accept_invitation`
+    делает `on conflict do update set role` мимо обеих: единственный
+    владелец, кликнувший приглашение с ролью `parent` (после 0027 —
+    правдоподобное `finance`), оставляет центр без владельца. Триггер
+    `memberships_last_owner_guard` (before update or delete, 23514, тот же
+    текст) + `accept_invitation` при существующем членстве — отказ 23505
+    «Вы уже участник этого центра — роль меняет владелец», не перезапись
+    роли по ссылке.
+  - pgTAP: забор по каталогу без белых списков — `authenticated` без
+    `DELETE` ни на одной таблице/вью `public`, anon без единого права;
+    тест 0021 — белый список пустеет, вью вне списка 10; последний
+    владелец через `accept_invitation`, второй владелец понижается.
+- Роли `registrar` и `finance` («Доработка» п.1) — три миграции, три PR,
+  **порядок инвертирован**: сначала RPC, последней — политики и лестница.
+  Пока `memberships_role_check` не расширен, строка с новой ролью не
+  существует, промежуточные состояния безопасны по построению.
+  **Решение: `tenant_admin` не расширяется** — остаётся owner/admin; для
+  новых ролей отдельные политики по явному списку таблиц; таблица без
+  решения закрыта — этап 7 (диагностика, цели, ДЗ, `lesson_notes`) не
+  достанется бухгалтеру по умолчанию.
+  - `0025_roles_registrar_rpc.sql`: `memberships_role_check` и
+    `invitations_role_check` += `registrar`, `finance` (лестница ещё не
+    пускает — назначить нельзя, тесты сеют членство напрямую). Три
+    предиката вместо литералов в каждом гейте — иначе обёртка и внутренняя
+    функция разъедутся молча (`installment_plans_cancel_live` уже
+    заблокировала бы обе роли): `can_front_desk(p_center uuid default
+    current_center())` = owner/admin/registrar, `can_finance(...)` =
+    owner/admin/finance, `can_payments(...)` = все четыре; `stable`,
+    `coalesce(role_in(p_center), '')`. Перевыпуск с `can_front_desk()`:
+    `create_student_with_payer`, `archive_student`, `restore_student`,
+    `find_payer_by_phone`, `create_lesson_series` (0022),
+    `create_lesson_series_preview`, `lesson_slot_conflicts`,
+    `cancel_lesson`, `cancel_series_from`, `reschedule_lesson`,
+    `substitute_teacher`, `teacher_vacation`, `teacher_vacation_preview`,
+    `mark_attendance` (**0010**, не 0009 — в 0010 `coalesce` против
+    NULL-роли), `mark_lesson_status`, `sell_subscription`,
+    `sell_subscription_paid`, `freeze_subscription`,
+    `unfreeze_subscription`, `transfer_remaining`; с `can_payments()`:
+    `record_payment`, `refund_subscription`, `create_installment_plan`,
+    `pay_installment`, `cancel_installment_plan`,
+    `installment_plans_cancel_live` (role_in по центру подписки),
+    `subscription_summary`, `subscription_visible_to_caller`,
+    `payer_display_name` (ветка owner/admin). Тело — по `grep -n "create or
+    replace function public.<имя>("` на момент написания, не по памяти;
+    одна строка меняется. pgTAP: registrar lives / чужой центр / NULL-роль
+    (кейс 0010) на перевыпущенных; finance 42501 на функциях стойки.
+  - `0026_roles_finance_rpc.sql` — `can_finance()`: `record_expense`,
+    `archive/restore_expense_category`, `archive/restore_payment_source`,
+    `close_month` (`reopen_month` — только owner), `calc_salary` (ветка
+    owner/admin + проверка специалиста), `approve_salary`,
+    `record_salary_adjustment`, `salary_summary` (верхний список **и**
+    фильтр в CTE `scope`). Не получает: `archive/restore_teacher`,
+    `user_email`, функции расписания и учеников. `student_subscription_badge`
+    — без правки, finance проходит насквозь (остаток занятий ребёнка —
+    «ФИО и баланс», сознательно).
+  - `0027_roles_policies.sql`: процедура `apply_role_rls(tbl, p_role,
+    p_write boolean, p_soft_delete boolean)` — **без дефолтов** (12 таблиц
+    каталога без `deleted_at`), политики `tenant_<role>_select` и, при
+    записи, `tenant_<role>_insert`/`_update`; **`for all` не выдаётся никогда**
+    — DELETE нельзя открыть опечаткой. Вызовы:
+    - registrar, select+insert+update: `students`, `payers`, `groups`,
+      `group_students`, `lessons`, `attendance`; select: `teachers`,
+      `rooms`, `services`, `subscription_types`, `subscriptions` (правка
+      `notes`/`allow_negative`/`deleted_at` — решение о деньгах, остаётся
+      owner/admin), `subscription_freezes`, `payments`, `installment_plans`,
+      `installments`, `student_payers` (append-only, кладёт триггер),
+      `lesson_participants` (иначе состав группы на экране пуст —
+      `lesson_participants_read` перечисляет роли), `financial_periods`.
+      Нет: `expenses`, `expense_categories`, `teacher_rates`,
+      `salary_adjustments`, `salary_runs`, `invitations`, `audit_log`,
+      `events`.
+    - finance, select+insert: `teacher_rates` (ставка — прямая запись под
+      `approved_salary_guard`/`financial_period_guard`, как у admin; RPC
+      нет); select: `payments`, `expenses`, `expense_categories` (+
+      `_read_archived` — там `owner/admin` литералом), `payment_sources`,
+      `financial_periods`, `salary_adjustments`, `salary_runs`, `teachers`,
+      `payers`, `student_payers`, `students`, `subscriptions`,
+      `subscription_freezes`, `subscription_types`, `installment_plans`,
+      `installments`, `attendance`, `lessons`. Всё пишется через RPC.
+      **Отступление от ТЗ, на решение владельца:** `lessons.notes`,
+      `attendance.comment`, `students.notes` finance читает прямым запросом
+      — витрины выручки `security_invoker` с `join lessons` (без политики —
+      «выручка 0», а не «нет доступа»), `student_balance` — поверх
+      `students`. Колоночного разделения для роли не бывает (ADR-005);
+      честный путь — вынести заметки в отдельные таблицы (этап 7 заводит
+      `lesson_notes`) — тогда политика finance к ним не применяется и
+      колонка исчезает физически. Фиксируется явным pgTAP со ссылкой сюда.
+      Нет: `groups`, `group_students`, `rooms`, `services`, `invitations`,
+      `audit_log`, `events`, `lesson_participants`.
+    - Вью с ролью в теле: `revenue_by_month/teacher/service`,
+      `cash_by_source` — `can_finance()`; `student_balance` —
+      `can_payments()`; `expense_categories_read_archived` — `can_finance()`.
+    - Лестница: `change_member_role` — owner любую; admin — `teacher`,
+      `registrar`, `finance`, не трогает owner/admin. `create_invitation`:
+      `p_role in ('admin','teacher','parent','registrar','finance')`, admin
+      не приглашает admin; `teacher_id` только у `teacher`.
+    - `FEATURE_MATRIX.md`: курсив снимается, строки этапов 3–5 по коду; две
+      клетки поправить: «Участники» — своя строка видна (как teacher/
+      parent), «Плательщики У» у registrar — `archive_payer` не существует.
+    - pgTAP: `set_eq` по `pg_policies` на каждую таблицу каталога (новая
+      таблица этапа 7 без решения роняет тест); перебором по каталогу —
+      своя/чужая/запретная для обеих ролей, после блока «чужой центр» явный
+      `tests_claims`; лестница (admin→owner/admin — 42501, admin→registrar/
+      finance — lives, приглашения); `cancel_installment_plan` и
+      `refund_subscription` от обеих ролей — lives (цепочка
+      `installment_plans_cancel_live`); `revenue_by_month` для finance
+      непуст и **равен** сумме владельца; `student_balance` для обеих —
+      `state = 'active'` на живом абонементе; `lesson_participants`:
+      registrar 3 строки, finance 0, прямой insert — отказ у обоих.
+  - В приложении (`layout.tsx:52` знает `owner|admin`) — зеркало «роль →
+    экран» в Vitest на тех же случаях, что pgTAP; подсказка совпадает с
+    отказом базы.
 - pgTAP-пробелы из «Доработки» п.2 (каждый — отдельным кейсом, где нужно —
   правкой функции следующей миграцией):
   - переутверждение зарплаты после `reopen_month` — сейчас `approve_salary`
