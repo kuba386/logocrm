@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError } from '@/lib/errors'
+import { addDays } from '@/lib/timezone'
 
 export type SubscriptionState = AppError & { notice?: string }
 
@@ -50,12 +51,18 @@ export async function freezeSubscription(
   const from = String(formData.get('from') ?? '')
   if (!subscriptionId || !from) return { message: 'Укажите дату начала заморозки' }
 
+  const to = optional(formData, 'to')
+
   const supabase = await createClient()
   const { error } = await supabase.rpc('freeze_subscription', {
     p_id: subscriptionId,
     p_from: from,
-    // Пустая дата конца — открытый конец. RPC сам трактует NULL как «пока не разморозят».
-    p_to: optional(formData, 'to'),
+    // Поле «По» в форме — включительно (последний замороженный день), а
+    // freeze_subscription строит daterange с исключающей верхней границей:
+    // прибавляем день, иначе введённое 15.09 молча заморозило бы только по
+    // 14.09. Пустая дата конца — открытый конец, RPC сам трактует NULL как
+    // «пока не разморозят».
+    p_to: to ? addDays(to, 1) : undefined,
   })
 
   if (error) return toAppError(error, 'Не удалось заморозить абонемент')
@@ -72,6 +79,12 @@ export async function unfreezeSubscription(
   const subscriptionId = String(formData.get('subscriptionId') ?? '')
   if (!subscriptionId) return { message: 'Абонемент не найден' }
 
+  // UnfreezeForm не заводит поле «to» — форма разморозки задним числом ещё
+  // не сделана, поэтому optional() здесь всегда undefined и RPC берёт
+  // center_today(). Тот же +1 день, что и во freezeSubscription выше, здесь
+  // не нужен: p_to у unfreeze_subscription не «последний день заморозки»
+  // (включительно), а «с какого дня абонемент снова активен» — то есть уже
+  // исключающая граница по смыслу, а не только по типу daterange.
   const supabase = await createClient()
   const { error } = await supabase.rpc('unfreeze_subscription', {
     p_id: subscriptionId,

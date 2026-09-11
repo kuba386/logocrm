@@ -123,3 +123,28 @@ test('Этап 4, п.2: отметки посещения списывают, «
   await markDaniyar(page, 3, 'Прогул')
   expect(await daniyarRemaining(page)).toBe(5)
 })
+
+// Не абонемент Данияра: на нём цепочка admin → teacher → parent (teacher.spec.ts
+// помечает пятое занятие, parent.spec.ts проверяет «4 из 8» — заморозка
+// где-то в этой цепочке сдвинула бы остаток непредсказуемо). У Айлин в
+// фикстуре подписки нет и её остаток нигде не проверяется — независима.
+test('Заморозка с датой окончания покрывает введённый день, а не день раньше', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.ailin }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
+
+  const typeSelect = page.locator('select#typeId')
+  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
+  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
+  await typeSelect.selectOption(optionValue)
+  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+
+  // freeze_subscription строит daterange с исключающей верхней границей —
+  // без +1 дня на call site (subscription-actions.ts) 05.04.2027 молча
+  // осталось бы незамороженным, хотя поле «По» обещает включительно.
+  await page.getByLabel('С', { exact: true }).fill('2027-04-01')
+  await page.getByLabel('По (пусто — пока не разморозят)').fill('2027-04-05')
+  await actAndAwait(page, 'Заморозить', 'Абонемент заморожен')
+
+  await expect(page.getByText(/Заморожен с 01\.04\.2027 по 05\.04\.2027/)).toBeVisible()
+})
