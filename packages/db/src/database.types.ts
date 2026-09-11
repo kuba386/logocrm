@@ -588,6 +588,85 @@ export type Database = {
           },
         ]
       }
+      installments: {
+        Row: {
+          amount_tiyin: number
+          base_paid_tiyin: number
+          cancelled_at: string | null
+          center_id: string
+          created_at: string
+          created_by: string | null
+          due_date: string
+          due_notified_at: string | null
+          id: string
+          overdue_notified_at: string | null
+          payer_id: string
+          plan_id: string
+          seq: number
+          student_id: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          base_paid_tiyin: number
+          cancelled_at?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          due_date: string
+          due_notified_at?: string | null
+          id?: string
+          overdue_notified_at?: string | null
+          payer_id: string
+          plan_id: string
+          seq: number
+          student_id: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          base_paid_tiyin?: number
+          cancelled_at?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          due_date?: string
+          due_notified_at?: string | null
+          id?: string
+          overdue_notified_at?: string | null
+          payer_id?: string
+          plan_id?: string
+          seq?: number
+          student_id?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "installments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installments_student_payer_fk"
+            columns: ["student_id", "payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "student_payers"
+            referencedColumns: ["student_id", "payer_id", "center_id"]
+          },
+          {
+            foreignKeyName: "installments_subscription_fk"
+            columns: ["subscription_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           accepted_at: string | null
@@ -1781,6 +1860,52 @@ export type Database = {
       }
     }
     Views: {
+      installments_view: {
+        Row: {
+          amount_tiyin: number | null
+          base_paid_tiyin: number | null
+          cancelled_at: string | null
+          center_id: string | null
+          created_at: string | null
+          cumulative_tiyin: number | null
+          due_date: string | null
+          due_notified_at: string | null
+          id: string | null
+          overdue_notified_at: string | null
+          paid_tiyin: number | null
+          payer_id: string | null
+          plan_id: string | null
+          price_tiyin: number | null
+          seq: number | null
+          state: string | null
+          student_id: string | null
+          subscription_id: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "installments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installments_student_payer_fk"
+            columns: ["student_id", "payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "student_payers"
+            referencedColumns: ["student_id", "payer_id", "center_id"]
+          },
+          {
+            foreignKeyName: "installments_subscription_fk"
+            columns: ["subscription_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+        ]
+      }
       payers_with_stats: {
         Row: {
           center_id: string | null
@@ -1987,6 +2112,10 @@ export type Database = {
           student_id: string
         }[]
       }
+      cancel_installment_plan: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
@@ -2009,6 +2138,15 @@ export type Database = {
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
+      }
+      create_installment_plan: {
+        Args: {
+          p_first_due?: string
+          p_n: number
+          p_step_months?: number
+          p_subscription_id: string
+        }
+        Returns: number
       }
       create_invitation: {
         Args: {
@@ -2063,6 +2201,10 @@ export type Database = {
         Args: { p_center_id?: string; p_payload?: Json; p_type: string }
         Returns: number
       }
+      emit_event_unchecked: {
+        Args: { p_center_id: string; p_payload: Json; p_type: string }
+        Returns: number
+      }
       find_payer_by_phone: {
         Args: { p_phone: string }
         Returns: {
@@ -2078,6 +2220,17 @@ export type Database = {
         Returns: undefined
       }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
+      installments_cancel_unpaid: {
+        Args: { p_subscription_id: string }
+        Returns: number
+      }
+      installments_notify: {
+        Args: never
+        Returns: {
+          due_count: number
+          overdue_count: number
+        }[]
+      }
       invitation_preview: {
         Args: { p_token: string }
         Returns: {
@@ -2123,6 +2276,15 @@ export type Database = {
       normalize_kg_phone: { Args: { p_phone: string }; Returns: string }
       parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
+      pay_installment: {
+        Args: {
+          p_comment?: string
+          p_installment_id: string
+          p_paid_at?: string
+          p_source_id?: string
+        }
+        Returns: string
+      }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
       rebuild_lesson_participants: {
         Args: { p_lesson_id: string }
@@ -2261,6 +2423,18 @@ export type Database = {
       subscription_lessons_left: {
         Args: { p_subscription_id: string }
         Returns: number
+      }
+      subscription_payment_summary: {
+        Args: { p_subscription_id: string }
+        Returns: {
+          installments_total: number
+          installments_unpaid: number
+          next_due: string
+          overdue_count: number
+          paid_tiyin: number
+          payment_state: string
+          price_tiyin: number
+        }[]
       }
       subscription_state: {
         Args: { p_subscription_id: string }
