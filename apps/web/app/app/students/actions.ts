@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createStudentSchema, findPayerByPhoneSchema, updateStudentSchema } from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
+import { toAppError } from '@/lib/errors'
 
 export type StudentState = { error?: string; notice?: string; studentId?: string }
 
@@ -122,7 +123,7 @@ export async function updateStudent(_prev: StudentState, formData: FormData): Pr
     .eq('id', parsed.data.id)
 
   if (error) {
-    return { error: error.message || 'Не удалось сохранить изменения' }
+    return { error: toAppError(error, 'Не удалось сохранить изменения').message }
   }
 
   revalidatePath('/app/students')

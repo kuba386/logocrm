@@ -482,32 +482,32 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "group_students_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: "group_students_group_fk"
+            columns: ["group_id", "center_id"]
             isOneToOne: false
             referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "group_students_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "group_students_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "student_balance"
-            referencedColumns: ["student_id"]
+            referencedColumns: ["student_id", "center_id"]
           },
           {
-            foreignKeyName: "group_students_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "group_students_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "group_students_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "group_students_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -566,25 +566,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "groups_room_id_fkey"
-            columns: ["room_id"]
+            foreignKeyName: "groups_room_fk"
+            columns: ["room_id", "center_id"]
             isOneToOne: false
             referencedRelation: "rooms"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "groups_service_id_fkey"
-            columns: ["service_id"]
+            foreignKeyName: "groups_service_fk"
+            columns: ["service_id", "center_id"]
             isOneToOne: false
             referencedRelation: "services"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "groups_teacher_id_fkey"
-            columns: ["teacher_id"]
+            foreignKeyName: "groups_teacher_fk"
+            columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -796,11 +796,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "invitations_teacher_id_fkey"
-            columns: ["teacher_id"]
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "invitations_teacher_fk"
+            columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -834,32 +848,32 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "lesson_participants_lesson_id_fkey"
-            columns: ["lesson_id"]
+            foreignKeyName: "lesson_participants_lesson_fk"
+            columns: ["lesson_id", "center_id"]
             isOneToOne: false
             referencedRelation: "lessons"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lesson_participants_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lesson_participants_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "student_balance"
-            referencedColumns: ["student_id"]
+            referencedColumns: ["student_id", "center_id"]
           },
           {
-            foreignKeyName: "lesson_participants_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lesson_participants_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lesson_participants_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lesson_participants_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -939,46 +953,46 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "lessons_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: "lessons_group_fk"
+            columns: ["group_id", "center_id"]
             isOneToOne: false
             referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_room_id_fkey"
-            columns: ["room_id"]
+            foreignKeyName: "lessons_room_fk"
+            columns: ["room_id", "center_id"]
             isOneToOne: false
             referencedRelation: "rooms"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_service_id_fkey"
-            columns: ["service_id"]
+            foreignKeyName: "lessons_service_fk"
+            columns: ["service_id", "center_id"]
             isOneToOne: false
             referencedRelation: "services"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lessons_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "student_balance"
-            referencedColumns: ["student_id"]
+            referencedColumns: ["student_id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lessons_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "lessons_student_fk"
+            columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "lessons_substitute_teacher_fk"
@@ -988,25 +1002,11 @@ export type Database = {
             referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "lessons_substitute_teacher_id_fkey"
-            columns: ["substitute_teacher_id"]
-            isOneToOne: false
-            referencedRelation: "teachers"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "lessons_teacher_fk"
             columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
             referencedColumns: ["id", "center_id"]
-          },
-          {
-            foreignKeyName: "lessons_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "teachers"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -1042,6 +1042,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "memberships_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -1569,25 +1590,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "students_payer_id_fkey"
-            columns: ["payer_id"]
+            foreignKeyName: "students_payer_fk"
+            columns: ["payer_id", "center_id"]
             isOneToOne: false
             referencedRelation: "payers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "students_payer_id_fkey"
-            columns: ["payer_id"]
+            foreignKeyName: "students_payer_fk"
+            columns: ["payer_id", "center_id"]
             isOneToOne: false
             referencedRelation: "payers_with_stats"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
           {
-            foreignKeyName: "students_primary_teacher_id_fkey"
-            columns: ["primary_teacher_id"]
+            foreignKeyName: "students_primary_teacher_fk"
+            columns: ["primary_teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -2082,11 +2103,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "invitations_teacher_id_fkey"
-            columns: ["teacher_id"]
+            foreignKeyName: "invitations_teacher_fk"
+            columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -2185,6 +2206,13 @@ export type Database = {
             referencedRelation: "centers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "memberships_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
         ]
       }
       student_balance: {
@@ -2254,11 +2282,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "students_primary_teacher_id_fkey"
-            columns: ["primary_teacher_id"]
+            foreignKeyName: "students_primary_teacher_fk"
+            columns: ["primary_teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -2541,6 +2569,7 @@ export type Database = {
         Returns: number
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
+      repair_center_scoped_refs: { Args: never; Returns: undefined }
       reschedule_lesson: {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
