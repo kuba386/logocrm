@@ -550,18 +550,18 @@ select is(
 -- reset role claims не сбрасывает — обнуляем явно.
 select public.tests_claims(null, null);
 select is(
-  (select sum(total_tiyin) from public.cash_by_source), null::bigint,
+  (select sum(total_tiyin)::bigint from public.cash_by_source), null::bigint,
   'Под postgres без claims владельца витрина пуста: ролевой фильтр в теле, не только RLS'
 );
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select is(
-  (select sum(total_tiyin) from public.cash_by_source), 200000::bigint,
+  (select sum(total_tiyin)::bigint from public.cash_by_source), 200000::bigint,
   'Владелец: касса за всё время = 200000 − 50000 + 10000 + 70000 − 30000'
 );
 select is(
-  (select sum(revenue_tiyin) from public.revenue_by_month), 410000::bigint,
+  (select sum(revenue_tiyin)::bigint from public.revenue_by_month), 410000::bigint,
   'Владелец: выручка за всё время = 310000 + 50000 + 50000'
 );
 select is(
@@ -569,7 +569,7 @@ select is(
   'Сумма посещений по специалистам сходится с помесячной'
 );
 select is(
-  (select sum(revenue_tiyin) from public.revenue_by_service), (select sum(revenue_tiyin) from public.revenue_by_month),
+  (select sum(revenue_tiyin)::bigint from public.revenue_by_service), (select sum(revenue_tiyin)::bigint from public.revenue_by_month),
   'Сумма выручки по услугам сходится с помесячной'
 );
 reset role;
