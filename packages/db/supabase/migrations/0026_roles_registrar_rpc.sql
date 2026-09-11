@@ -1,14 +1,14 @@
 -- =============================================================================
--- 0025_roles_registrar_rpc.sql — роли registrar/finance, шаг 1 из 3: чеки,
+-- 0026_roles_registrar_rpc.sql — роли registrar/finance, шаг 1 из 3: чеки,
 -- предикаты, RPC стойки и платежей (этап 5, «Доработка» п.1)
 --
--- Порядок трёх миграций инвертирован по ревью плана: сначала функции, потом
--- (0027) политики и лестница назначений. Здесь чек-констрейнты уже
--- расширены, но назначить новую роль пока нельзя — change_member_role и
+-- Порядок трёх миграций инвертирован по ревью плана: сначала функции (0026,
+-- 0027), потом (0028) политики и лестница назначений. Здесь чек-констрейнты
+-- уже расширены, но назначить новую роль пока нельзя — change_member_role и
 -- create_invitation остаются с прежними списками; строка с registrar в
 -- memberships появляется только из pgTAP от postgres. Промежуточное
--- состояние безопасно по построению: у роли есть RPC, но нет ни политик, ни
--- пути назначения.
+-- состояние: у роли есть RPC на запись, но нет ни одной политики на чтение и
+-- нет пути назначения — до 0028 такой пользователь не существует.
 --
 -- Решения:
 --   Р1. Три предиката вместо литералов ('owner','admin') в каждом гейте:
@@ -24,11 +24,26 @@
 --       заголовке каждой; сверено grep'ом по всем миграциям, не по памяти —
 --       mark_attendance, например, живёт в 0010, не в 0009), меняется
 --       только строка гейта. Гранты повторены явно.
---   Р3. mark_lesson_status (0006) до этой миграции пропускала NULL-роль:
---       `elsif v_role not in ('owner','admin')` при NULL — NULL, ветка не
---       срабатывает, update проходил до emit_event (а событие пишется только
---       при cancelled). Пользователь с отозванным членством и старым JWT мог
---       закрывать занятия. 0010/0011 её не тронули. Предикат закрывает.
+--   Р3. mark_lesson_status: NULL-роль (`elsif v_role not in (...)` при NULL
+--       не срабатывает) закрыта параллельно в 0025 (#49) через coalesce; здесь
+--       тело берётся из 0025, гейт — предикат, и это последнее определение:
+--       0026 > 0025 в порядке применения, registrar не потеряет закрытие
+--       занятия.
+--   Р6. Инвокерные калькуляторы — refund_calc, subscription_lessons_left,
+--       subscription_state (через subscription_visible_to_caller — та definer,
+--       но вью student_balance и installments_view — invoker) — для
+--       registrar/finance до 0028 отдают NULL/пусто: RLS базовых таблиц их
+--       ещё не пускает. Прикладной путь к остатку и сумме возврата для новых
+--       ролей — только subscription_summary (definer, can_payments):
+--       refund_subscription(p_expected := subscription_summary(...).refund_tiyin).
+--       Иначе повторяется двусмысленный NULL из student_balance: «безлимит»
+--       и «не моя роль» неразличимы.
+--   Р7. refund_subscription — can_front_desk, не can_payments: это не платёж,
+--       а списание остатка и отмена абонемента; роль, которой запрещено
+--       продать, заморозить и перенести абонемент, не должна его гасить.
+--       Бухгалтер проводит платёж возврата через record_payment(kind =
+--       'refund'). cancel_installment_plan остаётся can_payments: рассрочка —
+--       график платежей, не абонемент.
 --   Р4. subscription_visible_to_caller: семантика «роль в текущем центре И
 --       абонемент этого центра» сохранена дословно (can_payments() без
 --       аргумента + сравнение center_id), не заменена на role_in(центра
@@ -874,7 +889,7 @@ exception when unique_violation then
 end;
 $$;
 
--- из 0006_schedule.sql (Р3: NULL-роль больше не проходит)
+-- из 0025_mark_lesson_status_role_guard.sql (#49); Р3
 create or replace function public.mark_lesson_status(
   p_lesson_id uuid, p_status text, p_notes text default null
 )
@@ -1287,7 +1302,7 @@ end;
 $$;
 
 
--- 6. Платежи, возвраты, рассрочки (can_payments) ---------------------------------------
+-- 6. Платежи и рассрочки (can_payments); возврат абонемента — стойка (Р7) -------------
 
 -- из 0013_finance_core.sql
 create or replace function public.record_payment(
@@ -1337,7 +1352,7 @@ begin
 end;
 $$;
 
--- из 0010_stage4_hardening.sql
+-- из 0010_stage4_hardening.sql (Р7: стойка, не платежи)
 create or replace function public.refund_subscription(p_id uuid, p_expected_tiyin integer)
   returns integer
   language plpgsql
@@ -1349,7 +1364,7 @@ declare
   v_actual integer;
   v_left   integer;
 begin
-  if not public.can_payments() then
+  if not public.can_front_desk() then
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 

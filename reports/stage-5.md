@@ -89,14 +89,16 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
   новых ролей отдельные политики по явному списку таблиц; таблица без
   решения закрыта — этап 7 (диагностика, цели, ДЗ, `lesson_notes`) не
   достанется бухгалтеру по умолчанию.
-  - `0025_roles_registrar_rpc.sql`: `memberships_role_check` и
-    `invitations_role_check` += `registrar`, `finance` (лестница ещё не
-    пускает — назначить нельзя, тесты сеют членство напрямую). Три
-    предиката вместо литералов в каждом гейте — иначе обёртка и внутренняя
-    функция разъедутся молча (`installment_plans_cancel_live` уже
-    заблокировала бы обе роли): `can_front_desk(p_center uuid default
-    current_center())` = owner/admin/registrar, `can_finance(...)` =
-    owner/admin/finance, `can_payments(...)` = все четыре; `stable`,
+  - `0026_roles_registrar_rpc.sql` (номер 0025 занял #49 параллельной
+    сессии — тот же фикс NULL-роли в `mark_lesson_status`; тело берётся
+    оттуда): `memberships_role_check` и `invitations_role_check` +=
+    `registrar`, `finance` (лестница ещё не пускает — назначить нельзя,
+    тесты сеют членство напрямую). Три предиката вместо литералов в каждом
+    гейте — иначе обёртка и внутренняя функция разъедутся молча
+    (`installment_plans_cancel_live` уже заблокировала бы обе роли):
+    `can_front_desk(p_center uuid default current_center())` =
+    owner/admin/registrar, `can_finance(...)` = owner/admin/finance,
+    `can_payments(...)` = все четыре; `stable`, invoker,
     `coalesce(role_in(p_center), '')`. Перевыпуск с `can_front_desk()`:
     `create_student_with_payer`, `archive_student`, `restore_student`,
     `find_payer_by_phone`, `create_lesson_series` (0022),
@@ -104,18 +106,27 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
     `cancel_lesson`, `cancel_series_from`, `reschedule_lesson`,
     `substitute_teacher`, `teacher_vacation`, `teacher_vacation_preview`,
     `mark_attendance` (**0010**, не 0009 — в 0010 `coalesce` против
-    NULL-роли), `mark_lesson_status`, `sell_subscription`,
+    NULL-роли), `mark_lesson_status` (0025), `sell_subscription`,
     `sell_subscription_paid`, `freeze_subscription`,
-    `unfreeze_subscription`, `transfer_remaining`; с `can_payments()`:
-    `record_payment`, `refund_subscription`, `create_installment_plan`,
+    `unfreeze_subscription`, `transfer_remaining`, **`refund_subscription`**
+    (ревью кода: это списание остатка и отмена абонемента, а не платёж —
+    роль, которой нельзя продать и заморозить, не гасит; бухгалтер проводит
+    возврат денег через `record_payment(kind = 'refund')`); с
+    `can_payments()`: `record_payment`, `create_installment_plan`,
     `pay_installment`, `cancel_installment_plan`,
     `installment_plans_cancel_live` (role_in по центру подписки),
     `subscription_summary`, `subscription_visible_to_caller`,
-    `payer_display_name` (ветка owner/admin). Тело — по `grep -n "create or
-    replace function public.<имя>("` на момент написания, не по памяти;
-    одна строка меняется. pgTAP: registrar lives / чужой центр / NULL-роль
-    (кейс 0010) на перевыпущенных; finance 42501 на функциях стойки.
-  - `0026_roles_finance_rpc.sql` — `can_finance()`: `record_expense`,
+    `payer_display_name` (ветка owner/admin). Тело — по `grep -nE "create
+    (or replace )?function public\.<имя>\("` по всем миграциям, не по
+    памяти; одна строка меняется. **Решение (ревью кода):** инвокерные
+    калькуляторы (`refund_calc`, `subscription_lessons_left`, вью
+    `student_balance`/`installments_view`) для новых ролей до 0028 отдают
+    NULL/пусто — прикладной путь к остатку и сумме возврата только
+    `subscription_summary` (definer, `can_payments`). pgTAP: registrar
+    lives по всему сценарию стойки (id, которые RPC не возвращает, — от
+    postgres; проверки состояния после `reset role`), finance/teacher/
+    чужой центр/NULL-роль — отказы, `refund_subscription` от finance 42501.
+  - `0027_roles_finance_rpc.sql` — `can_finance()`: `record_expense`,
     `archive/restore_expense_category`, `archive/restore_payment_source`,
     `close_month` (`reopen_month` — только owner), `calc_salary` (ветка
     owner/admin + проверка специалиста), `approve_salary`,
@@ -124,7 +135,7 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
     `user_email`, функции расписания и учеников. `student_subscription_badge`
     — без правки, finance проходит насквозь (остаток занятий ребёнка —
     «ФИО и баланс», сознательно).
-  - `0027_roles_policies.sql`: процедура `apply_role_rls(tbl, p_role,
+  - `0028_roles_policies.sql`: процедура `apply_role_rls(tbl, p_role,
     p_write boolean, p_soft_delete boolean)` — **без дефолтов** (12 таблиц
     каталога без `deleted_at`), политики `tenant_<role>_select` и, при
     записи, `tenant_<role>_insert`/`_update`; **`for all` не выдаётся никогда**
@@ -310,7 +321,7 @@ empty states, мобильный вид на preview.
 | Unit | core: salary.test (32), finance.test (24) — 144/144 |
 | CI | app / db / Playwright — зелёные на каждом PR; `main` был красным дважды (см. дефекты) |
 | Чек-лист кликом | — (UI не начат) |
-| Advisors | после 0017, 0018–0020, 0022 и 0023: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
+| Advisors | после 0024–0025: WARN `auth_rls_initplan` на `memberships` ушёл, остальное без изменений. После 0017, 0018–0020, 0022 и 0023: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
 
 ## Найденные дефекты
 
@@ -340,11 +351,19 @@ empty states, мобильный вид на preview.
   0001–0006 держался на одной `tenant_admin for all`; `accept_invitation`
   перезаписывала роль по ссылке мимо проверки последнего владельца;
   табличный `insert` на `invitations` обходил лестницу `create_invitation`.
-- 0025 (при перевыпуске гейтов): `mark_lesson_status` (0006) пропускала
+- 0026 (при перевыпуске гейтов): `mark_lesson_status` (0006) пропускала
   NULL-роль — `elsif v_role not in ('owner','admin')` при NULL не
   срабатывает, а событие пишется только при `cancelled`; пользователь с
   отозванным членством и старым JWT мог закрывать занятия. 0010/0011 её не
-  тронули. Закрыто предикатом `can_front_desk()`.
+  тронули. Нашли две сессии независимо: #49 закрыл `coalesce` (0025), 0026
+  перевыпускает с предикатом. Второй дубль номера за этап (после 0021) —
+  проверка «каталог + открытые PR» не ловит PR, открытый и влитый между
+  двумя моими проверками.
+- 0026 (ревью кода): `not (false or NULL)` в `mark_attendance` — NULL, та
+  же дыра в новой форме; тест читал `lessons`/`installments` под registrar
+  без политик и получал NULL в подзапросах; `refund_calc` — invoker, для
+  новых ролей NULL; `refund_subscription` с `can_payments` отдавала
+  бухгалтеру отмену абонемента.
 
 ## Что осталось владельцу
 
