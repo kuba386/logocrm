@@ -1934,6 +1934,20 @@ export type Database = {
       }
     }
     Views: {
+      cash_by_source: {
+        Row: {
+          center_id: string | null
+          corrections_tiyin: number | null
+          month: string | null
+          other_tiyin: number | null
+          received_tiyin: number | null
+          refunded_tiyin: number | null
+          source_id: string | null
+          spent_tiyin: number | null
+          total_tiyin: number | null
+        }
+        Relationships: []
+      }
       installments_view: {
         Row: {
           amount_tiyin: number | null
@@ -2073,6 +2087,82 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teachers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      revenue_by_month: {
+        Row: {
+          center_id: string | null
+          lessons: number | null
+          month: string | null
+          revenue_tiyin: number | null
+          unlimited_visits: number | null
+          unpriced_visits: number | null
+          visits: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      revenue_by_service: {
+        Row: {
+          center_id: string | null
+          lessons: number | null
+          month: string | null
+          revenue_tiyin: number | null
+          service_id: string | null
+          unlimited_visits: number | null
+          unpriced_visits: number | null
+          visits: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      revenue_by_teacher: {
+        Row: {
+          center_id: string | null
+          lessons: number | null
+          month: string | null
+          revenue_tiyin: number | null
+          teacher_id: string | null
+          unlimited_visits: number | null
+          unpriced_visits: number | null
+          visits: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_paid_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
