@@ -14,6 +14,7 @@
     "reset": "supabase db reset",
     "test:db": "supabase test db",
     "new": "supabase migration new",
+    "check:versions": "node scripts/check-migration-versions.mjs",
     "link": "supabase link --project-ref",
     "push": "supabase db push",
     "gen:types": "supabase gen types typescript --linked --schema public > src/database.types.ts",
