@@ -831,7 +831,9 @@ declare
   v_id     uuid;
   v_exists public.attendance;
 begin
-  if not (public.can_front_desk() or v_role = 'teacher') then
+  -- coalesce обязателен: `false or NULL` — NULL, `not NULL` — NULL, if не
+  -- сработал бы — та же дыра, что закрывала 0010.
+  if not (public.can_front_desk() or coalesce(v_role, '') = 'teacher') then
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
   if v_role = 'teacher' and not public.teacher_of_lesson(p_lesson_id) then
