@@ -123,3 +123,47 @@ test('Этап 4, п.2: отметки посещения списывают, «
   await markDaniyar(page, 3, 'Прогул')
   expect(await daniyarRemaining(page)).toBe(5)
 })
+
+// Не абонемент Данияра: на нём цепочка admin → teacher → parent (teacher.spec.ts
+// помечает пятое занятие, parent.spec.ts проверяет «4 из 8» — заморозка
+// где-то в этой цепочке сдвинула бы остаток непредсказуемо). У Айлин в
+// фикстуре подписки нет и её остаток нигде не проверяется — независима.
+test('Заморозка с датой окончания покрывает введённый день, а не день раньше', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.ailin }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
+
+  const typeSelect = page.locator('select#typeId')
+  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
+  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
+  await typeSelect.selectOption(optionValue)
+  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+
+  // Без перезагрузки второй actAndAwait подряд на той же странице видит
+  // «Абонемент продан» формы продажи как уже пришедший ответ и никогда не
+  // дожидается своего — та же причина, что у reload в fillLessonDialog
+  // (helpers.ts).
+  await page.reload()
+  await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
+
+  // freeze_subscription строит daterange с исключающей верхней границей —
+  // без +1 дня на call site (subscription-actions.ts) 05.04.2027 молча
+  // осталось бы незамороженным, хотя поле «По» обещает включительно.
+  await page.getByLabel('С', { exact: true }).fill('2027-04-01')
+  await page.getByLabel('По (пусто — пока не разморозят)').fill('2027-04-05')
+
+  // Не actAndAwait: как только freezeFrom не null, SubscriptionCard прячет
+  // FreezeForm целиком (условие рендера — «!subscription.freezeFrom»,
+  // subscriptions-panel.tsx) — успешная заморозка размонтирует форму
+  // вместе с её уведомлением раньше, чем тест успеет его прочитать. Ждём
+  // результат напрямую; freezeFrom в будущем (2027) — «Будет заморожен»,
+  // не «Заморожен» (тот же файл).
+  await page.getByRole('button', { name: 'Заморозить' }).click()
+  const result = page.getByText(/(Будет заморожен|Заморожен) с 01\.04\.2027 по 05\.04\.2027/)
+  const error = page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({ hasText: /\S/ })
+  await expect(result.or(error).first()).toBeVisible({ timeout: 20_000 })
+  if (await error.first().isVisible()) {
+    throw new Error(`Заморозка отклонена: ${await error.first().innerText()}`)
+  }
+  await expect(result).toBeVisible()
+})
