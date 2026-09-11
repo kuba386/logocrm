@@ -72,7 +72,7 @@ const CHECK_MESSAGES: Record<string, string> = {
   salary_adjustments_amount_not_zero: 'Сумма не может быть нулевой',
   salary_runs_month_is_first_of_month: 'Месяц начисления — первое число месяца',
   installments_amount_positive: 'Сумма платежа рассрочки должна быть больше нуля',
-  installments_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
+  installment_plans_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
   installments_seq_positive: 'Номер платежа рассрочки начинается с единицы',
 }
 
@@ -82,6 +82,8 @@ const CHECK_MESSAGES: Record<string, string> = {
  * экране появлялся как есть.
  */
 const UNIQUE_MESSAGES: Record<string, string> = {
+  payers_center_phone_uniq: 'Плательщик с таким телефоном уже есть',
+  installment_plans_one_live_key: 'По абонементу уже есть рассрочка — сначала отмените её',
   installments_plan_seq_key: 'Платёж с таким номером в этом плане рассрочки уже есть',
 }
 
@@ -106,11 +108,14 @@ const FK_MESSAGES: Record<string, string> = {
   attendance_paid_teacher_fk: 'Специалист не найден',
   installments_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
   installments_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
+  installments_plan_fk: 'Платёж рассрочки не соответствует своему плану',
+  installment_plans_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
+  installment_plans_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
   // 0017 завела составные FK на lessons, но не занесла их сюда — тот же
-  // класс упущения, что закрывается здесь заодно с 0019.
+  // класс упущения, что закрывается здесь заодно с 0021.
   lessons_teacher_fk: 'Специалист не найден — возможно, он из другого центра',
   lessons_substitute_teacher_fk: 'Заменяющий специалист не найден — возможно, он из другого центра',
-  // 0019 — составные FK на границах тенанта (groups/students/invitations/
+  // 0021 — составные FK на границах тенанта (groups/students/invitations/
   // memberships/lessons/group_students).
   groups_teacher_fk: 'Специалист не найден — возможно, он из другого центра',
   groups_room_fk: 'Кабинет не найден — возможно, он из другого центра',
@@ -127,7 +132,7 @@ const FK_MESSAGES: Record<string, string> = {
   lessons_service_fk: 'Услуга не найдена — возможно, она из другого центра',
   group_students_group_fk: 'Группа не найдена — возможно, она из другого центра',
   group_students_student_fk: 'Ученик не найден — возможно, он из другого центра',
-  // Соседняя дыра того же класса, найденная по пути (0008): не про 0019,
+  // Соседняя дыра того же класса, найденная по пути (0008): не про 0021,
   // но раз FK_MESSAGES всё равно правится в этом PR — дешевле закрыть сразу.
   subscription_types_service_fk: 'Услуга не найдена — возможно, она из другого центра',
 }
@@ -241,6 +246,8 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   if (code === UNIQUE_VIOLATION) {
     const name = uniqueConstraintName(message)
     if (name && UNIQUE_MESSAGES[name]) return { message: UNIQUE_MESSAGES[name] }
+    // Нативный констрейнт без текста в карте — русский фолбэк, как у CHECK и
+    // FK: английский текст с именем объекта схемы пользователю не показывается.
     return { message: name ? 'Такая запись уже есть' : message || 'Такая запись уже есть' }
   }
 
