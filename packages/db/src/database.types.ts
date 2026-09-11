@@ -20,6 +20,8 @@ export type Database = {
           lesson_id: string
           marked_at: string
           marked_by: string | null
+          paid_teacher_id: string
+          pays_teacher: boolean
           price_tiyin: number
           status_id: string
           student_id: string
@@ -36,6 +38,8 @@ export type Database = {
           lesson_id: string
           marked_at?: string
           marked_by?: string | null
+          paid_teacher_id: string
+          pays_teacher: boolean
           price_tiyin?: number
           status_id: string
           student_id: string
@@ -52,6 +56,8 @@ export type Database = {
           lesson_id?: string
           marked_at?: string
           marked_by?: string | null
+          paid_teacher_id?: string
+          pays_teacher?: boolean
           price_tiyin?: number
           status_id?: string
           student_id?: string
@@ -71,6 +77,13 @@ export type Database = {
             columns: ["lesson_id", "center_id"]
             isOneToOne: false
             referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_paid_teacher_fk"
+            columns: ["paid_teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
             referencedColumns: ["id", "center_id"]
           },
           {
@@ -815,11 +828,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lessons_substitute_teacher_fk"
+            columns: ["substitute_teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
             foreignKeyName: "lessons_substitute_teacher_id_fkey"
             columns: ["substitute_teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "lessons_teacher_id_fkey"
@@ -1103,6 +1130,102 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      salary_adjustments: {
+        Row: {
+          amount_tiyin: number
+          center_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          month: string
+          reason: string
+          teacher_id: string
+        }
+        Insert: {
+          amount_tiyin: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month: string
+          reason: string
+          teacher_id: string
+        }
+        Update: {
+          amount_tiyin?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: string
+          reason?: string
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salary_adjustments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salary_adjustments_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      salary_runs: {
+        Row: {
+          approved_at: string
+          approved_by: string | null
+          center_id: string
+          id: string
+          lines: Json
+          month: string
+          teacher_id: string
+          total_tiyin: number
+        }
+        Insert: {
+          approved_at?: string
+          approved_by?: string | null
+          center_id?: string
+          id?: string
+          lines: Json
+          month: string
+          teacher_id: string
+          total_tiyin: number
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string | null
+          center_id?: string
+          id?: string
+          lines?: Json
+          month?: string
+          teacher_id?: string
+          total_tiyin?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salary_runs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salary_runs_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -1542,6 +1665,64 @@ export type Database = {
           },
         ]
       }
+      teacher_rates: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          model: string
+          service_id: string | null
+          teacher_id: string
+          valid_from: string
+          value: number
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model: string
+          service_id?: string | null
+          teacher_id: string
+          valid_from?: string
+          value: number
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          model?: string
+          service_id?: string | null
+          teacher_id?: string
+          valid_from?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_rates_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_rates_service_fk"
+            columns: ["service_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "teacher_rates_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       teachers: {
         Row: {
           center_id: string
@@ -1777,16 +1958,34 @@ export type Database = {
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
+      approve_salary: {
+        Args: { p_month: string; p_teacher_id: string }
+        Returns: string
+      }
       archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
       archive_expense_category: { Args: { p_id: string }; Returns: undefined }
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
+      archive_teacher: { Args: { p_id: string }; Returns: undefined }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
       calc_lesson_price: {
         Args: { p_lessons: number; p_price_tiyin: number }
         Returns: number
+      }
+      calc_salary: {
+        Args: { p_month: string; p_teacher_id: string }
+        Returns: {
+          amount_tiyin: number
+          attendance_id: string
+          lesson_date: string
+          lesson_id: string
+          lesson_price_tiyin: number
+          model: string
+          note: string
+          student_id: string
+        }[]
       }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
@@ -1961,6 +2160,15 @@ export type Database = {
         }
         Returns: string
       }
+      record_salary_adjustment: {
+        Args: {
+          p_amount_tiyin: number
+          p_month: string
+          p_reason: string
+          p_teacher_id: string
+        }
+        Returns: string
+      }
       refund_calc: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string }
@@ -1976,9 +2184,21 @@ export type Database = {
       restore_payment_source: { Args: { p_id: string }; Returns: undefined }
       restore_student: { Args: { p_id: string }; Returns: undefined }
       restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
+      restore_teacher: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
       ru_month_year: { Args: { p_date: string }; Returns: string }
+      salary_summary: {
+        Args: { p_month: string }
+        Returns: {
+          adjustments_tiyin: number
+          approved_at: string
+          approved_run_id: string
+          calc_tiyin: number
+          teacher_id: string
+          total_tiyin: number
+        }[]
+      }
       seed_attendance_statuses: {
         Args: { p_center_id: string }
         Returns: undefined

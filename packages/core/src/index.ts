@@ -22,3 +22,19 @@ export {
   type SubscriptionKind,
   type SubscriptionSnapshot,
 } from './subscription'
+export {
+  calcSalary,
+  salaryTotal,
+  pickRate,
+  perHourAmount,
+  percentAmount,
+  RATE_MODELS,
+  NOTE_NOT_DONE,
+  NOTE_NOT_PAID_STATUS,
+  NOTE_NO_RATE,
+  NOTE_PAID_ELSEWHERE,
+  type RateModel,
+  type TeacherRate,
+  type AttendanceRow,
+  type SalaryLine,
+} from './salary'

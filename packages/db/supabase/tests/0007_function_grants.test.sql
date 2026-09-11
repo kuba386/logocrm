@@ -50,7 +50,9 @@ from unnest(array[
   'public.backfill_subscription_payments()',
   'public.backfill_student_payers_history()',
   'public.centers_seed_expense_categories()',
-  'public.seed_expense_categories(uuid)'
+  'public.seed_expense_categories(uuid)',
+  'public.teacher_rates_set_created_by()',
+  'public.approved_salary_guard()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -157,7 +159,13 @@ select set_eq(
     ('subscription_state(uuid)'),
     ('subscription_summary(uuid)'),
     ('transfer_remaining(uuid,uuid)'),
-    ('unfreeze_subscription(uuid,date)')
+    ('unfreeze_subscription(uuid,date)'),
+    ('archive_teacher(uuid)'),
+    ('restore_teacher(uuid)'),
+    ('record_salary_adjustment(uuid,date,integer,text)'),
+    ('calc_salary(uuid,date)'),
+    ('approve_salary(uuid,date)'),
+    ('salary_summary(date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
