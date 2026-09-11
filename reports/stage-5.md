@@ -156,14 +156,22 @@ PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0
       Нет: `expenses`, `expense_categories`, `teacher_rates`,
       `salary_adjustments`, `salary_runs`, `invitations`, `audit_log`,
       `events`.
-    - finance, select+insert: `teacher_rates` (ставка — прямая запись под
+    - finance (список «запись без чтения» из шапки 0027, Р8 — каждая
+      строка отдельным `create policy` и pgTAP-кейсом `is(count, N)`, не
+      `lives_ok`: отсутствующая политика даёт ноль строк, не ошибку):
+      select+insert: `teacher_rates` (ставка — прямая запись под
       `approved_salary_guard`/`financial_period_guard`, как у admin; RPC
-      нет); select: `payments`, `expenses`, `expense_categories` (+
-      `_read_archived` — там `owner/admin` литералом), `payment_sources`,
-      `financial_periods`, `salary_adjustments`, `salary_runs`, `teachers`,
-      `payers`, `student_payers`, `students`, `subscriptions`,
-      `subscription_freezes`, `subscription_types`, `installment_plans`,
-      `installments`, `attendance`, `lessons`. Всё пишется через RPC.
+      нет); select+insert+update: `expense_categories` (+ `_read_archived`
+      — там `owner/admin` литералом → `can_finance()`), `payment_sources`
+      (создание статьи/источника — прямой insert, RPC только
+      archive/restore); select: `payments`, `expenses` (update (comment) —
+      грант уже колоночный), `financial_periods` (иначе «месяц открыт» на
+      закрытом), `salary_adjustments`, `salary_runs` (`_read_own` у
+      бухгалтера пуст), `teachers`, `payers`, `student_payers`, `students`,
+      `subscriptions`, `subscription_freezes`, `subscription_types`,
+      `installment_plans`, `installments`, `attendance`, `lessons`.
+      Остальное пишется через RPC. Зеркально — registrar на этих же
+      таблицах: ноль строк и 42501 на запись.
       **Отступление от ТЗ, на решение владельца:** `lessons.notes`,
       `attendance.comment`, `students.notes` finance читает прямым запросом
       — витрины выручки `security_invoker` с `join lessons` (без политики —

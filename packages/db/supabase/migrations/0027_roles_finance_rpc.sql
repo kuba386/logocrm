@@ -21,7 +21,26 @@
 --       в 06:00 5 октября: занятие в 02:00 в отмену не попадало, а занятие
 --       в 02:00 следующего за p_to дня — попадало. Граница теперь
 --       (p_from::timestamp) at time zone center_timezone(центр) — так же, как
---       у record_expense и sell_subscription_paid.
+--       у record_expense и sell_subscription_paid. Заодно чинит живой баг
+--       lesson-panel.tsx: «отменить эту и последующие» на занятии в 02:00
+--       передавало lesson.day (дата по центру) — само занятие не отменялось.
+--   Р8. Запись без чтения. 0027 отдаёт бухгалтеру RPC, а встречные пути к
+--       тем же данным — политики tenant_admin, которые 0028 ОБЯЗАНА открыть
+--       finance, иначе экраны покажут «пусто» там, где база отказала бы:
+--         teacher_rates        — select + insert (approve_salary замораживает
+--                                снимок по ставкам, которых он не видел);
+--         expenses             — select (+ update (comment) — грант уже
+--                                колоночный);
+--         expense_categories,
+--         payment_sources      — select + insert + update (создание статьи —
+--                                прямой insert, RPC только archive/restore);
+--         financial_periods    — select (иначе «месяц открыт» на закрытом и
+--                                «уже закрыт» по кнопке);
+--         salary_adjustments,
+--         salary_runs          — select (_read_own у бухгалтера пуст:
+--                                my_teacher_id() NULL).
+--       До 0028 пользователя с ролью finance не существует (лестница и
+--       гранты 0024 не дают вставить членство), поэтому это долг, не дыра.
 -- =============================================================================
 
 
