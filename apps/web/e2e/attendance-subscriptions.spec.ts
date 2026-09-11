@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { formatSom } from '@logocrm/core'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, openTodayWeek, studentCards } from './helpers'
+import { actAndAwait, bishkekYesterdayIso, openBishkekYesterdayWeek, studentCards } from './helpers'
 
 // Пункты 1 и 2 чек-листа приёмки этапа 4 (docs/Roadmap/stages.md). Пункты 5
 // и 6 (специалист и родитель) — в teacher.spec.ts/parent.spec.ts, они читают
@@ -11,10 +11,16 @@ import { actAndAwait, openTodayWeek, studentCards } from './helpers'
 // тексту чек-листа, а молча уводит занятие в долг — нужен отдельный разбор,
 // не механическое повторение формулировки.
 //
-// Пять занятий Данияра в фикстуре (packages/db/supabase/fixtures/e2e.sql) —
-// starts_at считается от now(), а не фиксированная будущая дата, как у
+// Пять занятий Данияра в фикстуре (packages/db/supabase/fixtures/e2e.sql)
+// датированы вчера по Бишкеку, а не фиксированной будущей датой, как у
 // остальной фикстуры: «Отметить посещение» доступно только для уже
-// начавшихся занятий (lesson-panel.tsx, canMarkAttendance).
+// начавшихся занятий (lesson-panel.tsx, canMarkAttendance). «Дата начала»
+// абонемента ниже проставлена тем же вчера явно, не через пустое поле —
+// sell_subscription без явной даты берёт center_today() (0010:256), и
+// абонемент датировался бы СЕГОДНЯ, позже вчерашних занятий; составной
+// кандидат на списание требует s.starts_at <= v_lesson_date (0010:861) —
+// молчаливо переставало бы находиться. Обе даты — из одной и той же
+// bishkekYesterdayIso(), а не вычисляются порознь.
 
 test.describe.configure({ mode: 'serial' })
 
@@ -27,7 +33,7 @@ const TYPE_NAME = 'Восемь занятий · e2e'
  * неотмеченное» не найти, но хронологический порядок рендера стабилен.
  */
 async function markDaniyar(page: Page, index: number, statusName: string) {
-  await openTodayWeek(page)
+  await openBishkekYesterdayWeek(page)
   await studentCards(page, STUDENTS.daniyar).nth(index).click()
   await page.getByRole('button', { name: 'Отметить посещение' }).click()
 
@@ -76,6 +82,11 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // Цена подставляется из типа (400000 тыйын = 4000 сом) и не трогается —
   // проверяем именно то, что подстановка сработала, а не переписываем её.
   await expect(page.locator('#priceSom')).toHaveValue('4000')
+
+  // Явно вчера по Бишкеку — та же дата, что у занятий фикстуры (см.
+  // комментарий вверху файла). Пустое поле взяло бы center_today() и
+  // разошлось бы с занятиями на день.
+  await page.locator('#startsAt').fill(bishkekYesterdayIso())
 
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 

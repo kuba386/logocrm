@@ -20,17 +20,21 @@ export async function openWeek(page: Page, isoDate: string) {
 }
 
 /**
- * Сегодняшняя дата — для занятий, у которых starts_at считается от now()
- * (этап 4: «Отметить посещение» доступно только для уже начавшихся
- * занятий, canMarkAttendance в lesson-panel.tsx). Фиксированные будущие
- * даты вроде MONDAY для такой проверки не годятся.
+ * Вчерашняя дата по Бишкеку (UTC+6, без перехода на летнее время —
+ * фиксированный сдвиг безопасен). Занятия Данияра в фикстуре (e2e.sql)
+ * датированы вчера по Бишкеку, не сегодня — см. комментарий там же.
+ * Используется и для навигации по неделе расписания, и для явной даты
+ * начала абонемента при продаже: одна и та же точка отсчёта, а не две
+ * независимо вычисленные "сегодня"/"вчера", которые могли бы разойтись.
  */
-export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+export function bishkekYesterdayIso(): string {
+  const d = new Date(Date.now() + 6 * 60 * 60 * 1000)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
 }
 
-export async function openTodayWeek(page: Page) {
-  await openWeek(page, todayIso())
+export async function openBishkekYesterdayWeek(page: Page) {
+  await openWeek(page, bishkekYesterdayIso())
 }
 
 /** Карточки занятий ученика на открытой неделе, в порядке рендера сетки. */
