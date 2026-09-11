@@ -433,6 +433,36 @@ export const installmentOverdueSchema = z.object({
 })
 export type InstallmentOverdue = z.infer<typeof installmentOverdueSchema>
 
+/** План рассрочки оформлен (create_installment_plan, 0020). */
+export const installmentPlanCreatedSchema = z.object({
+  type: z.literal('installment_plan.created'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    plan_id: z.string().uuid(),
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    payer_id: z.string().uuid(),
+    installments: z.number().int().positive(),
+    total_tiyin: z.number().int().positive(),
+    first_due: z.string(),
+  }),
+})
+export type InstallmentPlanCreated = z.infer<typeof installmentPlanCreatedSchema>
+
+/** План отменён администратором (cancel_installment_plan). Отмена при
+ * возврате/переносе абонемента события не пишет — у тех путей свои. */
+export const installmentPlanCancelledSchema = z.object({
+  type: z.literal('installment_plan.cancelled'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    plan_id: z.string().uuid(),
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    payer_id: z.string().uuid(),
+  }),
+})
+export type InstallmentPlanCancelled = z.infer<typeof installmentPlanCancelledSchema>
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -470,6 +500,8 @@ export const appEventSchema = z.discriminatedUnion('type', [
   periodReopenedSchema,
   installmentDueSchema,
   installmentOverdueSchema,
+  installmentPlanCreatedSchema,
+  installmentPlanCancelledSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -502,6 +534,8 @@ export const appEventTypes = [
   'period.reopened',
   'installment.due',
   'installment.overdue',
+  'installment_plan.created',
+  'installment_plan.cancelled',
 ] as const
 export type AppEventType = (typeof appEventTypes)[number]
 

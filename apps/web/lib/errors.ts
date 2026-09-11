@@ -82,6 +82,8 @@ const CHECK_MESSAGES: Record<string, string> = {
  * экране появлялся как есть.
  */
 const UNIQUE_MESSAGES: Record<string, string> = {
+  payers_center_phone_uniq: 'Плательщик с таким телефоном уже есть',
+  installment_plans_one_live_key: 'По абонементу уже есть рассрочка — сначала отмените её',
   installments_plan_seq_key: 'Платёж с таким номером в этом плане рассрочки уже есть',
 }
 
@@ -217,7 +219,9 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   if (code === UNIQUE_VIOLATION) {
     const name = uniqueConstraintName(message)
     if (name && UNIQUE_MESSAGES[name]) return { message: UNIQUE_MESSAGES[name] }
-    return { message: name ? 'Такая запись уже есть' : message || 'Такая запись уже есть' }
+    // Неизвестное имя — нативный текст как есть: в нём хотя бы названо
+    // ограничение, «Такая запись уже есть» без него менее полезно.
+    return { message: message || 'Такая запись уже есть' }
   }
 
   if (code === NOT_FOUND) {

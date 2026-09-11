@@ -55,7 +55,7 @@ from unnest(array[
   'public.approved_salary_guard()',
   'public.emit_event_unchecked(text,jsonb,uuid)',
   'public.installments_notify()',
-  'public.installments_cancel_unpaid(uuid)',
+  'public.installment_plans_cancel_live(uuid)',
   'public.subscriptions_cancel_installments()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
@@ -170,7 +170,7 @@ select set_eq(
     ('calc_salary(uuid,date)'),
     ('approve_salary(uuid,date)'),
     ('salary_summary(date)'),
-    ('create_installment_plan(uuid,integer,date,smallint)'),
+    ('create_installment_plan(uuid,integer,date,smallint,integer)'),
     ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
     ('cancel_installment_plan(uuid)'),
     ('subscription_payment_summary(uuid)')
