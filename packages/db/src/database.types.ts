@@ -274,6 +274,117 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_categories: {
+        Row: {
+          center_id: string
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_categories_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount_tiyin: number
+          category_id: string
+          center_id: string
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          paid_at: string
+          source_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          category_id: string
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          paid_at?: string
+          source_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          category_id?: string
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          paid_at?: string
+          source_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_category_fk"
+            columns: ["category_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "expenses_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_source_fk"
+            columns: ["source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       financial_periods: {
         Row: {
           center_id: string
@@ -1667,6 +1778,7 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      archive_expense_category: { Args: { p_id: string }; Returns: undefined }
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
@@ -1825,6 +1937,17 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: undefined
       }
+      record_expense: {
+        Args: {
+          p_amount_tiyin: number
+          p_category_id: string
+          p_comment?: string
+          p_kind?: string
+          p_paid_on?: string
+          p_source_id?: string
+        }
+        Returns: string
+      }
       record_payment: {
         Args: {
           p_amount_tiyin: number
@@ -1849,6 +1972,7 @@ export type Database = {
         Returns: undefined
       }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      restore_expense_category: { Args: { p_id: string }; Returns: undefined }
       restore_payment_source: { Args: { p_id: string }; Returns: undefined }
       restore_student: { Args: { p_id: string }; Returns: undefined }
       restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
@@ -1856,6 +1980,10 @@ export type Database = {
       role_in: { Args: { p_center_id: string }; Returns: string }
       ru_month_year: { Args: { p_date: string }; Returns: string }
       seed_attendance_statuses: {
+        Args: { p_center_id: string }
+        Returns: undefined
+      }
+      seed_expense_categories: {
         Args: { p_center_id: string }
         Returns: undefined
       }

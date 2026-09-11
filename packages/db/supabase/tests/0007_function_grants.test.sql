@@ -48,7 +48,9 @@ from unnest(array[
   'public.recalc_subscription_paid(uuid)',
   'public.students_track_payer()',
   'public.backfill_subscription_payments()',
-  'public.backfill_student_payers_history()'
+  'public.backfill_student_payers_history()',
+  'public.centers_seed_expense_categories()',
+  'public.seed_expense_categories(uuid)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -89,6 +91,7 @@ select set_eq(
     ('accept_invitation(text)'),
     ('age_years(date)'),
     ('archive_attendance_status(uuid)'),
+    ('archive_expense_category(uuid)'),
     ('archive_payment_source(uuid)'),
     ('archive_student(uuid)'),
     ('archive_subscription_type(uuid)'),
@@ -116,10 +119,12 @@ select set_eq(
     ('parent_of_lesson(uuid)'),
     ('parent_of_student(uuid)'),
     ('payer_display_name(uuid)'),
+    ('record_expense(uuid,integer,text,uuid,date,text)'),
     ('record_payment(uuid,integer,text,uuid,uuid,uuid,timestamp with time zone,text)'),
     ('reopen_month(date)'),
     ('reschedule_lesson(uuid,timestamp with time zone,timestamp with time zone)'),
     ('restore_attendance_status(uuid)'),
+    ('restore_expense_category(uuid)'),
     ('restore_payment_source(uuid)'),
     ('restore_student(uuid)'),
     ('restore_subscription_type(uuid)'),
