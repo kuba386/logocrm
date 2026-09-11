@@ -450,7 +450,8 @@ create trigger subscriptions_cancel_installments
 -- Р3: только без auth.uid() (cron/service_role, этап 6). Отметка и есть
 -- блокировка: update ... returning — параллельный запуск дождётся первого и
 -- получит 0 строк, двойных сообщений родителю не будет. Абонемент отменён/
--- удалён или ученик в архиве — не уведомляем (в интерфейсе строки уже нет).
+-- удалён или ученик в архиве (students.status = 'archived') — не уведомляем
+-- (в интерфейсе строки уже нет).
 create or replace function public.installments_notify()
   returns table (due_count integer, overdue_count integer)
   language plpgsql
@@ -476,7 +477,9 @@ begin
        and v.state = 'due'
        and i.due_notified_at is null
        and s.deleted_at is null and s.status <> 'cancelled'
-       and st.deleted_at is null
+       -- Архив ученика — status = 'archived' (archive_student, 0011), не
+       -- deleted_at: первый прогон CI слал due по архивному ребёнку.
+       and st.deleted_at is null and st.status <> 'archived'
      returning i.id, i.center_id, i.subscription_id, i.student_id, i.payer_id,
                i.seq, i.due_date, i.amount_tiyin
   loop
@@ -501,7 +504,9 @@ begin
        and v.state = 'overdue'
        and i.overdue_notified_at is null
        and s.deleted_at is null and s.status <> 'cancelled'
-       and st.deleted_at is null
+       -- Архив ученика — status = 'archived' (archive_student, 0011), не
+       -- deleted_at: первый прогон CI слал due по архивному ребёнку.
+       and st.deleted_at is null and st.status <> 'archived'
      returning i.id, i.center_id, i.subscription_id, i.student_id, i.payer_id,
                i.seq, i.due_date, i.amount_tiyin
   loop
