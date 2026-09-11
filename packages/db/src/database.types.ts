@@ -1737,6 +1737,7 @@ export type Database = {
           paid_tiyin: number
           payer_id: string
           price_tiyin: number
+          sale_key: string | null
           starts_at: string
           status: string
           student_id: string
@@ -1759,6 +1760,7 @@ export type Database = {
           paid_tiyin?: number
           payer_id: string
           price_tiyin: number
+          sale_key?: string | null
           starts_at: string
           status?: string
           student_id: string
@@ -1781,6 +1783,7 @@ export type Database = {
           paid_tiyin?: number
           payer_id?: string
           price_tiyin?: number
+          sale_key?: string | null
           starts_at?: string
           status?: string
           student_id?: string
@@ -2607,6 +2610,29 @@ export type Database = {
           p_type_id: string
         }
         Returns: string
+      }
+      sell_subscription_paid: {
+        Args: {
+          p_expected_remaining_tiyin?: number
+          p_first_due?: string
+          p_installments?: number
+          p_paid_on?: string
+          p_paid_tiyin?: number
+          p_price_tiyin?: number
+          p_sale_key: string
+          p_source_id?: string
+          p_starts_at?: string
+          p_step_months?: number
+          p_student_id: string
+          p_type_id: string
+        }
+        Returns: {
+          amount_tiyin: number
+          due_date: string
+          payment_id: string
+          seq: number
+          subscription_id: string
+        }[]
       }
       series_dates: {
         Args: { p: Json }
