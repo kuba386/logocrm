@@ -343,7 +343,7 @@ function SubscriptionCard({
           датированную, уже идущую (freezeTo есть И state === 'frozen'),
           снять раньше срока нельзя — RPC откажет «У абонемента нет
           открытой заморозки», и кнопка обещала бы несбыточное
-          (продуктовое решение 2, см. заголовок миграции 0014). */}
+          (продуктовое решение 2, см. заголовок миграции 0015). */}
       {subscription.freezeFrom && !(subscription.freezeTo && subscription.state === 'frozen') ? (
         <div className="border-t border-border pt-3">
           <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} />

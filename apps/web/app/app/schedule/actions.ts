@@ -283,7 +283,7 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
         // ЗАНЯТИЯ (attendance_fill_and_check, v_lesson_date). Для занятия
         // из другого дня рядом с границей заморозки метка может разойтись
         // с тем, что ответит клик «Пришёл» — известный, не устранённый в
-        // этой миграции пробел (0014_freeze_state_unification.sql, раздел
+        // этой миграции пробел (0015_freeze_state_unification.sql, раздел
         // 11 в шапке файла); для сегодняшних занятий, подавляющего
         // большинства отметок, метка точна.
         let label: string

@@ -94,7 +94,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
           const teacher = lesson ? (lesson.substitute_teacher_id ?? lesson.teacher_id) : null
 
           // state === 'frozen' проверяется до active_subscription_id: заморозка
-          // не трогает lessons_left/ends_at (0014, раздел 5) — без этой ветки
+          // не трогает lessons_left/ends_at (0015, раздел 5) — без этой ветки
           // родитель на паузе видел бы то же «N из M», что и до заморозки, без
           // намёка, что списаний сейчас нет.
           let balanceLabel: string

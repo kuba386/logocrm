@@ -60,6 +60,22 @@ const CHECK_MESSAGES: Record<string, string> = {
   financial_periods_month_is_first_of_month: 'Месяц периода — первое число месяца',
   subscriptions_status_no_frozen_check: 'Статус абонемента меняется только действиями карточки — заморозка и срок считаются по датам',
   subscription_types_lessons_no_period_check: 'У типа абонемента на количество занятий срок действия не указывается',
+  payments_amount_not_zero: 'Сумма не может быть нулевой',
+  payments_kind_known: 'Неизвестный тип операции',
+}
+
+/**
+ * Русские тексты по имени внешнего ключа — тот же приём, что CHECK_MESSAGES,
+ * для 23503. Появилось с 0013/0014: составные FK там держат инварианты
+ * («плательщик не чужому ребёнку», «абонемент не чужого центра»), которые
+ * раньше проверялись бы в функции — а нативный текст Postgres для FK ещё
+ * менее читаем, чем у CHECK.
+ */
+const FK_MESSAGES: Record<string, string> = {
+  payments_student_payer_fk: 'Этот плательщик не привязан к ребёнку — выберите из списка плательщиков ребёнка',
+  payments_subscription_fk: 'Абонемент не найден — возможно, он из другого центра',
+  payments_source_fk: 'Источник оплаты не найден',
+  payments_payer_fk: 'Плательщик не найден',
 }
 
 function checkConstraintName(message: string): string | null {
@@ -74,7 +90,13 @@ function exclusionConstraintName(message: string): string | null {
   const m = /violates exclusion constraint "([a-z0-9_]+)"/i.exec(message)
   return m?.[1] ?? null
 }
+
+function foreignKeyConstraintName(message: string): string | null {
+  const m = /violates foreign key constraint "([a-z0-9_]+)"/i.exec(message)
+  return m?.[1] ?? null
+}
 const UNIQUE_VIOLATION = '23505'
+const FOREIGN_KEY_VIOLATION = '23503'
 const NOT_FOUND = '42704'
 const BAD_INPUT = '22023'
 const MISSING_INPUT = '22004'
@@ -141,6 +163,12 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
     // Исключения из plpgsql с этим кодом уже по-русски; нативный констрейнт —
     // нет, и его текст пользователю не показывается.
     return { message: name ? 'Действие нарушает правила центра' : message || 'Действие нарушает правила центра' }
+  }
+
+  if (code === FOREIGN_KEY_VIOLATION) {
+    const name = foreignKeyConstraintName(message)
+    if (name && FK_MESSAGES[name]) return { message: FK_MESSAGES[name] }
+    return { message: name ? 'Ссылка на несуществующую или чужую запись' : message || fallback }
   }
 
   if (code === SERIALIZATION_FAILURE || code === DEADLOCK_DETECTED) {

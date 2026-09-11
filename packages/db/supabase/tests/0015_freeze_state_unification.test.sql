@@ -1,4 +1,4 @@
--- pgTAP: 0014_freeze_state_unification — единый источник правды о заморозке.
+-- pgTAP: 0015_freeze_state_unification — единый источник правды о заморозке.
 -- Даты — всегда через public.center_today(center_id)/center_timezone(center_id),
 -- никогда голый current_date/now()::date: расхождение часового пояса сессии
 -- (обычно UTC) и центра (Asia/Bishkek, UTC+6) уже один раз уронило CI на main

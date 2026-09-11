@@ -43,7 +43,12 @@ from unnest(array[
   'public.payments_recalc_trigger()',
   'public.financial_period_guard()',
   'public.subscription_types_guard_sold_fields()',
-  'public.subscription_freezes_guard_backdate()'
+  'public.subscription_freezes_guard_backdate()',
+  'public.seed_payment_sources(uuid)',
+  'public.recalc_subscription_paid(uuid)',
+  'public.students_track_payer()',
+  'public.backfill_subscription_payments()',
+  'public.backfill_student_payers_history()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -120,6 +125,7 @@ select set_eq(
     ('restore_subscription_type(uuid)'),
     ('revoke_membership(uuid)'),
     ('role_in(uuid)'),
+    ('ru_month_year(date)'),
     ('series_dates(jsonb)'),
     ('set_default_attendance_status(uuid)'),
     ('substitute_teacher(uuid,uuid)'),

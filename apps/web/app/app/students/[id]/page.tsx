@@ -167,7 +167,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     // upper(period) - 1), а не разбором daterange-текста на клиенте: тот
     // разбор был вторым источником правды о заморозке рядом с subscription_
     // state и мог показать не ту же дату, что называет исключение при
-    // отметке (0014_freeze_state_unification.sql, раздел 8).
+    // отметке (0015_freeze_state_unification.sql, раздел 8).
     const summaries = await Promise.all(
       (subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id })),
     )
