@@ -197,11 +197,16 @@ test('Этап 4, п.3: отметить посещение во время за
 test('Этап 4, п.4: остаток до 0 — исчерпан, следующая отметка уходит в долг', async ({ page }) => {
   const SMALL_TYPE = 'Два занятия · e2e'
 
+  // По id, не getByLabel: к этому моменту в списке уже есть TYPE_NAME, и его
+  // собственная (редактируемая) форма строки несёт те же подписи полей
+  // («Название», «Вид»…) — getByLabel находит и её, и форму добавления,
+  // strict mode violation. Оба TypeFields делят разметку, но не id: форма
+  // добавления — idSuffix="new" (subscription-types/page.tsx:151).
   await page.goto('/app/settings/subscription-types')
-  await page.getByLabel('Название').fill(SMALL_TYPE)
-  await page.getByLabel('Вид').selectOption({ label: 'Пакет занятий' })
-  await page.getByLabel('Занятий').fill('2')
-  await page.getByLabel('Цена, сом').fill('1000')
+  await page.locator('#name-new').fill(SMALL_TYPE)
+  await page.locator('#kind-new').selectOption({ label: 'Пакет занятий' })
+  await page.locator('#lessons-new').fill('2')
+  await page.locator('#price-new').fill('1000')
   await actAndAwait(page, 'Добавить', 'Сохранено')
 
   await page.goto('/app/students')
