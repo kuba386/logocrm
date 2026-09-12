@@ -58,7 +58,8 @@ from unnest(array[
   'public.installment_plans_cancel_live(uuid)',
   'public.subscriptions_cancel_installments()',
   'public.memberships_last_owner_guard()',
-  'public.apply_role_rls(text, text, text, boolean)'
+  'public.apply_role_rls(text, text, text, boolean)',
+  'public.salary_runs_immutable()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -128,7 +129,8 @@ select set_eq(
     ('parent_of_student(uuid)'),
     ('payer_display_name(uuid)'),
     ('record_expense(uuid,integer,text,uuid,date,text)'),
-    ('record_payment(uuid,integer,text,uuid,uuid,uuid,timestamp with time zone,text)'),
+    ('record_payment(uuid,integer,text,uuid,uuid,uuid,timestamp with time zone,text,date)'),
+    ('cancel_salary_run(uuid,date)'),
     ('reopen_month(date)'),
     ('reschedule_lesson(uuid,timestamp with time zone,timestamp with time zone)'),
     ('restore_attendance_status(uuid)'),
