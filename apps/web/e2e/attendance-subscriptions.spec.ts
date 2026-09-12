@@ -2,23 +2,25 @@ import { expect, test, type Page } from '@playwright/test'
 import { formatSom } from '@logocrm/core'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, bishkekYesterdayIso, openBishkekYesterdayWeek, studentCards } from './helpers'
+import { actAndAwait, bishkekYesterdayIso, lessonCard, openBishkekYesterdayWeek, studentCards } from './helpers'
 
 // Пункты 1-4 чек-листа приёмки этапа 4 (docs/Roadmap/stages.md). Пункты 5 и 6
 // (специалист и родитель) — в teacher.spec.ts/parent.spec.ts, они читают
 // состояние, оставленное этим файлом.
 //
-// Пункты 3-4 (заморозка, долг/исчерпание) достались Тимуру, не Данияру —
-// отдельный ребёнок и отдельный специалист (Айгуль, не Нургуль), чтобы не
-// трогать цепочку admin → teacher → parent, которая держится на абонементе
-// Данияра (см. комментарий у «Этап 4, п.2» ниже). На момент, когда писался
-// этот файл впервые, было неясно, действительно ли заморозка бросает
-// исключение при отметке, а не молча уводит занятие в долг — комментарий
-// откладывал проверку. 0015_freeze_state_unification.sql (раздел 11,
+// Пункты 3-4 (заморозка, долг/исчерпание) достались Тимуру и Амине, не
+// Данияру — отдельные дети и отдельные специалисты (Айгуль/Нургуль на
+// свободных часах), чтобы не трогать цепочку admin → teacher → parent,
+// которая держится на абонементе Данияра (см. комментарий у «Этап 4, п.2»
+// ниже). Тимур и Амина — РАЗНЫЕ дети, не один на обе проверки: см.
+// комментарий перед «Этап 4, п.3». На момент, когда писался этот файл
+// впервые, было неясно, действительно ли заморозка бросает исключение при
+// отметке, а не молча уводит занятие в долг — комментарий откладывал
+// проверку. 0015_freeze_state_unification.sql (раздел 11,
 // attendance_fill_and_check) это уже реализует и держит 59 pgTAP-тестов;
 // здесь — только недостающая проверка кликом.
 //
-// Пять занятий Данияра и четыре занятия Тимура в фикстуре
+// Пять занятий Данияра, одно занятие Тимура и три занятия Амины в фикстуре
 // (packages/db/supabase/fixtures/e2e.sql) датированы вчера по Бишкеку, а не
 // фиксированной будущей датой, как у остальной фикстуры: «Отметить
 // посещение» доступно только для уже начавшихся занятий (lesson-panel.tsx,
@@ -52,6 +54,25 @@ async function markStudent(page: Page, student: string, index: number, statusNam
   // сервера и подсветит нажатую кнопку активной. text-white — только у
   // active-варианта (apps/web/lib/attendance.ts), у inactive его нет ни
   // для одного цвета. Раньше этого остаток ещё старый.
+  await expect(row.getByRole('button', { name: statusName, exact: true })).toHaveClass(/text-white/)
+}
+
+/**
+ * То же, что markStudent, но по времени занятия (lessonCard), не по индексу
+ * среди карточек студента: индекс надёжен только когда у ребёнка одно
+ * занятие в фикстуре или все его занятия ведёт один специалист без чужих
+ * занятий вперемешку (как у Данияра). У Амины три занятия подряд одним
+ * специалистом — время однозначно, риска нет, но выбрано намеренно как
+ * более прямой способ, раз всё равно известно заранее.
+ */
+async function markStudentAt(page: Page, student: string, time: string, statusName: string) {
+  await openBishkekYesterdayWeek(page)
+  await lessonCard(page, time, student).click()
+  await page.getByRole('button', { name: 'Отметить посещение' }).click()
+
+  const row = page.locator('li').filter({ hasText: student })
+  await row.getByRole('button', { name: statusName, exact: true }).click()
+
   await expect(row.getByRole('button', { name: statusName, exact: true })).toHaveClass(/text-white/)
 }
 
@@ -135,10 +156,14 @@ test('Этап 4, п.2: отметки посещения списывают, «
   expect(await daniyarRemaining(page)).toBe(5)
 })
 
-// Тимур, не Данияр: отдельный ребёнок и отдельный специалист (Айгуль), чтобы
-// не трогать цепочку admin → teacher → parent на абонементе Данияра выше.
-// Четыре занятия «вчера» в фикстуре (e2e.sql, a0006-a0009): l1 — для этого
-// теста, l2-l4 — для следующего (исчерпание/долг).
+// Тимур и Амина, не Данияр: отдельные дети и отдельные специалисты, чтобы не
+// трогать цепочку admin → teacher → parent на абонементе Данияра выше. Два
+// РАЗНЫХ ребёнка, не один на обе проверки — на одном, с двумя абонементами
+// в один день (один замороженный, другой активный), порядок карточек в
+// недельной сетке и подбор кандидата на списание держат больше неочевидных
+// условий, чем стоит поверять этим тестом: нашли в CI, что
+// studentCards().nth(N) на такой странице резолвится не в тот <button>.
+// Разными детьми вопрос снят целиком, а не обойдён на том же поле.
 test('Этап 4, п.3: отметить посещение во время заморозки — исключение, не молчаливый долг', async ({ page }) => {
   await page.goto('/app/students')
   await page.getByRole('link', { name: STUDENTS.timur }).click()
@@ -148,15 +173,15 @@ test('Этап 4, п.3: отметить посещение во время за
   const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
   if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
   await typeSelect.selectOption(optionValue)
-  // Та же дата, что у занятия l1 фикстуры — иначе s.starts_at > v_lesson_date
-  // и абонемент вообще не попал бы в кандидаты (0015:1064), тест проверял бы
-  // не то исключение.
+  // Та же дата, что у занятия Тимура в фикстуре (e2e.sql, a0006, 15:00) —
+  // иначе s.starts_at > v_lesson_date и абонемент вообще не попал бы в
+  // кандидаты (0015:1064), тест проверял бы не то исключение.
   await page.locator('#startsAt').fill(bishkekYesterdayIso())
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
   // Замораживаем сразу же, открытым концом, с той же даты — абонемент
   // становится единственным кандидатом на списание, и он заморожен на дату
-  // занятия l1 (subscription_freezes.period @> v_lesson_date).
+  // занятия (subscription_freezes.period @> v_lesson_date).
   await page.reload()
   await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
   await page.getByLabel('С', { exact: true }).fill(bishkekYesterdayIso())
@@ -171,9 +196,10 @@ test('Этап 4, п.3: отметить посещение во время за
 
   // Отметка «Пришёл» на замороженном единственном абонементе — исключение
   // (attendance_fill_and_check, 0015, раздел 11), а не тихий долг по цене
-  // услуги.
+  // услуги. По времени (единственное занятие Тимура в фикстуре — 15:00), не
+  // по индексу среди карточек студента.
   await openBishkekYesterdayWeek(page)
-  await studentCards(page, STUDENTS.timur).first().click()
+  await lessonCard(page, '15:00', STUDENTS.timur).click()
   await page.getByRole('button', { name: 'Отметить посещение' }).click()
 
   const row = page.locator('li').filter({ hasText: STUDENTS.timur })
@@ -184,16 +210,11 @@ test('Этап 4, п.3: отметить посещение во время за
     { timeout: 20_000 },
   )
   // Отказ — кнопка не должна выглядеть нажатой (text-white — только у
-  // успешно применённого статуса, markStudent выше проверяет то же самое от
+  // успешно применённого статуса, markStudent ниже проверяет то же самое от
   // противного).
   await expect(row.getByRole('button', { name: 'Пришёл', exact: true })).not.toHaveClass(/text-white/)
 })
 
-// Продолжает предыдущий тест: маленький (2 занятия) абонемент того же
-// Тимура, независимый от замороженного восьми-занятийного — кандидат на
-// списание выбирается по «незамороженные первыми» (0015:1081), так что
-// новый, активный абонемент побеждает при подборе, хотя формально оба
-// подходят по датам.
 test('Этап 4, п.4: остаток до 0 — исчерпан, следующая отметка уходит в долг', async ({ page }) => {
   const SMALL_TYPE = 'Два занятия · e2e'
 
@@ -210,8 +231,8 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
   await actAndAwait(page, 'Добавить', 'Сохранено')
 
   await page.goto('/app/students')
-  await page.getByRole('link', { name: STUDENTS.timur }).click()
-  await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
+  await page.getByRole('link', { name: STUDENTS.amina }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.amina })).toBeVisible()
 
   const typeSelect = page.locator('select#typeId')
   const optionValue = await typeSelect.locator('option', { hasText: SMALL_TYPE }).getAttribute('value')
@@ -220,22 +241,23 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
   await page.locator('#startsAt').fill(bishkekYesterdayIso())
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
-  // l2, l3 (index 1, 2) — два «Пришёл» доводят 2-занятийный абонемент до 0.
-  await markStudent(page, STUDENTS.timur, 1, 'Пришёл')
-  await markStudent(page, STUDENTS.timur, 2, 'Пришёл')
+  // Три занятия Амины в фикстуре (e2e.sql, a0007-a0009): 15:00, 15:45,
+  // 16:30. Первые два — два «Пришёл» доводят 2-занятийный абонемент до 0;
+  // единственный абонемент, ни один другой кандидат не затуманивает выбор.
+  await markStudentAt(page, STUDENTS.amina, '15:00', 'Пришёл')
+  await markStudentAt(page, STUDENTS.amina, '15:45', 'Пришёл')
 
   await page.goto('/app/students')
-  await page.getByRole('link', { name: STUDENTS.timur }).click()
+  await page.getByRole('link', { name: STUDENTS.amina }).click()
   const smallCard = page.locator('div').filter({ hasText: SMALL_TYPE }).filter({ hasText: '0 зан.' }).last()
   await expect(smallCard).toContainText('Исчерпан')
 
-  // l4 (index 3) — третья отметка: списывать не с чего (восьми-занятийный
-  // заморожен, двух-занятийный исчерпан — оба не кандидаты), долг по цене
-  // услуги (Индивидуальное занятие, 800 сом — e2e.sql).
-  await markStudent(page, STUDENTS.timur, 3, 'Пришёл')
+  // 16:30 — третья отметка: абонемент исчерпан, списывать не с чего, долг
+  // по цене услуги (Индивидуальное занятие, 800 сом — e2e.sql).
+  await markStudentAt(page, STUDENTS.amina, '16:30', 'Пришёл')
 
   await page.goto('/app/debts')
-  const debtRow = page.locator('div').filter({ hasText: STUDENTS.timur }).filter({ hasText: 'Долг' }).last()
+  const debtRow = page.locator('div').filter({ hasText: STUDENTS.amina }).filter({ hasText: 'Долг' }).last()
   await expect(debtRow).toContainText(formatSom(80_000))
 })
 
