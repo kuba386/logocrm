@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 set local time zone 'UTC';
 
-select plan(51);
+select plan(53);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -207,6 +207,18 @@ select ok(
   and not has_table_privilege('authenticated', 'public.salary_runs', 'DELETE'),
   'Гранта update/delete на salary_runs по-прежнему нет — триггер второй слой'
 );
+-- Роль на разрешённый переход — тоже в триггере: от postgres с claims
+-- бухгалтера (грант обошли), отмена всё равно отбивается.
+select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-00000000000a');
+select throws_ok(
+  $q$ update public.salary_runs set cancelled_at = now() where id = (select id from t_ins where name = 'run2') $q$,
+  '42501', null, 'Переход в «отменён» не от владельца — отказ триггера, даже в обход гранта'
+);
+select is(
+  (select count(*)::int from public.events where type = 'salary.run_cancelled'), 1,
+  'Событий отмены не прибавилось'
+);
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 -- Старая ветка guard: корректировка за M1 (снимка нет) переносится в M2 (живой снимок run2).
 insert into public.salary_adjustments (center_id, teacher_id, month, amount_tiyin, reason)
 values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000001', (select m1 from t_month), 3000, 'M1');
@@ -290,24 +302,28 @@ select is(
 );
 reset role;
 
--- Второй пояс: та же дата, другая полночь.
+-- Второй пояс: ТА ЖЕ замороженная дата (today − 1 центра А — для NY это
+-- не позже его «сегодня» и не старше года, оба гейта проходят), другая
+-- полночь. Своё «вчера» у NY брать нельзя: в окне 18:00–04:00 UTC оно
+-- отличается на день от бишкекского, и сравнение моментов зависело бы от
+-- часа прогона CI.
 select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000b');
 set local role authenticated;
 insert into t_ins values ('pay_ny', public.record_payment(
   'dddddddd-0000-0000-0000-00000000000b', 7000, 'payment', null, null, null, null, 'NY',
-  public.center_today('cccccccc-0000-0000-0000-00000000000b') - 1));
+  (select today - 1 from t_month)));
 select is(
   (select paid_at from public.payments where id = (select id from t_ins where name = 'pay_ny')),
-  ((public.center_today('cccccccc-0000-0000-0000-00000000000b') - 1)::timestamp) at time zone 'America/New_York',
-  'Нью-Йорк: полночь того же «вчера» — на 10–11 часов позже бишкекской'
+  (((select today - 1 from t_month)::timestamp) at time zone 'America/New_York'),
+  'Нью-Йорк: полночь той же даты по America/New_York'
 );
 reset role;
 
 select ok(
-  (select p_ny.paid_at > p_a.paid_at
+  (select extract(epoch from (p_ny.paid_at - p_a.paid_at)) / 3600 in (10, 11)
      from public.payments p_ny, public.payments p_a
     where p_ny.id = (select id from t_ins where name = 'pay_ny') and p_a.id = (select id from t_ins where name = 'pay_on')),
-  'Одна и та же календарная дата даёт разные моменты по центрам'
+  'Одна дата, два центра: нью-йоркская полночь на 10 (летом) или 11 (зимой) часов позже бишкекской'
 );
 
 

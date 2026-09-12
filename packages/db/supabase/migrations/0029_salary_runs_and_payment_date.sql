@@ -83,6 +83,13 @@ begin
     raise exception 'Снимок зарплаты неизменяем — вместе с отменой ничего не правится' using errcode = '22023';
   end if;
 
+  -- Триггер держит не только «что», но и «кто»: будущий grant update или
+  -- политика роли на запись не откроют отмену мимо владельца (tenant_admin —
+  -- for all). Триггерный/служебный путь без uid — как в installments_notify.
+  if auth.uid() is not null and coalesce(public.my_role(), '') <> 'owner' then
+    raise exception 'Отменить снимок зарплаты может только владелец' using errcode = '42501';
+  end if;
+
   return new;
 end;
 $$;
