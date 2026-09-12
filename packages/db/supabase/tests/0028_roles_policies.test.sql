@@ -66,8 +66,9 @@ select is(
 select is(
   (select count(*)::int from pg_policies
     where schemaname = 'public' and tablename in ('lesson_participants', 'student_payers')
-      and policyname like 'tenant_%' and cmd <> 'SELECT'),
-  0, 'lesson_participants и student_payers — у новых ролей только SELECT (строки кладут триггеры)'
+      and (policyname like 'tenant_registrar%' or policyname like 'tenant_finance%')
+      and cmd <> 'SELECT'),
+  0, 'lesson_participants и student_payers — у новых ролей только SELECT (строки кладут триггеры; tenant_admin for all — 0004, не здесь)'
 );
 
 
