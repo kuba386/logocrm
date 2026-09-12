@@ -1,8 +1,8 @@
 # Этап 5 — Финансы и зарплата
 
 Дата: 2026-09-12 (в работе)
-PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0021), #42/#45 (0022), далее — 0023+
-Миграции: 0013_finance_core, 0014_finance_core_fixes, 0016_expenses, 0017_teacher_rates_and_salary, 0018_installments, 0019_installments_notify_archived, 0020_installment_plans, 0021_revenue_views, 0022_center_scoped_fks
+PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0021), #42/#45 (0022), #46 (0023), #48 (0024), #49 (0025, параллельная сессия), #51 (0026), #52 (0027), #53 (0028)
+Миграции: 0013_finance_core, 0014_finance_core_fixes, 0016_expenses, 0017_teacher_rates_and_salary, 0018_installments, 0019_installments_notify_archived, 0020_installment_plans, 0021_revenue_views, 0022_center_scoped_fks, 0023_sell_subscription_paid, 0024_access_hygiene, 0025_mark_lesson_status_role_guard, 0026_roles_registrar_rpc, 0027_roles_finance_rpc, 0028_roles_policies
 
 ## Plan
 
