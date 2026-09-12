@@ -254,3 +254,17 @@ export const monthSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}-01$/, 'Месяц — первое число, ГГГГ-ММ-01'),
 })
 export type MonthInput = z.infer<typeof monthSchema>
+
+// --- Этап 5: /app/salary --------------------------------------------------------------
+
+export const teacherMonthSchema = monthSchema.extend({
+  teacherId: z.string().uuid('Некорректный специалист'),
+})
+export type TeacherMonthInput = z.infer<typeof teacherMonthSchema>
+
+/** record_salary_adjustment: бонус (+) или штраф (−), ноль запрещён констрейнтом. */
+export const salaryAdjustmentSchema = teacherMonthSchema.extend({
+  amountTiyin: z.number().int('Сумма — в сомах, до тыйына').refine((v) => v !== 0, 'Сумма не может быть нулём'),
+  reason: z.string().trim().min(2, 'Укажите причину').max(200, 'Причина — не длиннее 200 символов'),
+})
+export type SalaryAdjustmentInput = z.infer<typeof salaryAdjustmentSchema>

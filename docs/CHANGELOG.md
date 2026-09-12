@@ -33,6 +33,11 @@
   — платежи и рассрочки, бухгалтеру и администрации — всё. zod-схемы
   `recordPaymentSchema`/`recordExpenseSchema`/`payInstallmentSchema`/
   `monthSchema` в `packages/contracts`; строки — `messages/ru.json`.
+- **`/app/salary`** — месяц → `salary_summary` по специалистам (по занятиям,
+  корректировки, итого, утверждено / отменённые снимки), раскрытие
+  `calc_salary` построчно, бонус/штраф (`record_salary_adjustment`),
+  «Утвердить» за прошедший месяц (`approve_salary`), «Отменить снимок» —
+  владельцу (`cancel_salary_run`, 0029). Доступ — owner/admin/finance.
 
 ### Исправлено
 
