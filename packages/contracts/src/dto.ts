@@ -268,3 +268,26 @@ export const salaryAdjustmentSchema = teacherMonthSchema.extend({
   reason: z.string().trim().min(2, 'Укажите причину').max(200, 'Причина — не длиннее 200 символов'),
 })
 export type SalaryAdjustmentInput = z.infer<typeof salaryAdjustmentSchema>
+
+/** Совпадает с teacher_rates_model_known (0017). */
+export const rateModelSchema = z.enum(['per_lesson', 'per_hour', 'percent_payment', 'per_student'])
+export type RateModel = z.infer<typeof rateModelSchema>
+
+/**
+ * Прямой insert в teacher_rates (RPC нет, 0017): value — тыйыны для
+ * per_lesson/per_hour/per_student, проценты × 100 для percent_payment
+ * (3000 = 30.00%, teacher_rates_percent_bounded ≤ 10000).
+ */
+export const teacherRateSchema = z
+  .object({
+    teacherId: z.string().uuid('Выберите специалиста'),
+    serviceId: z.string().uuid('Некорректная услуга').optional(),
+    model: rateModelSchema,
+    value: z.number().int('Значение — целое в тыйынах или сотых процента').min(0, 'Ставка не может быть отрицательной'),
+    validFrom: isoDateSchema,
+  })
+  .refine((i) => i.model !== 'percent_payment' || i.value <= 10000, {
+    message: 'Процент — не больше 100',
+    path: ['value'],
+  })
+export type TeacherRateInput = z.infer<typeof teacherRateSchema>

@@ -101,6 +101,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   Зарплата
                 </Link>
               ) : null}
+              {role === 'teacher' ? (
+                <Link href="/app/my-salary" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                  Моя зарплата
+                </Link>
+              ) : null}
               {isAdmin || finance ? (
                 <Link
                   href="/app/settings/staff"
