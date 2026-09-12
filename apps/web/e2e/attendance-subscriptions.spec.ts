@@ -241,20 +241,23 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
   await page.locator('#startsAt').fill(bishkekYesterdayIso())
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
-  // Три занятия Амины в фикстуре (e2e.sql, a0007-a0009): 15:00, 15:45,
-  // 16:30. Первые два — два «Пришёл» доводят 2-занятийный абонемент до 0;
+  // Три занятия Амины в фикстуре (e2e.sql, a0007-a0009): 15:45, 16:30,
+  // 17:15 — следом за единственным занятием Тимура (15:00-15:45), не
+  // одновременно: недельная сетка не разносит занятия разных специалистов
+  // по колонкам, совпадение по времени наложило бы карточки друг на друга.
+  // Первые два — два «Пришёл» доводят 2-занятийный абонемент до 0;
   // единственный абонемент, ни один другой кандидат не затуманивает выбор.
-  await markStudentAt(page, STUDENTS.amina, '15:00', 'Пришёл')
   await markStudentAt(page, STUDENTS.amina, '15:45', 'Пришёл')
+  await markStudentAt(page, STUDENTS.amina, '16:30', 'Пришёл')
 
   await page.goto('/app/students')
   await page.getByRole('link', { name: STUDENTS.amina }).click()
   const smallCard = page.locator('div').filter({ hasText: SMALL_TYPE }).filter({ hasText: '0 зан.' }).last()
   await expect(smallCard).toContainText('Исчерпан')
 
-  // 16:30 — третья отметка: абонемент исчерпан, списывать не с чего, долг
+  // 17:15 — третья отметка: абонемент исчерпан, списывать не с чего, долг
   // по цене услуги (Индивидуальное занятие, 800 сом — e2e.sql).
-  await markStudentAt(page, STUDENTS.amina, '16:30', 'Пришёл')
+  await markStudentAt(page, STUDENTS.amina, '17:15', 'Пришёл')
 
   await page.goto('/app/debts')
   const debtRow = page.locator('div').filter({ hasText: STUDENTS.amina }).filter({ hasText: 'Долг' }).last()
