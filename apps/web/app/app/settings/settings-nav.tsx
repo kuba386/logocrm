@@ -14,6 +14,7 @@ const SECTIONS = [
   { href: '/app/settings/services', label: 'Услуги' },
   { href: '/app/settings/attendance-statuses', label: 'Статусы посещения' },
   { href: '/app/settings/subscription-types', label: 'Типы абонементов' },
+  { href: '/app/settings/teacher-rates', label: 'Ставки' },
 ]
 
 export function SettingsNav() {
