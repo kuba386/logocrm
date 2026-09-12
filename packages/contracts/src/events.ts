@@ -209,7 +209,15 @@ export const subscriptionRefundedSchema = z.object({
     center_id: z.string().uuid(),
     subscription_id: z.string().uuid(),
     lessons: z.number().int().nonnegative(),
+    // Стоимость неотработанных занятий (refund_calc), не деньги — по
+    // частично оплаченному абонементу больше реально возвращённого
+    // (0030). Деньги — refund_tiyin.
     amount_tiyin: z.number().int().nonnegative(),
+    // Optional: поле появилось в 0030. События, записанные раньше (в т.ч.
+    // в staging), его не содержат — события не переписываются
+    // (deleted_at-правило распространяется и на форму payload), а схема
+    // читает и старую, и новую историю.
+    refund_tiyin: z.number().int().nonnegative().optional(),
   }),
 })
 export type SubscriptionRefunded = z.infer<typeof subscriptionRefundedSchema>

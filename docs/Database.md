@@ -403,7 +403,8 @@ reset role;
 
 | Функция | Кому | Что делает |
 |---|---|---|
-| `sell_subscription` / `freeze_subscription` / `unfreeze_subscription` / `refund_subscription` / `transfer_remaining` | owner, admin | все пути записи в абонементы |
+| `sell_subscription` / `freeze_subscription` / `unfreeze_subscription` / `transfer_remaining` | owner, admin | все пути записи в абонементы |
+| `refund_subscription(p_id, p_expected_tiyin, p_source_id)` | owner, admin, registrar (`can_front_desk`, 0026) | отмена с возвратом — платёжной строкой на `least(refund_calc, paid_tiyin)`, источник обязателен только если реально возвращаются деньги; повторный возврат держит `payments_refund_once_key` (0030) |
 | `mark_attendance` / `mark_attendance_bulk` | owner, admin, teacher (своё занятие) | единственный прикладной путь отметки; статус занятия не трогает |
 | `subscription_summary(uuid)` | owner, admin | остаток, состояние, дни заморозки, сумма возврата; чужой — исключение |
 | `student_subscription_badge(uuid)` | все роли своего центра | «нет / заканчивается / есть», без сумм |
@@ -485,6 +486,26 @@ end if;
   `other_tiyin`, чтобы был громким, а не терялся из именованных колонок.
 - Месяц без строки — не ноль: отсутствие строки трактует клиент, в одном
   месте.
+
+### Инварианты `payments` (0013, 0030)
+
+- **Знак — часть суммы**, не отдельный флаг: `payments_sign_matches_kind`
+  (`kind = 'payment'` → `amount_tiyin > 0`; `'refund'` → `< 0`;
+  `'correction'` — любой). `sum(amount_tiyin)` в любой витрине без `filter`
+  по `kind` уже даёт правильную кассу.
+- **Переплата** — инвариант только для `kind = 'payment'` с
+  `subscription_id`: триггер `payments_recalc_paid_overpay_guard`
+  (`payments_no_overpay()`), **AFTER**, по алфавиту после
+  `payments_recalc_paid` — значит видит уже пересчитанный `paid_tiyin`, не
+  считает прогноз сам. `kind = 'correction'` инвариант сознательно не
+  проверяет: единственный путь провести переплату намеренно
+  (`docs/Roadmap/stages.md:352-356`). Без списка колонок в `update of` —
+  `kind` тоже должен попадать под проверку, отдельный список однажды уже
+  давал обойти инвариант правкой не той колонки.
+- **Повторный возврат** — частичный unique `payments_refund_once_key on
+  payments (subscription_id) where kind = 'refund'`: `refund_subscription`
+  сам это тоже проверяет (ради текста ошибки), но гарантия — в индексе,
+  переживает прямой insert.
 
 ### Что не построено (этап 5)
 
