@@ -44,9 +44,12 @@
 
 -- 1. salary_runs: cancelled_at, частичный unique, неизменяемость -------------------
 
+-- cancelled_by — без FK на auth.users, как approved_by в 0017: on delete set
+-- null был бы update отменённого снимка, который триггер ниже отбивает, и
+-- удаление учётки сотрудника падало бы с текстом про снимок.
 alter table public.salary_runs
   add column if not exists cancelled_at timestamptz,
-  add column if not exists cancelled_by uuid references auth.users (id) on delete set null;
+  add column if not exists cancelled_by uuid;
 
 comment on column public.salary_runs.cancelled_at is
   'Снимок отменён владельцем (cancel_salary_run) — единственное изменение, которое переживает salary_runs_immutable. Отменённый снимок остаётся историей: salary_summary считает их в cancelled_runs.';
@@ -73,9 +76,10 @@ begin
   if new.cancelled_at is null then
     raise exception 'Снимок зарплаты неизменяем — переутверждение только через cancel_salary_run' using errcode = '22023';
   end if;
-  if row(new.id, new.center_id, new.teacher_id, new.month, new.total_tiyin, new.lines, new.approved_at, new.approved_by)
-     is distinct from
-     row(old.id, old.center_id, old.teacher_id, old.month, old.total_tiyin, old.lines, old.approved_at, old.approved_by) then
+  -- Вся строка минус две колонки отмены, а не белый список: колонка,
+  -- добавленная будущей миграцией, защищена по умолчанию, а «эту можно
+  -- менять» — явная правка вычитаемого списка.
+  if (to_jsonb(new) - 'cancelled_at' - 'cancelled_by') <> (to_jsonb(old) - 'cancelled_at' - 'cancelled_by') then
     raise exception 'Снимок зарплаты неизменяем — вместе с отменой ничего не правится' using errcode = '22023';
   end if;
 

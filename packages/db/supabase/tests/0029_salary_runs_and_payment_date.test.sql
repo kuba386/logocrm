@@ -9,7 +9,7 @@ create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 set local time zone 'UTC';
 
-select plan(47);
+select plan(51);
 
 insert into auth.users (
   instance_id, id, aud, role, email,
@@ -50,6 +50,7 @@ insert into public.subscription_types (id, center_id, name, kind, lessons_count,
 create temporary table t_month as
   select (date_trunc('month', public.center_today('cccccccc-0000-0000-0000-00000000000a')) - interval '1 month')::date as m1,
          (date_trunc('month', public.center_today('cccccccc-0000-0000-0000-00000000000a')) - interval '2 months')::date as m2,
+         (date_trunc('month', public.center_today('cccccccc-0000-0000-0000-00000000000a')) - interval '3 months')::date as m3,
          public.center_today('cccccccc-0000-0000-0000-00000000000a') as today;
 grant select on t_month to authenticated;
 
@@ -118,6 +119,19 @@ select throws_ok(
 );
 reset role;
 
+-- Чужой центр: владелец NY не отменяет снимок центра А (ADR-002).
+select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000b');
+set local role authenticated;
+select throws_ok(
+  $q$ select public.cancel_salary_run('aaaaaaaa-0000-0000-0000-000000000001', (select m2 from t_month)) $q$,
+  '42704', null, 'Владелец другого центра — «снимка нет», не отмена'
+);
+reset role;
+select is(
+  (select cancelled_at from public.salary_runs where id = (select id from t_ins where name = 'run1')),
+  null::timestamptz, 'Снимок центра А остался живым после попытки из NY'
+);
+
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select is(
@@ -127,6 +141,11 @@ select is(
 select throws_ok(
   $q$ select public.cancel_salary_run('aaaaaaaa-0000-0000-0000-000000000001', (select m2 from t_month)) $q$,
   '42704', null, 'Повторная отмена — живого снимка нет'
+);
+select is(
+  (select count(*)::int from public.salary_summary((select m2 from t_month))
+    where teacher_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  1, 'salary_summary отдаёт строку специалиста — следующий null не от пустого результата'
 );
 select is(
   (select approved_run_id from public.salary_summary((select m2 from t_month))
@@ -306,6 +325,13 @@ select lives_ok(
   'finance утверждает зарплату после 0029 (тело из 0027 — can_finance)'
 );
 reset role;
+
+-- Старая ветка guard: корректировка M1 (снимок теперь живой) переносится в
+-- M3, где снимка нет — срабатывает только elsif по old.month.
+select throws_ok(
+  $q$ update public.salary_adjustments set month = (select m3 from t_month) where reason = 'M1' $q$,
+  '22023', null, 'Перенос корректировки ИЗ месяца с живым снимком — старая ветка guard (old.month)'
+);
 
 select public.tests_claims('55555555-5555-5555-5555-555555555555','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
