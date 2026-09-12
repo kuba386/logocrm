@@ -55,7 +55,7 @@ create temporary table t_month as
 grant select on t_month to authenticated;
 
 insert into public.lessons (id, center_id, teacher_id, student_id, starts_at, ends_at)
-select 'ffffffff-0000-0000-0000-00000000000' || n, 'cccccccc-0000-0000-0000-00000000000a',
+select ('ffffffff-0000-0000-0000-00000000000' || n)::uuid, 'cccccccc-0000-0000-0000-00000000000a',
        'aaaaaaaa-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000001',
        ((m1 + 4)::timestamp + make_interval(hours => 9 + n)) at time zone 'Asia/Bishkek',
        ((m1 + 4)::timestamp + make_interval(hours => 9 + n, mins => 45)) at time zone 'Asia/Bishkek'
