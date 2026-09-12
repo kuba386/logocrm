@@ -57,7 +57,8 @@ from unnest(array[
   'public.installments_notify()',
   'public.installment_plans_cancel_live(uuid)',
   'public.subscriptions_cancel_installments()',
-  'public.memberships_last_owner_guard()'
+  'public.memberships_last_owner_guard()',
+  'public.apply_role_rls(text, text, text, boolean)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -175,7 +176,10 @@ select set_eq(
     ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
     ('cancel_installment_plan(uuid)'),
     ('subscription_payment_summary(uuid)'),
-    ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)')
+    ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)'),
+    ('can_front_desk(uuid)'),
+    ('can_finance(uuid)'),
+    ('can_payments(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

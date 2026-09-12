@@ -2319,6 +2319,9 @@ export type Database = {
           student_id: string
         }[]
       }
+      can_finance: { Args: { p_center_id?: string }; Returns: boolean }
+      can_front_desk: { Args: { p_center_id?: string }; Returns: boolean }
+      can_payments: { Args: { p_center_id?: string }; Returns: boolean }
       cancel_installment_plan: {
         Args: { p_subscription_id: string }
         Returns: number
