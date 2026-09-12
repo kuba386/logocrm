@@ -22,7 +22,12 @@ export default async function DashboardPage() {
   const { data: center } = await supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle()
   const timeZone = centerTimeZone(center?.settings)
 
-  if (role === 'owner' || role === 'admin') return <AdminDashboard timeZone={timeZone} />
+  // registrar/finance — дашборд администратора: лишнее (выручка для
+  // регистратора, расписание для бухгалтера) режут политики 0028, экран
+  // покажет пусто, а не чужое.
+  if (role === 'owner' || role === 'admin' || role === 'registrar' || role === 'finance') {
+    return <AdminDashboard timeZone={timeZone} />
+  }
   if (role === 'teacher') return <TeacherDashboard timeZone={timeZone} />
   if (role === 'parent') return <ParentDashboard timeZone={timeZone} />
 

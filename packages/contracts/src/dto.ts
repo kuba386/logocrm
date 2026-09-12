@@ -196,3 +196,61 @@ export const sellSubscriptionPaidSchema = z
     path: ['installments'],
   })
 export type SellSubscriptionPaidInput = z.infer<typeof sellSubscriptionPaidSchema>
+
+// --- Этап 5: /app/finance ------------------------------------------------------------
+
+/** Совпадает с payments_kind_known (0014). Знак — payments_sign_matches_kind: payment > 0, refund < 0. */
+export const paymentKindSchema = z.enum(['payment', 'refund', 'correction'])
+export type PaymentKind = z.infer<typeof paymentKindSchema>
+
+/** Совпадает с expenses_kind_known (0016): expense > 0, refund < 0 («вернули из расхода»). */
+export const expenseKindSchema = z.enum(['expense', 'refund', 'correction'])
+export type ExpenseKind = z.infer<typeof expenseKindSchema>
+
+const commentSchema = z.string().trim().max(500, 'Комментарий — не длиннее 500 символов').optional().or(z.literal(''))
+
+/**
+ * record_payment без привязки к абонементу (0029): платёж к абонементу
+ * проводится с карточки ученика (продажа, рассрочка). amountTiyin — уже со
+ * знаком: форма вводит модуль, server action ставит знак по виду.
+ */
+export const recordPaymentSchema = z
+  .object({
+    payerId: z.string().uuid('Выберите плательщика'),
+    studentId: z.string().uuid('Некорректный ученик').optional(),
+    kind: paymentKindSchema,
+    amountTiyin: z.number().int('Сумма — в сомах, до тыйына').refine((v) => v !== 0, 'Сумма не может быть нулём'),
+    sourceId: z.string().uuid('Укажите источник оплаты').optional(),
+    paidOn: isoDateSchema,
+    comment: commentSchema,
+  })
+  .refine((i) => i.kind !== 'payment' || i.amountTiyin > 0, { message: 'Платёж — положительная сумма', path: ['amountTiyin'] })
+  .refine((i) => i.kind !== 'refund' || i.amountTiyin < 0, { message: 'Возврат — отрицательная сумма', path: ['amountTiyin'] })
+  .refine((i) => i.kind === 'correction' || Boolean(i.sourceId), { message: 'Укажите источник оплаты', path: ['sourceId'] })
+export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>
+
+export const recordExpenseSchema = z
+  .object({
+    categoryId: z.string().uuid('Выберите статью расхода'),
+    kind: expenseKindSchema,
+    amountTiyin: z.number().int('Сумма — в сомах, до тыйына').refine((v) => v !== 0, 'Сумма не может быть нулём'),
+    sourceId: z.string().uuid('Некорректный источник').optional(),
+    paidOn: isoDateSchema,
+    comment: commentSchema,
+  })
+  .refine((i) => i.kind !== 'expense' || i.amountTiyin > 0, { message: 'Расход — положительная сумма', path: ['amountTiyin'] })
+  .refine((i) => i.kind !== 'refund' || i.amountTiyin < 0, { message: 'Возврат из расхода — отрицательная сумма', path: ['amountTiyin'] })
+export type RecordExpenseInput = z.infer<typeof recordExpenseSchema>
+
+export const payInstallmentSchema = z.object({
+  installmentId: z.string().uuid('Некорректный платёж рассрочки'),
+  sourceId: z.string().uuid('Укажите источник оплаты'),
+  comment: commentSchema,
+})
+export type PayInstallmentInput = z.infer<typeof payInstallmentSchema>
+
+/** Первое число месяца — как salary_runs_month_is_first_of_month и close_month. */
+export const monthSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}-01$/, 'Месяц — первое число, ГГГГ-ММ-01'),
+})
+export type MonthInput = z.infer<typeof monthSchema>

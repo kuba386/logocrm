@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/login/actions'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { roleLabel } from '@/lib/roles'
+import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
 
 /**
@@ -49,7 +49,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .eq('user_id', user.id),
   ])
 
+  // Меню — по матрице прав (docs/FEATURE_MATRIX.md); это косметика, отказ
+  // приходит из базы: registrar/finance режут политики 0028, не эти флаги.
   const isAdmin = role === 'owner' || role === 'admin'
+  const frontDesk = isFrontDesk(role)
+  const finance = isFinance(role)
+  const payments = canPayments(role)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -71,24 +76,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/app/students" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                 Ученики
               </Link>
-              {isAdmin ? (
-                <>
-                  <Link href="/app/payers" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                    Плательщики
-                  </Link>
-                  <Link href="/app/groups" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                    Группы
-                  </Link>
-                  <Link href="/app/debts" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                    Долги
-                  </Link>
-                  <Link
-                    href="/app/settings/staff"
-                    className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                  >
-                    Настройки
-                  </Link>
-                </>
+              {payments ? (
+                <Link href="/app/payers" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                  Плательщики
+                </Link>
+              ) : null}
+              {frontDesk ? (
+                <Link href="/app/groups" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                  Группы
+                </Link>
+              ) : null}
+              {payments ? (
+                <Link href="/app/debts" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                  Долги
+                </Link>
+              ) : null}
+              {payments ? (
+                <Link href="/app/finance" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                  Финансы
+                </Link>
+              ) : null}
+              {isAdmin || finance ? (
+                <Link
+                  href="/app/settings/staff"
+                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                >
+                  Настройки
+                </Link>
               ) : null}
             </nav>
           </div>

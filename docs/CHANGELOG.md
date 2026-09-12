@@ -21,7 +21,18 @@
   для строк интерфейса по Definition of Done; переехали строки формы
   продажи и блока оплаты, остальные строки панели — с её следующей правкой.
 - Роли `registrar` и `finance` в `packages/contracts` (`roleSchema`,
-  `invitableRoleSchema`) — по чекам 0026/0028.
+  `invitableRoleSchema`) — по чекам 0026/0028; `apps/web/lib/roles.ts` —
+  названия, лестница назначений и приглашений как в `change_member_role`/
+  `create_invitation` (0028), меню и дашборд по матрице прав.
+- **`/app/finance`** — вкладки «Платежи» (итоги месяца из `cash_by_source`,
+  список, платёж/возврат/корректировка без абонемента через `record_payment`
+  с датой по центру), «Расходы» (`record_expense`), «Рассрочки»
+  (`installments_view`, просроченные красным, WhatsApp-напоминание,
+  «Оплачен» → `pay_installment`), «Периоды» (`close_month` с числом
+  запланированных занятий, `reopen_month` — только владельцу). Регистратору
+  — платежи и рассрочки, бухгалтеру и администрации — всё. zod-схемы
+  `recordPaymentSchema`/`recordExpenseSchema`/`payInstallmentSchema`/
+  `monthSchema` в `packages/contracts`; строки — `messages/ru.json`.
 
 ### Исправлено
 
