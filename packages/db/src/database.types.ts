@@ -2575,7 +2575,7 @@ export type Database = {
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
-        Args: { p_expected_tiyin: number; p_id: string }
+        Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
