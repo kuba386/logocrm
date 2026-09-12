@@ -23,6 +23,7 @@ export const STUDENTS = {
   daniyar: 'Данияр Иванов',
   foreign: 'Чужой Ребёнок',
   timur: 'Тимур Сыдыков',
+  amina: 'Амина Сыдыкова',
 } as const
 
 export const SERVICES = {
