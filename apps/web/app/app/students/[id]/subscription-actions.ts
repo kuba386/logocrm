@@ -136,9 +136,11 @@ export async function unfreezeSubscription(
 
 /**
  * p_expected_tiyin — сумма, которую только что показали администратору
- * (subscription_summary.refund_tiyin). Не оптимистичный расчёт: если
- * остаток изменился между показом и кликом, RPC откажет сам, а не тихо
- * вернёт другую сумму.
+ * (subscription_summary.refund_tiyin — стоимость неотработанных занятий,
+ * не деньги). Не оптимистичный расчёт: если остаток изменился между
+ * показом и кликом, RPC откажет сам, а не тихо вернёт другую сумму.
+ * Источник — только если реально возвращаются деньги (0030): по
+ * неоплаченному абонементу форма его не показывает и не отправляет.
  */
 export async function refundSubscription(
   _prev: SubscriptionState,
@@ -147,20 +149,22 @@ export async function refundSubscription(
   const studentId = String(formData.get('studentId') ?? '')
   const subscriptionId = String(formData.get('subscriptionId') ?? '')
   const expectedTiyin = Number(formData.get('expectedTiyin') ?? '')
+  const sourceId = optional(formData, 'sourceId')
   if (!subscriptionId || !Number.isInteger(expectedTiyin)) {
-    return { message: 'Пересчитайте сумму возврата и попробуйте снова' }
+    return { message: t('sale', 'recalcRefund') }
   }
 
   const supabase = await createClient()
   const { error } = await supabase.rpc('refund_subscription', {
     p_id: subscriptionId,
     p_expected_tiyin: expectedTiyin,
+    p_source_id: sourceId,
   })
 
-  if (error) return toAppError(error, 'Не удалось оформить возврат')
+  if (error) return toAppError(error, t('sale', 'refundFailed'))
 
   revalidatePath(`/app/students/${studentId}`)
-  return { message: '', notice: 'Возврат оформлен' }
+  return { message: '', notice: t('sale', 'refundDone') }
 }
 
 export async function transferRemaining(

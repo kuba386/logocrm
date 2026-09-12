@@ -59,7 +59,8 @@ from unnest(array[
   'public.subscriptions_cancel_installments()',
   'public.memberships_last_owner_guard()',
   'public.apply_role_rls(text, text, text, boolean)',
-  'public.salary_runs_immutable()'
+  'public.salary_runs_immutable()',
+  'public.payments_no_overpay()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -157,7 +158,7 @@ select set_eq(
     ('mark_attendance(uuid,uuid,text,text)'),
     ('mark_attendance_bulk(uuid,jsonb)'),
     ('refund_calc(uuid)'),
-    ('refund_subscription(uuid,integer)'),
+    ('refund_subscription(uuid,integer,uuid)'),
     ('sell_subscription(uuid,uuid,integer,date)'),
     ('student_subscription_badge(uuid)'),
     ('student_balance_pick(uuid)'),

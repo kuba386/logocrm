@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { formatSom, installmentDueDates, splitInstallments } from '@logocrm/core'
+import { formatSom, installmentDueDates, refundPayout, splitInstallments } from '@logocrm/core'
 import {
   freezeSubscription,
   refundSubscription,
@@ -395,22 +395,34 @@ function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscr
   )
 }
 
+/**
+ * refundTiyin (subscription_summary.refund_tiyin = refund_calc) — стоимость
+ * НЕОТРАБОТАННЫХ занятий, не деньги. Реально вернуть можно не больше
+ * внесённого (0030, Р1): по абонементу, оплаченному частично, сервер
+ * капнет сумму сам — форма показывает это явно, а не только «к возврату»
+ * из одной цифры, которая по частичной оплате её же не покроет.
+ */
 function RefundForm({
   studentId,
   subscriptionId,
   refundTiyin,
+  paidTiyin,
+  sources,
 }: {
   studentId: string
   subscriptionId: string
   refundTiyin: number
+  paidTiyin: number
+  sources: SourceOption[]
 }) {
   const [state, formAction] = useActionState(refundSubscription, initial)
   const [confirming, setConfirming] = useState(false)
+  const moneyBack = refundPayout(refundTiyin, paidTiyin)
 
   if (!confirming) {
     return (
       <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-        Вернуть
+        {t('sale', 'refund')}
       </Button>
     )
   }
@@ -421,13 +433,33 @@ function RefundForm({
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedTiyin" value={refundTiyin} />
       <p className="text-sm">
-        К возврату: <strong>{formatSom(refundTiyin)}</strong>. Если остаток изменился, пока считали, сервер
-        откажет — пересчитайте и повторите.
+        {t('sale', 'unworkedCost', { sum: formatSom(refundTiyin) })}
+        {moneyBack < refundTiyin ? (
+          <>
+            {' '}
+            {t('sale', 'moneyBack', { sum: formatSom(moneyBack) })}
+          </>
+        ) : null}
+        {'. '}
+        {t('sale', 'refundHint')}
       </p>
+      {moneyBack > 0 ? (
+        <div className="space-y-1">
+          <Label htmlFor={`refund-source-${subscriptionId}`}>{t('sale', 'source')}</Label>
+          <Select id={`refund-source-${subscriptionId}`} name="sourceId" defaultValue={sources[0]?.id ?? ''}>
+            {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
       <div className="flex gap-2">
-        <SubmitButton variant="destructive">Подтвердить возврат</SubmitButton>
+        <SubmitButton variant="destructive">{t('sale', 'confirmRefund')}</SubmitButton>
         <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(false)}>
-          Отмена
+          {t('sale', 'cancel')}
         </Button>
       </div>
       <FormError message={state.message} />
@@ -474,11 +506,13 @@ function SubscriptionCard({
   studentId,
   subscription,
   siblings,
+  sources,
   timeZone,
 }: {
   studentId: string
   subscription: SubscriptionView
   siblings: SiblingOption[]
+  sources: SourceOption[]
   timeZone: string
 }) {
   return (
@@ -565,7 +599,13 @@ function SubscriptionCard({
 
       {subscription.state !== 'cancelled' && subscription.refundTiyin > 0 ? (
         <div className="flex flex-wrap items-start gap-2 border-t border-border pt-3">
-          <RefundForm studentId={studentId} subscriptionId={subscription.id} refundTiyin={subscription.refundTiyin} />
+          <RefundForm
+            studentId={studentId}
+            subscriptionId={subscription.id}
+            refundTiyin={subscription.refundTiyin}
+            paidTiyin={subscription.paidTiyin}
+            sources={sources}
+          />
           <TransferForm studentId={studentId} subscriptionId={subscription.id} siblings={siblings} />
         </div>
       ) : null}
@@ -659,6 +699,7 @@ export function SubscriptionsPanel({
                   studentId={studentId}
                   subscription={subscription}
                   siblings={siblings}
+                  sources={sources}
                   timeZone={timeZone}
                 />
               ))}

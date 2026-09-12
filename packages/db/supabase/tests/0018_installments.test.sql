@@ -301,8 +301,11 @@ select is(
   'summary: неоплаченных строк нет'
 );
 
+-- kind='correction', не 'payment' (0030): переплата поверх уже оплаченного
+-- абонемента — единственный путь записать её намеренно, payments_no_overpay
+-- отбивает ровно это же действие с kind='payment'.
 insert into t_ins (name, id)
-select 'p_over', public.record_payment('dddddddd-0000-0000-0000-000000000001', 50000, 'payment',
+select 'p_over', public.record_payment('dddddddd-0000-0000-0000-000000000001', 50000, 'correction',
   'eeeeeeee-0000-0000-0000-000000000001', '88880000-0000-0000-0000-000000000001', null, now(), 'лишнее');
 
 select is(

@@ -14,6 +14,7 @@ export {
 export {
   lessonsLeft,
   refundAmount,
+  refundPayout,
   freezeShift,
   isRunningOut,
   isExhausted,

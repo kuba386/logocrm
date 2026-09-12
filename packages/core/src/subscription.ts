@@ -53,6 +53,20 @@ export function refundAmount(sub: SubscriptionSnapshot): number {
 }
 
 /**
+ * Деньги, которые реально возвращаются: не больше внесённого (0030).
+ *
+ * refundAmount (переданный сюда как refundTiyin) — стоимость неотработанных
+ * занятий, а не деньги: по частично оплаченному абонементу (продажа 4 000,
+ * оплата 2 000) она больше того, что можно вернуть. Отрицательный платёж
+ * сверх paid_tiyin уронил бы subscriptions_paid_not_negative на сервере —
+ * здесь то же ограничение видно раньше, для подсказки в форме (зеркало
+ * refund_subscription, Р1, 0030).
+ */
+export function refundPayout(refundTiyin: number, paidTiyin: number): number {
+  return Math.min(refundTiyin, paidTiyin)
+}
+
+/**
  * Новая дата окончания после заморозки: срок сдвигается на её длительность.
  *
  * Считается по календарным дням в часовом поясе центра. Дата на входе и

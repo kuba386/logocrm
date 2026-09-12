@@ -9,6 +9,7 @@ import {
   lessonPrice,
   lessonsLeft,
   refundAmount,
+  refundPayout,
   type SubscriptionSnapshot,
 } from './subscription'
 
@@ -63,6 +64,24 @@ describe('refundAmount', () => {
 
   it('безлимит возврата по занятиям не имеет', () => {
     expect(refundAmount(pack({ lessonsTotal: null }))).toBe(0)
+  })
+})
+
+describe('refundPayout — общий набор случаев с pgTAP (0030)', () => {
+  it('частичная оплата: продажа 4000, оплата 2000, ничего не отработано — вернётся 2000, не 4000', () => {
+    expect(refundPayout(refundAmount(pack()), 200_000)).toBe(200_000)
+  })
+
+  it('полная оплата — возврат равен стоимости неотработанных занятий', () => {
+    expect(refundPayout(refundAmount(pack()), 400_000)).toBe(400_000)
+  })
+
+  it('ничего не оплачено — возврат нулевой независимо от неотработанных занятий', () => {
+    expect(refundPayout(refundAmount(pack()), 0)).toBe(0)
+  })
+
+  it('внесено больше стоимости неотработанных занятий — капается по занятиям, не по оплате', () => {
+    expect(refundPayout(refundAmount(pack({ lessonsUsed: 5 })), 400_000)).toBe(150_000)
   })
 })
 
