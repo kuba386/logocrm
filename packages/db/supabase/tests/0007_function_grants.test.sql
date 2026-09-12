@@ -57,7 +57,8 @@ from unnest(array[
   'public.installments_notify()',
   'public.installment_plans_cancel_live(uuid)',
   'public.subscriptions_cancel_installments()',
-  'public.memberships_last_owner_guard()'
+  'public.memberships_last_owner_guard()',
+  'public.apply_role_rls(text, text, boolean, boolean)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
