@@ -1,8 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { sellSubscriptionPaidSchema } from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError } from '@/lib/errors'
+import { t } from '@/lib/messages'
 import { addDays } from '@/lib/timezone'
 
 export type SubscriptionState = AppError & { notice?: string }
@@ -20,26 +22,61 @@ function optionalTiyin(formData: FormData, key: string): number | undefined {
   return Math.round(som * 100)
 }
 
-export async function sellSubscription(
+/**
+ * Продажа с оплатой и рассрочкой одной транзакцией (sell_subscription_paid,
+ * 0023/0029): отказ любого шага откатывает всю продажу. Строки графика
+ * возвращает сервер — интерфейс перерисовывается по revalidatePath, а не по
+ * предпросмотру из браузера. sale_key — ключ идемпотентности против двойного
+ * клика: повтор с тем же ключом сервер отбивает.
+ */
+export async function sellSubscriptionPaid(
   _prev: SubscriptionState,
   formData: FormData,
 ): Promise<SubscriptionState> {
   const studentId = String(formData.get('studentId') ?? '')
-  const typeId = String(formData.get('typeId') ?? '')
-  if (!studentId || !typeId) return { message: 'Выберите тип абонемента' }
+  const paidTiyin = optionalTiyin(formData, 'paidSom') ?? 0
+  const withInstallments = formData.get('withInstallments') === 'on'
+  const expectedRaw = Number(formData.get('expectedRemainingTiyin') ?? '')
+
+  const parsed = sellSubscriptionPaidSchema.safeParse({
+    studentId,
+    typeId: String(formData.get('typeId') ?? ''),
+    saleKey: String(formData.get('saleKey') ?? ''),
+    priceTiyin: optionalTiyin(formData, 'priceSom'),
+    startsAt: optional(formData, 'startsAt'),
+    paidTiyin,
+    sourceId: paidTiyin > 0 ? optional(formData, 'sourceId') : undefined,
+    paidOn: optional(formData, 'paidOn'),
+    installments: withInstallments ? Number(formData.get('installments') ?? '') : undefined,
+    firstDue: withInstallments ? optional(formData, 'firstDue') : undefined,
+    stepMonths: withInstallments ? Number(formData.get('stepMonths') || 1) : 1,
+    expectedRemainingTiyin: Number.isFinite(expectedRaw) ? expectedRaw : -1,
+  })
+  if (!parsed.success) {
+    return { message: parsed.error.issues[0]?.message ?? t('sale', 'checkForm') }
+  }
+  const input = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('sell_subscription', {
-    p_student_id: studentId,
-    p_type_id: typeId,
-    p_price_tiyin: optionalTiyin(formData, 'priceSom'),
-    p_starts_at: optional(formData, 'startsAt'),
+  const { error } = await supabase.rpc('sell_subscription_paid', {
+    p_type_id: input.typeId,
+    p_student_id: input.studentId,
+    p_sale_key: input.saleKey,
+    p_price_tiyin: input.priceTiyin,
+    p_starts_at: input.startsAt,
+    p_paid_tiyin: input.paidTiyin > 0 ? input.paidTiyin : undefined,
+    p_source_id: input.paidTiyin > 0 ? input.sourceId : undefined,
+    p_paid_on: input.paidOn,
+    p_installments: input.installments,
+    p_first_due: input.firstDue,
+    p_step_months: input.stepMonths,
+    p_expected_remaining_tiyin: input.expectedRemainingTiyin,
   })
 
-  if (error) return toAppError(error, 'Не удалось продать абонемент')
+  if (error) return toAppError(error, t('sale', 'failed'))
 
   revalidatePath(`/app/students/${studentId}`)
-  return { message: '', notice: 'Абонемент продан' }
+  return { message: '', notice: t('sale', 'sold') }
 }
 
 export async function freezeSubscription(

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { centerTimeZone } from '@/lib/timezone'
+import { centerTimeZone, isoDayInZone } from '@/lib/timezone'
 import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
 import { StudentForm, type StudentFormValues } from './student-form'
 import {
@@ -13,6 +13,7 @@ import {
   type AttendanceHistoryRow,
   type BalanceView,
   type SiblingOption,
+  type SourceOption,
   type SubscriptionTypeOption,
   type SubscriptionView,
 } from './subscriptions-panel'
@@ -113,6 +114,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     balance: BalanceView
     subscriptions: SubscriptionView[]
     types: SubscriptionTypeOption[]
+    sources: SourceOption[]
+    today: string
     siblings: SiblingOption[]
     attendanceHistory: AttendanceHistoryRow[]
     timeZone: string
@@ -129,6 +132,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       { data: siblingRows },
       { data: attendanceRows },
       { data: center },
+      { data: sourceRows },
     ] = await Promise.all([
         supabase
           .from('subscriptions')
@@ -158,9 +162,37 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           .order('created_at', { ascending: false })
           .limit(20),
         supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+        // Источники оплаты для формы продажи: только живые; архивный источник
+        // record_payment примет (известное ограничение 0016), но предлагать его
+        // в форме незачем.
+        supabase
+          .from('payment_sources')
+          .select('id, name')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('sort'),
       ])
 
     const typeNameById = new Map((typeRows ?? []).map((t) => [t.id, t.name]))
+    const subscriptionIds = (subsRows ?? []).map((row) => row.id)
+
+    // Оплата и рассрочка — с сервера (subscription_payment_summary,
+    // installments_view), не из суммы платежей в браузере.
+    const [paymentSummaries, { data: installmentRows }] = await Promise.all([
+      Promise.all(
+        subscriptionIds.map((subscriptionId) =>
+          supabase.rpc('subscription_payment_summary', { p_subscription_id: subscriptionId }),
+        ),
+      ),
+      subscriptionIds.length
+        ? supabase
+            .from('installments_view')
+            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .in('subscription_id', subscriptionIds)
+            .is('cancelled_at', null)
+            .order('seq')
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+    ])
 
     // Границы текущей заморозки — из subscription_summary (freeze_from/
     // freeze_to, последний замороженный день уже посчитан на сервере как
@@ -191,6 +223,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         refundTiyin: summary?.refund_tiyin ?? 0,
         freezeFrom: summary?.freeze_from ?? null,
         freezeTo: summary?.freeze_to ?? null,
+        paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
+        paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        installments: (installmentRows ?? [])
+          .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
+          .map((r) => ({
+            seq: r.seq as number,
+            dueDate: r.due_date as string,
+            amountTiyin: r.amount_tiyin as number,
+            state: r.state ?? '',
+          })),
       }
     })
 
@@ -230,6 +272,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           periodDays: t.period_days,
         })),
       siblings: (siblingRows ?? []).map((s) => ({ id: s.id, fullName: s.full_name })),
+      sources: (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name })),
+      today: isoDayInZone(new Date(), centerTimeZone(center?.settings)),
       timeZone: centerTimeZone(center?.settings),
       attendanceHistory: attendanceRowsData.map((row) => {
         const status = row.status_id ? statusById.get(row.status_id) : undefined

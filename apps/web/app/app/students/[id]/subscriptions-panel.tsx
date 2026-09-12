@@ -1,12 +1,12 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { formatSom } from '@logocrm/core'
+import { formatSom, installmentDueDates, splitInstallments } from '@logocrm/core'
 import {
   freezeSubscription,
   refundSubscription,
-  sellSubscription,
+  sellSubscriptionPaid,
   transferRemaining,
   unfreezeSubscription,
   type SubscriptionState,
@@ -19,6 +19,7 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
 import { attendanceStatusClasses, SUBSCRIPTION_STATE_CLASSES, SUBSCRIPTION_STATE_LABELS } from '@/lib/attendance'
 import { dayInZone, formatInTimeZone, timeInZone } from '@/lib/timezone'
+import { label, t } from '@/lib/messages'
 
 const initial: SubscriptionState = { message: '' }
 
@@ -44,6 +45,14 @@ export type SubscriptionTypeOption = {
   periodDays: number | null
 }
 
+export type InstallmentRow = {
+  seq: number
+  dueDate: string
+  amountTiyin: number
+  /** upcoming | due | overdue | paid — из installments_view, не считается на клиенте. */
+  state: string
+}
+
 export type SubscriptionView = {
   id: string
   typeName: string
@@ -57,6 +66,19 @@ export type SubscriptionView = {
   /** Текущая заморозка: с какого дня и по какой включительно. null в freezeTo — открытая, «пока не разморозят». */
   freezeFrom: string | null
   freezeTo: string | null
+  /** Из subscription_payment_summary: внесено и состояние оплаты (unpaid | partial | paid | overpaid). */
+  paidTiyin: number
+  paymentState: string
+  /** Живой план рассрочки (installments_view), пустой массив — рассрочки нет. */
+  installments: InstallmentRow[]
+}
+
+export type SourceOption = { id: string; name: string }
+
+const INSTALLMENT_STATE_CLASSES: Record<string, string> = {
+  overdue: 'text-destructive font-medium',
+  due: 'font-medium',
+  paid: 'text-muted-foreground line-through',
 }
 
 export type BalanceView = {
@@ -120,18 +142,75 @@ function BalanceStrip({ balance, timeZone }: { balance: BalanceView; timeZone: s
   )
 }
 
-function SellForm({ studentId, types }: { studentId: string; types: SubscriptionTypeOption[] }) {
-  const [state, formAction] = useActionState(sellSubscription, initial)
+function somToTiyin(som: string): number {
+  const value = Number(som)
+  return Number.isFinite(value) ? Math.round(value * 100) : 0
+}
+
+/**
+ * Продажа с оплатой и рассрочкой (промт этапа 5: «Продать абонемент → сразу
+ * форма оплаты»). Внесённая сумма по умолчанию — полная цена; источник —
+ * первый в списке центра. Предпросмотр графика — из core (splitInstallments
+ * / installmentDueDates, зеркало SQL), а фактические строки создаёт RPC и
+ * отдаёт в ответе — панель перерисовывается по ним, не по предпросмотру.
+ * saleKey — ключ идемпотентности: живёт с открытия формы до успешного
+ * ответа, потом меняется; двойной клик со старым ключом сервер отбивает.
+ */
+function SellForm({
+  studentId,
+  types,
+  sources,
+  today,
+  timeZone,
+}: {
+  studentId: string
+  types: SubscriptionTypeOption[]
+  sources: SourceOption[]
+  today: string
+  timeZone: string
+}) {
+  const [state, formAction] = useActionState(sellSubscriptionPaid, initial)
   const [typeId, setTypeId] = useState('')
+  const [priceSom, setPriceSom] = useState('')
+  const [paidSom, setPaidSom] = useState('')
+  const [withInstallments, setWithInstallments] = useState(false)
+  const [installments, setInstallments] = useState(2)
+  const [firstDue, setFirstDue] = useState(today)
+  const [stepMonths, setStepMonths] = useState(1)
+  // Не при инициализации: случайный uuid на сервере и клиенте разошёлся бы
+  // в гидратации. После успешной продажи — новый ключ для следующей.
+  const [saleKey, setSaleKey] = useState('')
+  useEffect(() => {
+    setSaleKey(crypto.randomUUID())
+  }, [state.notice])
+
   const selected = types.find((t) => t.id === typeId)
+  const priceTiyin = somToTiyin(priceSom)
+  const paidTiyin = somToTiyin(paidSom)
+  const remainingTiyin = Math.max(priceTiyin - paidTiyin, 0)
+  const previewAmounts =
+    withInstallments && remainingTiyin > 0 && installments >= 1 && installments <= Math.min(24, remainingTiyin)
+      ? splitInstallments(remainingTiyin, installments)
+      : []
+  const previewDates = previewAmounts.length ? installmentDueDates(firstDue || today, installments, stepMonths) : []
+
+  function onTypeChange(id: string) {
+    setTypeId(id)
+    const type = types.find((t) => t.id === id)
+    const som = type ? String(type.priceTiyin / 100) : ''
+    setPriceSom(som)
+    setPaidSom(som)
+  }
 
   return (
     <form action={formAction} className="space-y-3 rounded-md border border-border p-3">
       <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="saleKey" value={saleKey} />
+      <input type="hidden" name="expectedRemainingTiyin" value={remainingTiyin} />
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1 sm:col-span-2">
           <Label htmlFor="typeId">Тип абонемента</Label>
-          <Select id="typeId" name="typeId" required value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+          <Select id="typeId" name="typeId" required value={typeId} onChange={(e) => onTypeChange(e.target.value)}>
             <option value="">Выберите тип</option>
             {types.map((type) => (
               <option key={type.id} value={type.id}>
@@ -151,8 +230,8 @@ function SellForm({ studentId, types }: { studentId: string; types: Subscription
             type="number"
             min={0}
             step="0.01"
-            defaultValue={selected ? selected.priceTiyin / 100 : undefined}
-            key={typeId}
+            value={priceSom}
+            onChange={(e) => setPriceSom(e.target.value)}
             placeholder={selected ? String(selected.priceTiyin / 100) : ''}
           />
         </div>
@@ -161,9 +240,123 @@ function SellForm({ studentId, types }: { studentId: string; types: Subscription
         <Label htmlFor="startsAt">Дата начала</Label>
         <Input id="startsAt" name="startsAt" type="date" className="max-w-[200px]" />
       </div>
+
+      <fieldset className="space-y-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-sm font-medium">{t('sale', 'payment')}</legend>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="paidSom">{t('sale', 'paidSom')}</Label>
+            <Input
+              id="paidSom"
+              name="paidSom"
+              type="number"
+              min={0}
+              step="0.01"
+              value={paidSom}
+              onChange={(e) => setPaidSom(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sourceId">{t('sale', 'source')}</Label>
+            <Select id="sourceId" name="sourceId" defaultValue={sources[0]?.id ?? ''} disabled={paidTiyin === 0}>
+              {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
+              {sources.map((source) => (
+                <option key={source.id} value={source.id}>
+                  {source.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="paidOn">{t('sale', 'paidOn')}</Label>
+            <Input id="paidOn" name="paidOn" type="date" defaultValue={today} max={today} disabled={paidTiyin === 0} />
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {priceTiyin > 0
+            ? remainingTiyin > 0
+              ? t('sale', 'remaining', { sum: formatSom(remainingTiyin) })
+              : paidTiyin > priceTiyin
+                ? t('sale', 'overpaid')
+                : t('sale', 'paidInFull')
+            : t('sale', 'chooseType')}
+        </p>
+      </fieldset>
+
+      {remainingTiyin > 0 ? (
+        <fieldset className="space-y-3 rounded-md border border-border p-3">
+          <legend className="px-1 text-sm font-medium">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="withInstallments"
+                checked={withInstallments}
+                onChange={(e) => setWithInstallments(e.target.checked)}
+              />
+              {t('sale', 'installments')}
+            </label>
+          </legend>
+          {withInstallments ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label htmlFor="installments">{t('sale', 'installmentsCount')}</Label>
+                  <Input
+                    id="installments"
+                    name="installments"
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={installments}
+                    onChange={(e) => setInstallments(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="firstDue">{t('sale', 'firstDue')}</Label>
+                  <Input
+                    id="firstDue"
+                    name="firstDue"
+                    type="date"
+                    min={today}
+                    value={firstDue}
+                    onChange={(e) => setFirstDue(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="stepMonths">{t('sale', 'stepMonths')}</Label>
+                  <Input
+                    id="stepMonths"
+                    name="stepMonths"
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={stepMonths}
+                    onChange={(e) => setStepMonths(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              {previewAmounts.length ? (
+                <ol className="space-y-1 text-sm">
+                  {previewAmounts.map((amount, index) => (
+                    <li key={index} className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {index + 1}. {previewDates[index] ? calendarDate(previewDates[index], timeZone) : '—'}
+                      </span>
+                      <span>{formatSom(amount)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-destructive">{t('sale', 'installmentsInvalid')}</p>
+              )}
+            </>
+          ) : null}
+        </fieldset>
+      ) : null}
+
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
-      <SubmitButton>Продать абонемент</SubmitButton>
+      <SubmitButton>{t('sale', 'submit')}</SubmitButton>
     </form>
   )
 }
@@ -313,6 +506,26 @@ function SubscriptionCard({
         </div>
       </div>
 
+      <p className="text-sm">
+        {t('subscriptionCard', 'paidOf', {
+          paid: formatSom(subscription.paidTiyin),
+          price: formatSom(subscription.priceTiyin),
+        })}
+        <span className="text-muted-foreground"> · {label('paymentState', subscription.paymentState)}</span>
+      </p>
+      {subscription.installments.length ? (
+        <ol className="space-y-1 text-sm">
+          {subscription.installments.map((row) => (
+            <li key={row.seq} className={cn('flex justify-between', INSTALLMENT_STATE_CLASSES[row.state])}>
+              <span>
+                {row.seq}. {calendarDate(row.dueDate, timeZone)} · {label('installmentState', row.state)}
+              </span>
+              <span>{formatSom(row.amountTiyin)}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+
       {/* freezeFrom, не state === 'frozen': subscription_summary отдаёт
           диапазон и для заморозки, идущей сейчас, и для ещё не начавшейся
           (state тогда 'active' — period не покрывает сегодня), и для
@@ -389,6 +602,8 @@ export function SubscriptionsPanel({
   balance,
   subscriptions,
   types,
+  sources,
+  today,
   siblings,
   attendanceHistory,
   timeZone,
@@ -397,6 +612,9 @@ export function SubscriptionsPanel({
   balance: BalanceView
   subscriptions: SubscriptionView[]
   types: SubscriptionTypeOption[]
+  sources: SourceOption[]
+  /** Сегодня по поясу центра (ISO-дата) — дефолт даты оплаты и первого платежа. */
+  today: string
   siblings: SiblingOption[]
   attendanceHistory: AttendanceHistoryRow[]
   timeZone: string
@@ -446,7 +664,7 @@ export function SubscriptionsPanel({
               ))}
             </div>
           )}
-          <SellForm studentId={studentId} types={types} />
+          <SellForm studentId={studentId} types={types} sources={sources} today={today} timeZone={timeZone} />
         </div>
       ) : (
         <AttendanceHistoryTable rows={attendanceHistory} timeZone={timeZone} />

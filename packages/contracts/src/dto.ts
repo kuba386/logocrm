@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 /** Входные DTO для server actions и RPC. Все сообщения об ошибках — по-русски. */
 
-export const roleSchema = z.enum(['owner', 'admin', 'teacher', 'parent'])
+/** Совпадает с memberships_role_check (0001, расширен в 0026: registrar, finance). */
+export const roleSchema = z.enum(['owner', 'admin', 'teacher', 'parent', 'registrar', 'finance'])
 export type Role = z.infer<typeof roleSchema>
 
 export const planSchema = z.enum(['trial', 'solo', 'studio', 'ai'])
@@ -30,8 +31,8 @@ export const switchCenterSchema = z.object({
 })
 export type SwitchCenterInput = z.infer<typeof switchCenterSchema>
 
-/** Роли, которые можно выдать через приглашение. Владельца пригласить нельзя. */
-export const invitableRoleSchema = z.enum(['admin', 'teacher', 'parent'])
+/** Роли, которые можно выдать через приглашение (invitations_role_check, 0026/0028). Владельца пригласить нельзя. */
+export const invitableRoleSchema = z.enum(['admin', 'teacher', 'parent', 'registrar', 'finance'])
 export type InvitableRole = z.infer<typeof invitableRoleSchema>
 
 export const createInvitationSchema = z
@@ -151,3 +152,47 @@ export type UpdateStudentInput = z.infer<typeof updateStudentSchema>
 
 export const findPayerByPhoneSchema = z.object({ phone: kgPhoneSchema })
 export type FindPayerByPhoneInput = z.infer<typeof findPayerByPhoneSchema>
+
+// --- Этап 5: продажа абонемента с оплатой и рассрочкой ---------------------------
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате ГГГГ-ММ-ДД')
+
+/**
+ * Вход sell_subscription_paid (0023/0029). Суммы — integer в тыйынах, как в
+ * базе. Форма считает только ожидаемый остаток (цена − внесено) для сверки
+ * с сервером — деньги в браузере не считаются, график строит RPC.
+ */
+export const sellSubscriptionPaidSchema = z
+  .object({
+    studentId: z.string().uuid('Некорректный ученик'),
+    typeId: z.string().uuid('Выберите тип абонемента'),
+    /** Ключ идемпотентности: форма генерирует при открытии, повтор с тем же ключом сервер отбивает. */
+    saleKey: z.string().uuid('Обновите страницу и повторите продажу'),
+    priceTiyin: z.number().int().min(0, 'Цена не может быть отрицательной').optional(),
+    startsAt: isoDateSchema.optional(),
+    paidTiyin: z.number().int('Сумма — в сомах, до тыйына').min(0, 'Внесённая сумма не может быть отрицательной'),
+    sourceId: z.string().uuid('Укажите источник оплаты').optional(),
+    paidOn: isoDateSchema.optional(),
+    installments: z
+      .number()
+      .int('Число платежей — целое')
+      .min(1, 'Число платежей — от 1')
+      .max(24, 'Число платежей — не больше 24')
+      .optional(),
+    firstDue: isoDateSchema.optional(),
+    stepMonths: z.number().int().min(1, 'Шаг рассрочки — от одного месяца').max(12, 'Шаг рассрочки — не больше года').default(1),
+    expectedRemainingTiyin: z.number().int().min(0, 'Остаток не может быть отрицательным'),
+  })
+  .refine((input) => input.paidTiyin === 0 || Boolean(input.sourceId), {
+    message: 'Укажите источник оплаты',
+    path: ['sourceId'],
+  })
+  .refine((input) => input.installments === undefined || input.expectedRemainingTiyin > 0, {
+    message: 'Абонемент оплачен целиком — рассрочка не нужна',
+    path: ['installments'],
+  })
+  .refine((input) => input.installments === undefined || input.installments <= input.expectedRemainingTiyin, {
+    message: 'Платежей больше, чем тыйынов в остатке',
+    path: ['installments'],
+  })
+export type SellSubscriptionPaidInput = z.infer<typeof sellSubscriptionPaidSchema>

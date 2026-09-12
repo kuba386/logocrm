@@ -379,8 +379,8 @@ empty states, мобильный вид на preview.
 | pgTAP | 0013 (38), 0014, 0016 (36), 0017 (65), 0018 (83), 0021 (70), 0022, 0023 (47), 0024 (33), 0026 (69), 0027 (53), 0028 (89), 0029 (53) — зелёные в CI |
 | Unit | core: salary.test (32), finance.test (24) — 144/144 |
 | CI | app / db / Playwright — зелёные на каждом PR; `main` был красным дважды (см. дефекты) |
-| Чек-лист кликом | — (UI не начат) |
-| Advisors | после 0024–0025: WARN `auth_rls_initplan` на `memberships` ушёл, остальное без изменений. После 0017, 0018–0020, 0022 и 0023: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
+| Чек-лист кликом | п.1 — форма продажи с оплатой и рассрочкой: проверена на preview (503 px, мобильная ширина): подстановка цены и внесённого, остаток, предпросмотр 2 × 2 000, источники; сама продажа — e2e в CI (staging-данные не трогались). DoD: zod `sellSubscriptionPaidSchema`, `errors.ts` (23505 `subscriptions_sale_key_key` с 0023), loading — `useFormStatus`, empty — «Нет источников оплаты»; строки формы и блока оплаты — в `messages/ru.json` (инфраструктура заведена этой правкой; остальные строки панели — долг до её следующей правки); CHANGELOG. Остальные пункты — по мере экранов |
+| Advisors | после 0026–0029: без ошибок; `multiple_permissive_policies` 15 → 42 — ожидаемо, это отдельные политики `tenant_registrar_*`/`tenant_finance_*` (0028 Р1: таблица без решения закрыта; цена — лишний предикат на строку), definer-RPC 72 → 73 (`cancel_salary_run`). После 0024–0025: WARN `auth_rls_initplan` на `memberships` ушёл, остальное без изменений. После 0017, 0018–0020, 0022 и 0023: без ошибок; только известные классы (definer-RPC для authenticated, составные FK без индекса — после 0022 их 51, INFO; две permissive-политики). Одно WARN `auth_rls_initplan` на `memberships_select_self_or_admin` (политика 0002, `auth.uid()` без `(select …)`) — не от этапа, правится следующей миграцией |
 
 ## Найденные дефекты
 

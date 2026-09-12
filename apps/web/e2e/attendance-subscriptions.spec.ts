@@ -104,8 +104,11 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // находит оба элемента разом и падает на strict mode violation.
   await expect(page.getByText(TYPE_NAME, { exact: true })).toBeVisible()
   // formatSom разделяет тысячи неразрывным пробелом (U+00A0), не обычным —
-  // сверяемся с самим форматтером, а не гадаем пробел в литерале.
-  await expect(page.getByText(formatSom(400_000), { exact: false })).toBeVisible()
+  // сверяемся с самим форматтером, а не гадаем пробел в литерале. Продажа с
+  // формой оплаты (этап 5) по умолчанию вносит полную цену: строка «Оплачено
+  // 4 000 из 4 000» — одна на карточке, а голый formatSom(400_000) теперь
+  // встречается дважды (цена и внесено) и упал бы на strict mode.
+  await expect(page.getByText(`Оплачено ${formatSom(400_000)} из ${formatSom(400_000)}`)).toBeVisible()
 })
 
 test('Этап 4, п.2: отметки посещения списывают, «болел» — нет, два «прогул» подряд не ломают отметку', async ({
@@ -166,4 +169,41 @@ test('Заморозка с датой окончания покрывает в�
     throw new Error(`Заморозка отклонена: ${await error.first().innerText()}`)
   }
   await expect(result).toBeVisible()
+})
+
+// Чек-лист этапа 5, п.1: продать за 4 000, внести 2 000, остаток в две
+// рассрочки по 1 000 — одной транзакцией (sell_subscription_paid). Айлин, а
+// не Данияр: на его абонементе висит цепочка teacher → parent. Последним в
+// файле — у Айлин уже есть абонемент из теста заморозки; вторая карточка
+// ничего в том тесте не ломает, обратный порядок ломал бы getByLabel('С').
+test('Этап 5, п.1: продажа с оплатой 2 000 и рассрочкой 2 × 1 000', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.ailin }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
+
+  const typeSelect = page.locator('select#typeId')
+  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
+  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
+  await typeSelect.selectOption(optionValue)
+
+  // Внесено подставляется из цены (4000) — меняем на 2000, источник остаётся
+  // первым из списка центра, дата оплаты — сегодня по центру.
+  await expect(page.locator('#paidSom')).toHaveValue('4000')
+  await page.locator('#paidSom').fill('2000')
+  await expect(page.getByText(`Остаток к оплате: ${formatSom(200_000)}`)).toBeVisible()
+
+  await page.getByLabel('Рассрочка на остаток').check()
+  await expect(page.locator('#installments')).toHaveValue('2')
+  // Предпросмотр — из core (splitInstallments), две строки по 1 000.
+  await expect(page.getByText(formatSom(100_000), { exact: false })).toHaveCount(2)
+
+  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+
+  // Карточка — по ответу сервера: внесено/цена/состояние и живой график
+  // (installments_view), не предпросмотр формы.
+  await expect(page.getByText(`Оплачено ${formatSom(200_000)} из ${formatSom(400_000)}`)).toBeVisible()
+  await expect(page.getByText('оплачен частично')).toBeVisible()
+  // После продажи форма сбрасывается на цену типа, предпросмотра нет —
+  // две строки по 1 000 остаются только в графике карточки.
+  await expect(page.getByText('· ожидается', { exact: false }).or(page.getByText('· к оплате', { exact: false }))).toHaveCount(2)
 })
