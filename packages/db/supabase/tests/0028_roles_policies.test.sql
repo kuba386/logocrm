@@ -10,7 +10,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(84);
+select plan(89);
 
 
 -- 1-3. Заборы по каталогу политик --------------------------------------------------------
@@ -191,6 +191,22 @@ select is((select count(*)::int from public.salary_adjustments), 0, 'registrar �
 select lives_ok(
   $q$ update public.students set notes = 'записал регистратор' where id = 'eeeeeeee-0000-0000-0000-000000000002' $q$,
   'registrar правит карточку ученика прямым update');
+-- Прямые insert — те же, что делает приложение от admin (0024 вернуло гранты).
+select lives_ok(
+  $q$ insert into public.payers (center_id, full_name, phone)
+      values ('cccccccc-0000-0000-0000-00000000000a', 'Плательщик от стойки', '+996700000055') $q$,
+  'registrar создаёт плательщика прямым insert');
+select lives_ok(
+  $q$ insert into public.students (center_id, full_name, payer_id)
+      values ('cccccccc-0000-0000-0000-00000000000a', 'Ребёнок от стойки', 'dddddddd-0000-0000-0000-000000000001') $q$,
+  'registrar создаёт ученика прямым insert (with check: deleted_at null по умолчанию)');
+select lives_ok(
+  $q$ insert into public.groups (center_id, name) values ('cccccccc-0000-0000-0000-00000000000a', 'Группа от стойки') $q$,
+  'registrar создаёт группу');
+select lives_ok(
+  $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
+      values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000002', 'eeeeeeee-0000-0000-0000-000000000002', '2027-05-03 10:00+06', '2027-05-03 10:45+06') $q$,
+  'registrar создаёт занятие прямым insert (состав кладёт definer-триггер)');
 select throws_ok(
   $q$ insert into public.lesson_participants (lesson_id, student_id, center_id, starts_at, ends_at)
       values ('ffffffff-0000-0000-0000-000000000002', 'eeeeeeee-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-00000000000a', now(), now()) $q$,
@@ -223,8 +239,8 @@ select is((select count(*)::int from public.expenses), 1, 'finance видит р
 select is((select count(*)::int from public.financial_periods), 1, 'finance видит замок месяца');
 select is((select count(*)::int from public.salary_adjustments), 1, 'finance видит корректировки');
 select is((select count(*)::int from public.salary_runs), 1, 'finance видит снимки зарплаты');
-select is((select count(*)::int from public.students), 2, 'finance видит учеников');
-select is((select count(*)::int from public.lessons), 2, 'finance видит занятия (витрины выручки — invoker с join lessons)');
+select is((select count(*)::int from public.students), 3, 'finance видит учеников (двое из фикстуры + один от registrar)');
+select is((select count(*)::int from public.lessons), 3, 'finance видит занятия (витрины выручки — invoker с join lessons)');
 select is((select count(*)::int from public.attendance), 1, 'finance видит отметки');
 select is(
   (select count(*)::int from public.expense_categories where deleted_at is not null), 1,
@@ -336,7 +352,7 @@ reset role;
 
 select public.tests_claims('77777777-7777-7777-7777-777777777777','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
-select is((select count(*)::int from public.students), 2, 'parent видит своих детей (оба у одного плательщика)');
+select is((select count(*)::int from public.students), 3, 'parent видит своих детей (все трое у одного плательщика, включая созданного registrar)');
 reset role;
 
 
@@ -407,13 +423,17 @@ reset role;
 -- 67-74. Гранты, инварианты процедуры, итог ------------------------------------------------------
 
 select ok(
-  not has_function_privilege('authenticated', 'public.apply_role_rls(text,text,boolean,boolean)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.apply_role_rls(text,text,boolean,boolean)', 'EXECUTE'),
+  not has_function_privilege('authenticated', 'public.apply_role_rls(text,text,text,boolean)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.apply_role_rls(text,text,text,boolean)', 'EXECUTE'),
   'apply_role_rls закрыта для прикладных ролей'
 );
 select throws_ok(
-  $q$ call public.apply_role_rls('students', 'teacher', false, true) $q$,
+  $q$ call public.apply_role_rls('students', 'teacher', 'read', true) $q$,
   'P0001', null, 'apply_role_rls не принимает роль вне списка новых'
+);
+select throws_ok(
+  $q$ call public.apply_role_rls('students', 'registrar', 'delete', true) $q$,
+  'P0001', null, 'apply_role_rls не принимает режим вне read/insert/write'
 );
 select ok(
   (select bool_and(coalesce(array_to_string(c.reloptions, ','), '') like '%security_invoker=true%')
