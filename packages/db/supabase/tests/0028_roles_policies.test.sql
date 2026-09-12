@@ -10,7 +10,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(74);
+select plan(84);
 
 
 -- 1-3. Заборы по каталогу политик --------------------------------------------------------
@@ -32,7 +32,7 @@ select set_eq(
     ('installment_plans:tenant_registrar_select'), ('installments:tenant_registrar_select'),
     ('student_payers:tenant_registrar_select'), ('financial_periods:tenant_registrar_select'),
     ('lesson_participants:tenant_registrar_select'),
-    ('teacher_rates:tenant_finance_select'), ('teacher_rates:tenant_finance_insert'), ('teacher_rates:tenant_finance_update'),
+    ('teacher_rates:tenant_finance_select'), ('teacher_rates:tenant_finance_insert'),
     ('expense_categories:tenant_finance_select'), ('expense_categories:tenant_finance_insert'), ('expense_categories:tenant_finance_update'),
     ('payment_sources:tenant_finance_select'), ('payment_sources:tenant_finance_insert'), ('payment_sources:tenant_finance_update'),
     ('payments:tenant_finance_select'), ('expenses:tenant_finance_select'), ('financial_periods:tenant_finance_select'),
@@ -57,6 +57,17 @@ select set_eq(
 select is(
   (select count(*)::int from pg_policies where schemaname = 'public' and policyname like 'tenant_%' and cmd = 'DELETE'),
   0, 'Ни одной политики новых ролей на DELETE'
+);
+select is(
+  (select count(*)::int from pg_policies
+    where schemaname = 'public' and tablename = 'teacher_rates' and cmd in ('UPDATE', 'DELETE')),
+  0, 'teacher_rates — append-only: ни одной политики UPDATE/DELETE ни у одной роли (гварды 0017 — только insert)'
+);
+select is(
+  (select count(*)::int from pg_policies
+    where schemaname = 'public' and tablename in ('lesson_participants', 'student_payers')
+      and policyname like 'tenant_%' and cmd <> 'SELECT'),
+  0, 'lesson_participants и student_payers — у новых ролей только SELECT (строки кладут триггеры)'
 );
 
 
@@ -130,13 +141,12 @@ create temporary table t_src as
 create temporary table t_cat as
   select id, row_number() over (order by sort, code) as n from public.expense_categories
    where center_id = 'cccccccc-0000-0000-0000-00000000000a';
-create temporary table t_month as
-  select (date_trunc('month', public.center_today('cccccccc-0000-0000-0000-00000000000a')) - interval '2 months')::date as m2;
-grant select on t_src, t_cat, t_month to authenticated;
+grant select on t_src, t_cat to authenticated;
 
 -- Данные — руками владельца через RPC: абонемент с 1 августа, отметка,
--- закрытие, платёж, расход, корректировка, снимок зарплаты, замок июля,
--- архив второй статьи расхода.
+-- закрытие, платёж, расход, корректировка, снимок зарплаты, замок июля
+-- (фиксированный месяц, не center_today() − 2: иначе через два месяца
+-- замок лёг бы на месяц самой отметки), архив второй статьи расхода.
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 insert into t_ins values ('sub1', public.sell_subscription('77777777-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000001', null, '2026-08-01'));
@@ -146,7 +156,7 @@ select public.record_payment('dddddddd-0000-0000-0000-000000000001', 100000, 'pa
 select public.record_expense((select id from t_cat where n = 1), 30000, 'expense', (select id from t_src));
 select public.record_salary_adjustment('aaaaaaaa-0000-0000-0000-000000000001', '2026-08-01', 5000, 'бонус');
 select public.approve_salary('aaaaaaaa-0000-0000-0000-000000000001', '2026-08-01');
-select public.close_month((select m2 from t_month));
+select public.close_month('2026-07-01');
 select public.archive_expense_category((select id from t_cat where n = 2));
 reset role;
 
@@ -154,6 +164,11 @@ select is(
   (select price_tiyin from public.attendance where lesson_id = 'ffffffff-0000-0000-0000-000000000001'), 50000,
   'Фикстура: отметка списала 50000 с абонемента — есть что показывать в выручке'
 );
+
+-- Эталон для invoker-калькулятора под registrar — от postgres, без RLS.
+create temporary table t_ref as
+  select public.refund_calc((select id from t_ins where name = 'sub1')) as v;
+grant select on t_ref to authenticated;
 
 
 -- 5-19. registrar: свой центр по списку ---------------------------------------------------------
@@ -184,6 +199,12 @@ select throws_ok(
   $q$ insert into public.expenses (center_id, category_id, amount_tiyin, paid_at, kind)
       values ('cccccccc-0000-0000-0000-00000000000a', (select id from t_cat where n = 1), 1, now(), 'expense') $q$,
   '42501', null, 'registrar не пишет расходы');
+select throws_ok(
+  $q$ update public.students set deleted_at = now() where id = 'eeeeeeee-0000-0000-0000-000000000002' $q$,
+  '42501', null, 'registrar не архивирует прямым update deleted_at — with check требует null; только archive_student');
+select is(
+  public.refund_calc((select id from t_ins where name = 'sub1')), (select v from t_ref),
+  'refund_calc (invoker) под registrar — то же число, что у postgres: subscriptions открыты политикой');
 reset role;
 
 select is(
@@ -226,6 +247,17 @@ select throws_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
       values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000001', '2027-04-01 10:00+06', '2027-04-01 10:45+06') $q$,
   '42501', null, 'finance не создаёт занятий — политики на insert нет');
+select throws_ok(
+  $q$ update public.payment_sources set deleted_at = now() where id = (select id from t_src) $q$,
+  '42501', null, 'finance не архивирует источник прямым update — deleted_at не в колоночном гранте');
+select throws_like(
+  $q$ insert into public.teacher_rates (center_id, teacher_id, model, value, valid_from)
+      values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000002', 'per_lesson', 1, '2026-07-15') $q$,
+  '%закрыт%', 'finance: ставка задним числом в закрытый июль — замок месяца (financial_period_guard_teacher_rates)');
+select throws_ok(
+  $q$ insert into public.teacher_rates (center_id, teacher_id, model, value, valid_from)
+      values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000001', 'per_lesson', 1, '2026-08-01') $q$,
+  '22023', null, 'finance: ставка в месяц с утверждённой зарплатой специалиста — approved_salary_guard');
 -- Р5: отступление от ТЗ зафиксировано явно, чтобы не «починили» молча.
 select is(
   (select notes from public.students where id = 'eeeeeeee-0000-0000-0000-000000000001'), 'заметка приёма',
@@ -270,7 +302,12 @@ select is(
   (select active_subscription_id from public.student_balance where student_id = 'eeeeeeee-0000-0000-0000-000000000001'),
   (select id from t_ins where name = 'sub1'),
   'student_balance у finance: живой абонемент виден (subscription_visible_to_caller — can_payments)');
+select is(
+  (select state from public.student_balance where student_id = 'eeeeeeee-0000-0000-0000-000000000001'),
+  'active', 'student_balance у finance: колонка state (0015) на месте и заполнена — тело взято из 0015, не 0010');
 reset role;
+
+select has_column('public', 'student_balance', 'state', 'student_balance.state не потеряна пересозданием');
 
 select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
@@ -332,6 +369,9 @@ select throws_ok(
 select throws_ok(
   $q$ select public.change_member_role('88888888-8888-8888-8888-888888888888', 'owner') $q$,
   '42501', null, 'admin не назначает owner');
+select throws_ok(
+  $q$ select public.change_member_role('88888888-8888-8888-8888-888888888888', 'parent') $q$,
+  '42501', null, 'admin не переводит сотрудника в parent — белый список из трёх ролей, не чёрный');
 select throws_ok(
   $q$ select public.change_member_role('11111111-1111-1111-1111-111111111111', 'finance') $q$,
   '42501', null, 'admin не трогает владельца');

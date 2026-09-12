@@ -95,9 +95,11 @@ select lives_ok(
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
+-- Роль вне чека — отказ независимо от того, расширена ли лестница (0028
+-- пускает registrar/finance; этот кейс остаётся верным до и после).
 select throws_like(
-  $q$ select public.change_member_role('44444444-4444-4444-4444-444444444444', 'registrar') $q$,
-  'Неизвестная роль%', 'Лестница до 0028 не назначает registrar — роль существует только в чеке'
+  $q$ select public.change_member_role('44444444-4444-4444-4444-444444444444', 'bookkeeper') $q$,
+  'Неизвестная роль%', 'Лестница отбивает роль вне чек-констрейнта'
 );
 reset role;
 
@@ -262,8 +264,12 @@ create temporary table t_sale2 as
   select * from public.sell_subscription_paid(
     '77777777-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000002',
     '55550000-0000-0000-0000-000000000027', null, null, null, null, null, 2);
-select is(public.refund_calc((select subscription_id from t_sale2 limit 1)), null::integer,
-  'refund_calc (invoker) под registrar — NULL до 0028: путь к сумме только subscription_summary (Р6)');
+-- До 0028 invoker-функция отдавала registrar NULL (нет политики на
+-- subscriptions); с 0028 — то же, что definer-путь. Ассерт верен для обеих
+-- фаз: сравнение, а не литерал.
+select is(public.refund_calc((select subscription_id from t_sale2 limit 1)),
+  (select refund_tiyin from public.subscription_summary((select subscription_id from t_sale2 limit 1))),
+  'refund_calc (invoker) под registrar совпадает с subscription_summary (definer) — после 0028 оба число (Р6)');
 select lives_ok(
   $q$ select public.refund_subscription((select subscription_id from t_sale2 limit 1),
         (select refund_tiyin from public.subscription_summary((select subscription_id from t_sale2 limit 1)))) $q$,

@@ -56,10 +56,16 @@
 
 -- 1. apply_role_rls -------------------------------------------------------------------
 
+-- p_mode: 'read' — только select; 'insert' — select + insert (append-only
+-- таблицы: teacher_rates — «ни update, ни delete — никогда», 0017);
+-- 'write' — select + insert + update. DELETE не выдаётся ни в одном режиме.
+-- with check у update при p_soft_delete тоже требует deleted_at is null:
+-- архив — только через archive_<table>, прямой update deleted_at новым ролям
+-- закрыт (у tenant_admin он открыт сознательно, 0004).
 create or replace procedure public.apply_role_rls(
   tbl           text,
   p_role        text,
-  p_write       boolean,
+  p_mode        text,
   p_soft_delete boolean
 )
   language plpgsql
@@ -71,6 +77,9 @@ declare
 begin
   if p_role not in ('registrar', 'finance') then
     raise exception 'apply_role_rls: роль % не из списка отдельных политик', p_role;
+  end if;
+  if p_mode not in ('read', 'insert', 'write') then
+    raise exception 'apply_role_rls: режим % — только read/insert/write', p_mode;
   end if;
 
   v_tenant := format('center_id = public.current_center() and public.my_role() = %L', p_role);
@@ -86,68 +95,72 @@ begin
     'create policy tenant_%s_select on public.%I for select to authenticated using (%s)',
     p_role, tbl, v_using);
 
-  if p_write then
+  if p_mode in ('insert', 'write') then
     execute format(
       'create policy tenant_%s_insert on public.%I for insert to authenticated with check (%s)',
-      p_role, tbl, v_tenant);
+      p_role, tbl, v_using);
+  end if;
+  if p_mode = 'write' then
     execute format(
       'create policy tenant_%s_update on public.%I for update to authenticated using (%s) with check (%s)',
-      p_role, tbl, v_using, v_tenant);
+      p_role, tbl, v_using, v_using);
   end if;
 end;
 $$;
 
-comment on procedure public.apply_role_rls(text, text, boolean, boolean) is
-  'call apply_role_rls(''students'', ''registrar'', true, true) — select (+ insert/update при p_write) для одной из новых ролей. DELETE не выдаётся никогда. Флаг deleted_at обязателен: без дефолта.';
+comment on procedure public.apply_role_rls(text, text, text, boolean) is
+  'call apply_role_rls(''students'', ''registrar'', ''write'', true) — политики одной из новых ролей: read / insert / write. DELETE не выдаётся никогда; прямой update deleted_at закрыт. Флаг deleted_at обязателен: без дефолта.';
 
-revoke execute on procedure public.apply_role_rls(text, text, boolean, boolean) from public, anon, authenticated;
+revoke execute on procedure public.apply_role_rls(text, text, text, boolean) from public, anon, authenticated;
 
 
 -- 2. registrar -------------------------------------------------------------------------
 
-call public.apply_role_rls('students',            'registrar', true,  true);
-call public.apply_role_rls('payers',              'registrar', true,  true);
-call public.apply_role_rls('groups',              'registrar', true,  true);
-call public.apply_role_rls('group_students',      'registrar', true,  true);
-call public.apply_role_rls('lessons',             'registrar', true,  true);
-call public.apply_role_rls('attendance',          'registrar', true,  false);
+call public.apply_role_rls('students',            'registrar', 'write', true);
+call public.apply_role_rls('payers',              'registrar', 'write', true);
+call public.apply_role_rls('groups',              'registrar', 'write', true);
+call public.apply_role_rls('group_students',      'registrar', 'write', true);
+call public.apply_role_rls('lessons',             'registrar', 'write', true);
+call public.apply_role_rls('attendance',          'registrar', 'write', false);
 
-call public.apply_role_rls('teachers',            'registrar', false, true);
-call public.apply_role_rls('rooms',               'registrar', false, true);
-call public.apply_role_rls('services',            'registrar', false, true);
-call public.apply_role_rls('subscription_types',  'registrar', false, true);
-call public.apply_role_rls('subscriptions',       'registrar', false, true);
-call public.apply_role_rls('subscription_freezes','registrar', false, false);
-call public.apply_role_rls('payments',            'registrar', false, false);
-call public.apply_role_rls('installment_plans',   'registrar', false, false);
-call public.apply_role_rls('installments',        'registrar', false, false);
-call public.apply_role_rls('student_payers',      'registrar', false, false);
-call public.apply_role_rls('financial_periods',   'registrar', false, false);
-call public.apply_role_rls('lesson_participants', 'registrar', false, true);
+call public.apply_role_rls('teachers',            'registrar', 'read',  true);
+call public.apply_role_rls('rooms',               'registrar', 'read',  true);
+call public.apply_role_rls('services',            'registrar', 'read',  true);
+call public.apply_role_rls('subscription_types',  'registrar', 'read',  true);
+call public.apply_role_rls('subscriptions',       'registrar', 'read',  true);
+call public.apply_role_rls('subscription_freezes','registrar', 'read',  false);
+call public.apply_role_rls('payments',            'registrar', 'read',  false);
+call public.apply_role_rls('installment_plans',   'registrar', 'read',  false);
+call public.apply_role_rls('installments',        'registrar', 'read',  false);
+call public.apply_role_rls('student_payers',      'registrar', 'read',  false);
+call public.apply_role_rls('financial_periods',   'registrar', 'read',  false);
+call public.apply_role_rls('lesson_participants', 'registrar', 'read',  true);
 
 
 -- 3. finance ----------------------------------------------------------------------------
 
-call public.apply_role_rls('teacher_rates',       'finance', true,  false);
-call public.apply_role_rls('expense_categories',  'finance', true,  true);
-call public.apply_role_rls('payment_sources',     'finance', true,  true);
+-- teacher_rates — append-only (0017: гварды навешаны только на insert,
+-- update/delete гранта нет и не будет): режим insert, не write.
+call public.apply_role_rls('teacher_rates',       'finance', 'insert', false);
+call public.apply_role_rls('expense_categories',  'finance', 'write',  true);
+call public.apply_role_rls('payment_sources',     'finance', 'write',  true);
 
-call public.apply_role_rls('payments',            'finance', false, false);
-call public.apply_role_rls('expenses',            'finance', false, false);
-call public.apply_role_rls('financial_periods',   'finance', false, false);
-call public.apply_role_rls('salary_adjustments',  'finance', false, false);
-call public.apply_role_rls('salary_runs',         'finance', false, false);
-call public.apply_role_rls('teachers',            'finance', false, true);
-call public.apply_role_rls('payers',              'finance', false, true);
-call public.apply_role_rls('student_payers',      'finance', false, false);
-call public.apply_role_rls('students',            'finance', false, true);
-call public.apply_role_rls('subscriptions',       'finance', false, true);
-call public.apply_role_rls('subscription_freezes','finance', false, false);
-call public.apply_role_rls('subscription_types',  'finance', false, true);
-call public.apply_role_rls('installment_plans',   'finance', false, false);
-call public.apply_role_rls('installments',        'finance', false, false);
-call public.apply_role_rls('attendance',          'finance', false, false);
-call public.apply_role_rls('lessons',             'finance', false, true);
+call public.apply_role_rls('payments',            'finance', 'read',   false);
+call public.apply_role_rls('expenses',            'finance', 'read',   false);
+call public.apply_role_rls('financial_periods',   'finance', 'read',   false);
+call public.apply_role_rls('salary_adjustments',  'finance', 'read',   false);
+call public.apply_role_rls('salary_runs',         'finance', 'read',   false);
+call public.apply_role_rls('teachers',            'finance', 'read',   true);
+call public.apply_role_rls('payers',              'finance', 'read',   true);
+call public.apply_role_rls('student_payers',      'finance', 'read',   false);
+call public.apply_role_rls('students',            'finance', 'read',   true);
+call public.apply_role_rls('subscriptions',       'finance', 'read',   true);
+call public.apply_role_rls('subscription_freezes','finance', 'read',   false);
+call public.apply_role_rls('subscription_types',  'finance', 'read',   true);
+call public.apply_role_rls('installment_plans',   'finance', 'read',   false);
+call public.apply_role_rls('installments',        'finance', 'read',   false);
+call public.apply_role_rls('attendance',          'finance', 'read',   false);
+call public.apply_role_rls('lessons',             'finance', 'read',   true);
 
 -- Архивные статьи расхода: политика 0016 с литералом owner/admin.
 drop policy if exists expense_categories_read_archived on public.expense_categories;
@@ -289,37 +302,33 @@ select f.center_id,
   from flows f
  group by f.center_id, f.month, f.source_id;
 
--- из 0010_stage4_hardening.sql; меняется только фильтр роли
+-- из 0015_freeze_state_unification.sql (не 0010: там ещё нет колонки state и
+-- student_balance_pick — create or replace на теле 0010 упал бы «cannot drop
+-- columns from view», а с дописанной колонкой откатил бы фикс замороженного
+-- кандидата); меняется только фильтр роли
 create or replace view public.student_balance
   with (security_invoker = true)
 as
   select
     s.id                                        as student_id,
     s.center_id,
-    sub.id                                      as active_subscription_id,
-    public.subscription_lessons_left(sub.id)    as lessons_left,
-    sub.ends_at,
+    b.subscription_id                           as active_subscription_id,
+    public.subscription_lessons_left(b.subscription_id) as lessons_left,
+    b.ends_at,
     coalesce((
       select sum(a.price_tiyin) from public.attendance a
        where a.student_id = s.id and a.subscription_id is null and a.deducted
     ), 0)::integer                              as debt_tiyin,
-    (greatest(-coalesce(public.subscription_lessons_left(sub.id), 0), 0)
-      * coalesce(sub.lesson_price_tiyin, 0))::integer as overdrawn_tiyin
+    (greatest(-coalesce(public.subscription_lessons_left(b.subscription_id), 0), 0)
+      * coalesce(b.lesson_price_tiyin, 0))::integer as overdrawn_tiyin,
+    b.state
   from public.students s
-  left join lateral (
-    select s2.* from public.subscriptions s2
-     where s2.student_id = s.id
-       and s2.deleted_at is null
-       and s2.status = 'active'
-       and public.subscription_state(s2.id) in ('active', 'exhausted')
-     order by s2.ends_at asc nulls last, s2.created_at, s2.id
-     limit 1
-  ) sub on true
-  where s.deleted_at is null
-    and (
-      public.can_payments()
-      or (public.my_role() = 'parent' and public.parent_of_student(s.id))
-    );
+  left join lateral public.student_balance_pick(s.id) b on true
+ where s.deleted_at is null
+   and (
+     public.can_payments()
+     or (public.my_role() = 'parent' and public.parent_of_student(s.id))
+   );
 
 revoke all on table
   public.revenue_by_month, public.revenue_by_teacher, public.revenue_by_service,
@@ -357,9 +366,11 @@ begin
     raise exception 'Неизвестная роль %', p_role using errcode = '22023';
   end if;
 
-  -- Администратор не может ни назначить owner/admin, ни трогать их самих:
-  -- иначе он повышает себя до владельца через подставного пользователя.
-  if v_actor = 'admin' and p_role in ('owner', 'admin') then
+  -- Белый список, не чёрный: администратор назначает ровно три роли
+  -- сотрудников. owner/admin — повышение себя через подставного; parent —
+  -- «выкинуть в роль, которая не видит ничего» без ведома владельца; любая
+  -- будущая роль в чеке не достанется ему автоматически.
+  if v_actor = 'admin' and p_role not in ('teacher', 'registrar', 'finance') then
     raise exception 'Администратор может назначать только роли специалиста, регистратора и бухгалтера' using errcode = '42501';
   end if;
 
