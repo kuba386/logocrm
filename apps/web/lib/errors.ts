@@ -86,6 +86,8 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   installment_plans_one_live_key: 'По абонементу уже есть рассрочка — сначала отмените её',
   subscriptions_sale_key_key: 'Эта продажа уже проведена — обновите страницу',
   installments_plan_seq_key: 'Платёж с таким номером в этом плане рассрочки уже есть',
+  salary_runs_teacher_month_live_key:
+    'Зарплата за этот месяц уже утверждена — чтобы утвердить заново, владелец отменяет снимок',
 }
 
 /**

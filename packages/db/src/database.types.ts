@@ -1359,6 +1359,8 @@ export type Database = {
         Row: {
           approved_at: string
           approved_by: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           center_id: string
           id: string
           lines: Json
@@ -1369,6 +1371,8 @@ export type Database = {
         Insert: {
           approved_at?: string
           approved_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           center_id?: string
           id?: string
           lines: Json
@@ -1379,6 +1383,8 @@ export type Database = {
         Update: {
           approved_at?: string
           approved_by?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           center_id?: string
           id?: string
           lines?: Json
@@ -2330,6 +2336,10 @@ export type Database = {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
       }
+      cancel_salary_run: {
+        Args: { p_month: string; p_teacher_id: string }
+        Returns: string
+      }
       cancel_series_from: {
         Args: { p_from: string; p_reason?: string; p_series_id: string }
         Returns: number
@@ -2546,6 +2556,7 @@ export type Database = {
           p_comment?: string
           p_kind?: string
           p_paid_at?: string
+          p_paid_on?: string
           p_payer_id: string
           p_source_id?: string
           p_student_id?: string
@@ -2589,6 +2600,7 @@ export type Database = {
           approved_at: string
           approved_run_id: string
           calc_tiyin: number
+          cancelled_runs: number
           teacher_id: string
           total_tiyin: number
         }[]

@@ -426,7 +426,8 @@ select ok(
   'Триггерная financial_period_guard закрыта для authenticated'
 );
 select ok(
-  has_function_privilege('authenticated', 'public.record_payment(uuid,integer,text,uuid,uuid,uuid,timestamptz,text)', 'EXECUTE'),
+  -- Сигнатура — с p_paid_on (0029): старая 8-параметровая дропнута.
+  has_function_privilege('authenticated', 'public.record_payment(uuid,integer,text,uuid,uuid,uuid,timestamptz,text,date)', 'EXECUTE'),
   'record_payment исполняется authenticated (белый список 0007 актуален)'
 );
 

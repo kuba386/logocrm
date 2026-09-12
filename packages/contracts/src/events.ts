@@ -342,6 +342,22 @@ export const salaryAdjustmentRecordedSchema = z.object({
 })
 export type SalaryAdjustmentRecorded = z.infer<typeof salaryAdjustmentRecordedSchema>
 
+/**
+ * Снимок зарплаты отменён владельцем (0029, cancel_salary_run) — одно
+ * событие на снимок. После отмены approve_salary за тот же месяц создаёт
+ * новый снимок; отменённый остаётся историей (salary_summary.cancelled_runs).
+ */
+export const salaryRunCancelledSchema = z.object({
+  type: z.literal('salary.run_cancelled'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    salary_run_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    month: z.string(),
+  }),
+})
+export type SalaryRunCancelled = z.infer<typeof salaryRunCancelledSchema>
+
 export const teacherArchivedSchema = z.object({
   type: z.literal('teacher.archived'),
   payload: z.object({
@@ -492,6 +508,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   studentAbsentStreakSchema,
   salaryCalculatedSchema,
   salaryAdjustmentRecordedSchema,
+  salaryRunCancelledSchema,
   teacherArchivedSchema,
   teacherRestoredSchema,
   paymentReceivedSchema,
@@ -528,6 +545,7 @@ export const appEventTypes = [
   'teacher.restored',
   'salary.calculated',
   'salary.adjustment_recorded',
+  'salary.run_cancelled',
   'payment.received',
   'payment.refunded',
   'period.closed',
