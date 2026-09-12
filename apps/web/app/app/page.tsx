@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   // регистратора, расписание для бухгалтера) режут политики 0028, экран
   // покажет пусто, а не чужое.
   if (role === 'owner' || role === 'admin' || role === 'registrar' || role === 'finance') {
-    return <AdminDashboard timeZone={timeZone} />
+    return <AdminDashboard timeZone={timeZone} finance={role !== 'registrar'} />
   }
   if (role === 'teacher') return <TeacherDashboard timeZone={timeZone} />
   if (role === 'parent') return <ParentDashboard timeZone={timeZone} />

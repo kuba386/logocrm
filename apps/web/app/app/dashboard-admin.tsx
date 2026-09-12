@@ -3,18 +3,35 @@ import { createClient } from '@/lib/supabase/server'
 import { addDays, dayInZone, isoDayInZone, startOfDayInZone, timeInZone } from '@/lib/timezone'
 import { formatSom } from '@logocrm/core'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { t } from '@/lib/messages'
 
 /**
  * Дашборд администратора: сколько занятий сегодня, у кого заканчивается
- * абонемент, у кого долг. Дальше в карточку ученика — не в отдельный экран
- * долгов, его ещё нет (docs/Design/DESIGN.md, «Пробелы»).
+ * абонемент, у кого долг, плюс деньги месяца (этап 5): выручка из
+ * revenue_by_month, касса из cash_by_source, просрочки из installments_view.
+ * Витрины считает база; под registrar выручка и касса пусты по RLS —
+ * карточки скрываются флагом finance, а не «покажем нули».
  */
-export async function AdminDashboard({ timeZone }: { timeZone: string }) {
+export async function AdminDashboard({ timeZone, finance = true }: { timeZone: string; finance?: boolean }) {
   const supabase = await createClient()
 
   const today = isoDayInZone(new Date(), timeZone)
   const todayStart = startOfDayInZone(today, timeZone)
   const todayEnd = startOfDayInZone(addDays(today, 1), timeZone)
+  const monthFirst = `${today.slice(0, 7)}-01`
+
+  const [{ data: revenueRows }, { data: cashRows }, { count: overdueCount }] = await Promise.all([
+    finance ? supabase.from('revenue_by_month').select('revenue_tiyin, visits').eq('month', monthFirst) : Promise.resolve({ data: [] }),
+    finance ? supabase.from('cash_by_source').select('total_tiyin').eq('month', monthFirst) : Promise.resolve({ data: [] }),
+    supabase
+      .from('installments_view')
+      .select('id', { count: 'exact', head: true })
+      .eq('state', 'overdue')
+      .is('cancelled_at', null),
+  ])
+  const revenue = (revenueRows ?? []).reduce((s, r) => s + (r.revenue_tiyin ?? 0), 0)
+  const visits = (revenueRows ?? []).reduce((s, r) => s + (r.visits ?? 0), 0)
+  const cashTotal = (cashRows ?? []).reduce((s, r) => s + (r.total_tiyin ?? 0), 0)
 
   const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtRows }] = await Promise.all([
     supabase
@@ -152,6 +169,50 @@ export async function AdminDashboard({ timeZone }: { timeZone: string }) {
           <CardContent className="pt-6 text-sm text-muted-foreground">На сегодня занятий не запланировано.</CardContent>
         </Card>
       ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {finance ? (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-3xl">{formatSom(revenue)}</CardTitle>
+                <CardDescription>
+                  {t('dashboard', 'revenueMonth')} · {t('dashboard', 'revenueHint')}
+                  {visits > 0 ? ` · посещений ${visits}` : ''}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-3xl">{formatSom(cashTotal)}</CardTitle>
+                <CardDescription>
+                  {t('dashboard', 'cashMonth')} · {t('dashboard', 'cashHint')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm">
+                <Link href="/app/finance" className="font-medium text-primary hover:underline">
+                  {t('dashboard', 'toFinance')}
+                </Link>
+              </CardContent>
+            </Card>
+          </>
+        ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle className={(overdueCount ?? 0) > 0 ? 'text-3xl text-destructive' : 'text-3xl'}>{overdueCount ?? 0}</CardTitle>
+            <CardDescription>
+              {(overdueCount ?? 0) > 0 ? t('dashboard', 'overdueInstallments') : t('dashboard', 'overdueNone')}
+            </CardDescription>
+          </CardHeader>
+          {(overdueCount ?? 0) > 0 ? (
+            <CardContent className="text-sm">
+              <Link href="/app/finance?tab=installments" className="font-medium text-primary hover:underline">
+                {t('dashboard', 'toInstallments')}
+              </Link>
+            </CardContent>
+          ) : null}
+        </Card>
+      </div>
     </div>
   )
 }

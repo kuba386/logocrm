@@ -164,6 +164,21 @@
     "detailsHint": "Строки — по вашим отметкам за месяц; примечание объясняет ноль.",
     "detailsEmpty": "В этом месяце отметок ещё нет."
   },
+  "dashboard": {
+    "revenueMonth": "Выручка за месяц",
+    "revenueHint": "начисление: отметки по проведённым занятиям",
+    "cashMonth": "Касса за месяц",
+    "cashHint": "платежи минус расходы, все источники",
+    "overdueInstallments": "Просроченных платежей по рассрочкам",
+    "overdueNone": "Просрочек по рассрочкам нет",
+    "toFinance": "Финансы →",
+    "toInstallments": "Рассрочки →",
+    "parentPayments": "Платежи",
+    "parentPaymentsEmpty": "Платежей пока нет.",
+    "parentInstallments": "Ближайшие платежи по рассрочке",
+    "parentInstallmentDue": "{amount} — до {due}",
+    "parentInstallmentOverdue": "{amount} — просрочен с {due}"
+  },
   "teacherRates": {
     "title": "Ставки специалистов",
     "subtitle": "Ставка действует с указанной даты и не правится задним числом — новая строка перекрывает старую. Ставка по услуге сильнее общей.",
