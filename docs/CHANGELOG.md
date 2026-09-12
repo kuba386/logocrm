@@ -5,6 +5,24 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- **Продажа абонемента с оплатой и рассрочкой** на карточке ученика
+  (`apps/web/app/app/students/[id]/subscriptions-panel.tsx`): внесённая
+  сумма (по умолчанию полная), источник, дата оплаты по поясу центра,
+  чекбокс «Рассрочка на остаток» с числом платежей, первой датой и шагом;
+  предпросмотр графика — из `@logocrm/core` (`splitInstallments`,
+  `installmentDueDates`), продажа — одним вызовом `sell_subscription_paid`
+  (0023/0029), ключ идемпотентности против двойного клика. Карточка
+  абонемента показывает «Оплачено X из Y · состояние» и живой график
+  рассрочки (`installments_view`). zod — `sellSubscriptionPaidSchema` в
+  `packages/contracts`; e2e — чек-лист этапа 5 п.1 (2 000 внесено, 2 × 1 000).
+- `apps/web/messages/ru.json` и `apps/web/lib/messages.ts` — первое место
+  для строк интерфейса по Definition of Done; переехали строки формы
+  продажи и блока оплаты, остальные строки панели — с её следующей правкой.
+- Роли `registrar` и `finance` в `packages/contracts` (`roleSchema`,
+  `invitableRoleSchema`) — по чекам 0026/0028.
+
 ### Исправлено
 
 - `apps/web/app/app/schedule/page.tsx` — ученики и группы запрашивались только
