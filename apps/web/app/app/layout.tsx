@@ -6,6 +6,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
 import { MobileNav } from '@/app/app/mobile-nav'
+import { SidebarNav } from '@/app/app/sidebar-nav'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -70,10 +71,41 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ].filter((link) => link.show)
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="relative border-b border-border bg-card">
-        <div className="container flex h-16 items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
+    <div className="flex min-h-screen">
+      {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card sm:flex">
+        <Link href="/app" className="block border-b border-border p-4 leading-tight">
+          <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
+          <span className="block text-xs text-muted-foreground">
+            {roleLabel(role)}
+            {center?.plan ? ` · тариф ${center.plan}` : ''}
+          </span>
+        </Link>
+
+        <SidebarNav links={navLinks} />
+
+        <div className="flex flex-col gap-2 border-t border-border p-3">
+          {(centersCount ?? 0) > 1 ? (
+            <Link
+              href="/select-center"
+              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+            >
+              Сменить центр
+            </Link>
+          ) : null}
+
+          <form action={signOut}>
+            <Button type="submit" variant="outline" size="sm" className="w-full">
+              Выйти
+            </Button>
+          </form>
+        </div>
+      </aside>
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        {/* Мобильный/планшетный хедер: сайдбар выше скрыт, здесь гамбургер. */}
+        <header className="relative border-b border-border bg-card sm:hidden">
+          <div className="container flex h-16 items-center justify-between gap-4">
             <Link href="/app" className="leading-tight">
               <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
               <span className="block text-xs text-muted-foreground">
@@ -82,41 +114,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             </Link>
 
-            <nav className="hidden gap-1 sm:flex">
-              {navLinks.map((link) => (
+            <div className="flex items-center gap-2">
+              {(centersCount ?? 0) > 1 ? (
                 <Link
-                  key={link.href}
-                  href={link.href}
+                  href="/select-center"
                   className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                 >
-                  {link.label}
+                  Сменить центр
                 </Link>
-              ))}
-            </nav>
+              ) : null}
+
+              <form action={signOut}>
+                <Button type="submit" variant="outline" size="sm">
+                  Выйти
+                </Button>
+              </form>
+
+              <MobileNav links={navLinks} />
+            </div>
           </div>
+        </header>
 
-          <div className="flex items-center gap-2">
-            {(centersCount ?? 0) > 1 ? (
-              <Link
-                href="/select-center"
-                className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-              >
-                Сменить центр
-              </Link>
-            ) : null}
-
-            <form action={signOut}>
-              <Button type="submit" variant="outline" size="sm">
-                Выйти
-              </Button>
-            </form>
-
-            <MobileNav links={navLinks} />
-          </div>
-        </div>
-      </header>
-
-      <main className="container flex-1 py-8">{children}</main>
+        <main className="container flex-1 py-8">{children}</main>
+      </div>
     </div>
   )
 }
