@@ -3,6 +3,7 @@ import {
   Contact,
   GraduationCap,
   Landmark,
+  LayoutDashboard,
   Receipt,
   Settings,
   Users,
@@ -15,6 +16,7 @@ import {
  * пункта не зависит от того, кто на него смотрит.
  */
 export const NAV_ICONS: Record<string, LucideIcon> = {
+  '/app': LayoutDashboard,
   '/app/schedule': CalendarDays,
   '/app/students': GraduationCap,
   '/app/payers': Contact,
