@@ -5,6 +5,7 @@ import { signOut } from '@/app/login/actions'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
+import { MobileNav } from '@/app/app/mobile-nav'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -56,9 +57,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const finance = isFinance(role)
   const payments = canPayments(role)
 
+  const navLinks = [
+    { href: '/app/schedule', label: 'Расписание', show: true },
+    { href: '/app/students', label: 'Ученики', show: true },
+    { href: '/app/payers', label: 'Плательщики', show: payments },
+    { href: '/app/groups', label: 'Группы', show: frontDesk },
+    { href: '/app/debts', label: 'Долги', show: payments },
+    { href: '/app/finance', label: 'Финансы', show: payments },
+    { href: '/app/salary', label: 'Зарплата', show: finance },
+    { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
+    { href: '/app/settings/staff', label: 'Настройки', show: isAdmin || finance },
+  ].filter((link) => link.show)
+
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-border bg-card">
+      <header className="relative border-b border-border bg-card">
         <div className="container flex h-16 items-center justify-between gap-4">
           <div className="flex items-center gap-6">
             <Link href="/app" className="leading-tight">
@@ -70,50 +83,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
 
             <nav className="hidden gap-1 sm:flex">
-              <Link href="/app/schedule" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                Расписание
-              </Link>
-              <Link href="/app/students" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                Ученики
-              </Link>
-              {payments ? (
-                <Link href="/app/payers" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Плательщики
-                </Link>
-              ) : null}
-              {frontDesk ? (
-                <Link href="/app/groups" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Группы
-                </Link>
-              ) : null}
-              {payments ? (
-                <Link href="/app/debts" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Долги
-                </Link>
-              ) : null}
-              {payments ? (
-                <Link href="/app/finance" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Финансы
-                </Link>
-              ) : null}
-              {finance ? (
-                <Link href="/app/salary" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Зарплата
-                </Link>
-              ) : null}
-              {role === 'teacher' ? (
-                <Link href="/app/my-salary" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-                  Моя зарплата
-                </Link>
-              ) : null}
-              {isAdmin || finance ? (
+              {navLinks.map((link) => (
                 <Link
-                  href="/app/settings/staff"
+                  key={link.href}
+                  href={link.href}
                   className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                 >
-                  Настройки
+                  {link.label}
                 </Link>
-              ) : null}
+              ))}
             </nav>
           </div>
 
@@ -132,6 +110,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Выйти
               </Button>
             </form>
+
+            <MobileNav links={navLinks} />
           </div>
         </div>
       </header>
