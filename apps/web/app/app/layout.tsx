@@ -5,8 +5,10 @@ import { signOut } from '@/app/login/actions'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
+import { cn } from '@/lib/utils'
 import { MobileNav } from '@/app/app/mobile-nav'
 import { SidebarNav } from '@/app/app/sidebar-nav'
+import { BottomTabs } from '@/app/app/bottom-tabs'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -70,6 +72,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/app/settings/staff', label: 'Настройки', show: isAdmin || finance },
   ].filter((link) => link.show)
 
+  // Нижние вкладки (Stitch: specialist-day-mobile.png, parent-cabinet-mobile.png)
+  // только там, где разделов мало — у admin/finance/registrar их 5-7,
+  // в таб-бар не влезут, им гамбургер. «Отметки»/«Задания» из макетов
+  // не заведены: у отметки посещения нет отдельного роута (она в
+  // расписании, docs/Roadmap/stages.md этап 4), а «Задания» — этап 7,
+  // ещё не реализован. Дашборд ролей — уже отдельная страница с своим
+  // содержимым (dashboard-teacher.tsx/dashboard-parent.tsx), не дубль
+  // расписания, поэтому явная вкладка на него, хотя в макете её нет.
+  const bottomTabs =
+    role === 'teacher'
+      ? [
+          { href: '/app', label: 'Дашборд' },
+          { href: '/app/schedule', label: 'Расписание' },
+          { href: '/app/students', label: 'Ученики' },
+          { href: '/app/my-salary', label: 'Зарплата' },
+        ]
+      : role === 'parent'
+        ? [
+            { href: '/app', label: 'Дашборд' },
+            { href: '/app/schedule', label: 'Расписание' },
+            { href: '/app/students', label: 'Ученики' },
+          ]
+        : null
+
   return (
     <div className="flex min-h-screen">
       {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
@@ -130,12 +156,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </Button>
               </form>
 
-              <MobileNav links={navLinks} />
+              {bottomTabs ? null : <MobileNav links={navLinks} />}
             </div>
           </div>
         </header>
 
-        <main className="container flex-1 py-8">{children}</main>
+        <main className={cn('container flex-1 py-8', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
+          {children}
+        </main>
+
+        {bottomTabs ? <BottomTabs links={bottomTabs} /> : null}
       </div>
     </div>
   )
