@@ -33,7 +33,7 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
   const visits = (revenueRows ?? []).reduce((s, r) => s + (r.visits ?? 0), 0)
   const cashTotal = (cashRows ?? []).reduce((s, r) => s + (r.total_tiyin ?? 0), 0)
 
-  const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtRows }] = await Promise.all([
+  const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtRows }, { data: unassignedRows }] = await Promise.all([
     supabase
       .from('lessons')
       .select('id, starts_at, status, teacher_id, substitute_teacher_id, student_id, group_id')
@@ -53,11 +53,24 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
       .neq('state', 'frozen')
       .order('lessons_left'),
     supabase.from('student_balance').select('student_id, debt_tiyin').gt('debt_tiyin', 0).order('debt_tiyin', { ascending: false }),
+    // «Требует внимания» (docs/Design/DESIGN.md): ученик без специалиста —
+    // единственный пункт панели из макета, применимый к нашей схеме.
+    // Конфликт кабинета физически не пройдёт lessons_room_no_overlap
+    // (0006_schedule.sql), отпуск без замены — отдельная задача (не эта).
+    // archived не считаем: раздел про тех, с кем ещё нужно разобраться,
+    // не про отказавшихся.
+    supabase
+      .from('students')
+      .select('id, full_name, status')
+      .is('primary_teacher_id', null)
+      .neq('status', 'archived')
+      .order('created_at', { ascending: false }),
   ])
 
   const lessons = lessonRows ?? []
   const lowBalance = lowBalanceRows ?? []
   const debts = debtRows ?? []
+  const unassigned = unassignedRows ?? []
 
   const studentIds = [
     ...new Set([...lessons.map((l) => l.student_id).filter((v): v is string => Boolean(v)), ...lowBalance.map((r) => r.student_id).filter((v): v is string => Boolean(v)), ...debts.map((r) => r.student_id).filter((v): v is string => Boolean(v))]),
@@ -163,6 +176,32 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
           ) : null}
         </Card>
       </div>
+
+      {unassigned.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              Требует внимания
+              <span className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning">
+                {unassigned.length}
+              </span>
+            </CardTitle>
+            <CardDescription>Ученик без специалиста — записан, но не назначен логопед</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {unassigned.slice(0, 5).map((student) => (
+              <Link
+                key={student.id}
+                href={`/app/students/${student.id}`}
+                className="flex justify-between gap-2 hover:underline"
+              >
+                <span className="truncate">{student.full_name}</span>
+                <span className="shrink-0 font-medium text-primary">Выбрать специалиста →</span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {lessons.length === 0 ? (
         <Card>
