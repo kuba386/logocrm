@@ -97,13 +97,6 @@ export type Database = {
             foreignKeyName: "attendance_student_fk"
             columns: ["student_id", "center_id"]
             isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
-          },
-          {
-            foreignKeyName: "attendance_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id", "center_id"]
           },
@@ -492,13 +485,6 @@ export type Database = {
             foreignKeyName: "group_students_student_fk"
             columns: ["student_id", "center_id"]
             isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
-          },
-          {
-            foreignKeyName: "group_students_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id", "center_id"]
           },
@@ -858,13 +844,6 @@ export type Database = {
             foreignKeyName: "lesson_participants_student_fk"
             columns: ["student_id", "center_id"]
             isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
-          },
-          {
-            foreignKeyName: "lesson_participants_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id", "center_id"]
           },
@@ -972,13 +951,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "services"
             referencedColumns: ["id", "center_id"]
-          },
-          {
-            foreignKeyName: "lessons_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
           },
           {
             foreignKeyName: "lessons_student_fk"
@@ -1513,13 +1485,6 @@ export type Database = {
             foreignKeyName: "student_payers_student_fk"
             columns: ["student_id", "center_id"]
             isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
-          },
-          {
-            foreignKeyName: "student_payers_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id", "center_id"]
           },
@@ -1817,13 +1782,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "payers_with_stats"
             referencedColumns: ["id", "center_id"]
-          },
-          {
-            foreignKeyName: "subscriptions_student_fk"
-            columns: ["student_id", "center_id"]
-            isOneToOne: false
-            referencedRelation: "student_balance"
-            referencedColumns: ["student_id", "center_id"]
           },
           {
             foreignKeyName: "subscriptions_student_fk"
@@ -2130,15 +2088,7 @@ export type Database = {
           unpriced_visits: number | null
           visits: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_center_id_fkey"
-            columns: ["center_id"]
-            isOneToOne: false
-            referencedRelation: "centers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       revenue_by_service: {
         Row: {
@@ -2151,15 +2101,7 @@ export type Database = {
           unpriced_visits: number | null
           visits: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_center_id_fkey"
-            columns: ["center_id"]
-            isOneToOne: false
-            referencedRelation: "centers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       revenue_by_teacher: {
         Row: {
@@ -2172,22 +2114,7 @@ export type Database = {
           unpriced_visits: number | null
           visits: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_center_id_fkey"
-            columns: ["center_id"]
-            isOneToOne: false
-            referencedRelation: "centers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_paid_teacher_fk"
-            columns: ["teacher_id", "center_id"]
-            isOneToOne: false
-            referencedRelation: "teachers"
-            referencedColumns: ["id", "center_id"]
-          },
-        ]
+        Relationships: []
       }
       staff_view: {
         Row: {
@@ -2228,15 +2155,7 @@ export type Database = {
           state: string | null
           student_id: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "students_center_id_fkey"
-            columns: ["center_id"]
-            isOneToOne: false
-            referencedRelation: "centers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       students_teacher_view: {
         Row: {
@@ -2593,6 +2512,17 @@ export type Database = {
         Returns: number
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
+      repair_center_scoped_refs: { Args: never; Returns: undefined }
+      reschedule_lesson: {
+        Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
+        Returns: undefined
+      }
+      restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      restore_expense_category: { Args: { p_id: string }; Returns: undefined }
+      restore_payment_source: { Args: { p_id: string }; Returns: undefined }
+      restore_student: { Args: { p_id: string }; Returns: undefined }
+      restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
+      restore_teacher: { Args: { p_id: string }; Returns: undefined }
       revenue_facts: {
         Args: never
         Returns: {
@@ -2605,17 +2535,6 @@ export type Database = {
           subscription_id: string
         }[]
       }
-      repair_center_scoped_refs: { Args: never; Returns: undefined }
-      reschedule_lesson: {
-        Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
-        Returns: undefined
-      }
-      restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
-      restore_expense_category: { Args: { p_id: string }; Returns: undefined }
-      restore_payment_source: { Args: { p_id: string }; Returns: undefined }
-      restore_student: { Args: { p_id: string }; Returns: undefined }
-      restore_subscription_type: { Args: { p_id: string }; Returns: undefined }
-      restore_teacher: { Args: { p_id: string }; Returns: undefined }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
       ru_month_year: { Args: { p_date: string }; Returns: string }
