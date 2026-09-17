@@ -265,48 +265,7 @@ comment on function public.payer_telegram_linked(uuid) is
   'Привязан ли Telegram у плательщика своего центра — «да/нет» без доступа к таблице привязок. owner/admin/registrar/finance.';
 
 
--- 4. Подбор абонемента без пользовательской сессии ---------------------------------------------------
-
--- из 0015_freeze_state_unification.sql; меняется ровно одно: внутри
--- вызывается subscription_state_unchecked вместо гейтованной
--- subscription_state.
---
--- Почему это безопасно и почему обязательно. Функция объявлена security
--- invoker, то есть строки из subscriptions ей и так режет RLS вызывающего:
--- специалист не увидит ни одного абонемента, родитель — только своих детей.
--- Гейт внутри subscription_state (0015:197) нужен там, где пользователь
--- спрашивает про произвольный id, а не здесь — здесь он дублирует RLS.
--- Зато при вызове из definer-функции без пользователя (бот, планировщик)
--- subscription_visible_to_caller возвращает false на auth.uid() is null, все
--- состояния становятся NULL, фильтр state in (...) не проходит ни одна
--- строка — и бот отвечал бы «абонемента нет» любому родителю. Найдено CI:
--- тесты 26-27 в 0033.
-create or replace function public.student_balance_pick(p_student_id uuid)
-  returns table (subscription_id uuid, ends_at date, lesson_price_tiyin integer, state text)
-  language sql
-  stable
-  security invoker
-  set search_path = ''
-as $$
-  select c.id, c.ends_at, c.lesson_price_tiyin, c.state
-    from (
-      select s2.id, s2.ends_at, s2.created_at, s2.lesson_price_tiyin,
-             public.subscription_state_unchecked(s2.id) as state
-        from public.subscriptions s2
-       where s2.student_id = p_student_id
-         and s2.deleted_at is null
-         and s2.status <> 'cancelled'
-    ) c
-   where c.state in ('active', 'exhausted', 'frozen')
-   order by (c.state = 'frozen') asc, c.ends_at asc nulls last, c.created_at, c.id
-   limit 1;
-$$;
-
-revoke all on function public.student_balance_pick(uuid) from public, anon;
-grant execute on function public.student_balance_pick(uuid) to authenticated;
-
-
--- 5. Команды бота ----------------------------------------------------------------------------------
+-- 4. Команды бота ----------------------------------------------------------------------------------
 
 create or replace function public.bot_today(p_chat_id bigint)
   returns table (
@@ -425,7 +384,27 @@ begin
       join public.students s on s.center_id = m.center_id
        and s.payer_id = m.payer_id
        and s.deleted_at is null
-      left join lateral public.student_balance_pick(s.id) b on true
+      -- Не student_balance_pick (0015): она security invoker и внутри зовёт
+      -- гейтованную subscription_state, а та на auth.uid() is null отдаёт
+      -- NULL — здесь пользователя нет, и ни один абонемент не прошёл бы
+      -- фильтр состояний. Перевести саму 0015 на _unchecked нельзя: у
+      -- authenticated нет права её исполнять, и упали бы все экраны
+      -- баланса (поймано CI). Отсюда — свой подбор теми же правилами.
+      -- МЕНЯЕШЬ ЗДЕСЬ — МЕНЯЙ И В 0015: порядок кандидатов один.
+      left join lateral (
+        select c.id as subscription_id
+          from (
+            select s2.id, s2.ends_at, s2.created_at,
+                   public.subscription_state_unchecked(s2.id) as state
+              from public.subscriptions s2
+             where s2.student_id = s.id
+               and s2.deleted_at is null
+               and s2.status <> 'cancelled'
+          ) c
+         where c.state in ('active', 'exhausted', 'frozen')
+         order by (c.state = 'frozen') asc, c.ends_at asc nulls last, c.created_at, c.id
+         limit 1
+      ) b on true
      where m.user_id = v_user
        and m.role = 'parent'
        and m.payer_id is not null
@@ -437,7 +416,7 @@ comment on function public.bot_balance(bigint) is
   'Остаток и долг по детям владельца чата — только для роли parent. has_subscription отделяет «безлимит» от «нет абонемента»: в lessons_left и то и другое даёт NULL (0010).';
 
 
--- 6. Подтверждение прихода --------------------------------------------------------------------------
+-- 5. Подтверждение прихода --------------------------------------------------------------------------
 
 create table if not exists public.lesson_confirmations (
   id           uuid primary key default gen_random_uuid(),
@@ -545,7 +524,7 @@ comment on function public.confirm_lesson(bigint, uuid, uuid) is
   'Родитель подтверждает приход ребёнка на занятие. Ребёнок — отдельным параметром (Р6): у родителя может быть двое детей в одной группе. Повторное подтверждение — false, не ошибка.';
 
 
--- 7. Гранты ------------------------------------------------------------------------------------------
+-- 6. Гранты ------------------------------------------------------------------------------------------
 
 revoke all on function public.create_telegram_link_code()                from public, anon, authenticated, service_role;
 revoke all on function public.unlink_telegram()                          from public, anon, authenticated, service_role;
