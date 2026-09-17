@@ -69,6 +69,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/app/finance', label: 'Финансы', show: payments },
     { href: '/app/salary', label: 'Зарплата', show: finance },
     { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
+    { href: '/app/notifications', label: 'Уведомления', show: isAdmin },
+    // Telegram привязывает каждый себе сам — в том числе родитель и
+    // специалист, которым настройки центра не показываются.
+    { href: '/app/telegram', label: 'Telegram', show: true },
     { href: '/app/settings/staff', label: 'Настройки', show: isAdmin || finance },
   ].filter((link) => link.show)
 
