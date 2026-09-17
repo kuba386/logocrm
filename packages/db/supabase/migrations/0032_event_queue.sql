@@ -262,12 +262,16 @@ begin
 
   -- skip locked: два одновременных прогона иначе поднимут attempts дважды,
   -- и событие уйдёт в терминал после полутора таймаутов вместо трёх.
-  select array_agg(e.id) into v_ids
-    from public.events e
-   where e.processed_at is null
-     and e.claimed_at is not null
-     and e.claimed_at < now() - p_older_than
-     for update skip locked;
+  -- Блокировка — в подзапросе: FOR UPDATE нельзя совмещать с агрегатом.
+  select array_agg(stale.id) into v_ids
+    from (
+      select e.id
+        from public.events e
+       where e.processed_at is null
+         and e.claimed_at is not null
+         and e.claimed_at < now() - p_older_than
+       for update skip locked
+    ) stale;
 
   if v_ids is null then
     return 0;

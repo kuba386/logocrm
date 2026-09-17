@@ -646,9 +646,14 @@ select ok(
   not has_function_privilege('service_role', 'public.installment_plans_cancel_live(uuid)', 'EXECUTE'),
   'installment_plans_cancel_live закрыта и от service_role'
 );
+-- Этап 6 наступил, и планировщиком оказался не service_role: у него остаются
+-- все таблицы (0024 снимал гранты только у public/anon/authenticated), то
+-- есть ключ n8n открывал бы карточки детей всех центров мимо узких функций
+-- 0031. Вход переехал на роль bot_worker без табличных грантов (0032, Р2).
 select ok(
-  has_function_privilege('service_role', 'public.installments_notify()', 'EXECUTE'),
-  'installments_notify открыта service_role — вход планировщика этапа 6 (сознательно)'
+  has_function_privilege('bot_worker', 'public.installments_notify()', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.installments_notify()', 'EXECUTE'),
+  'installments_notify открыта bot_worker и закрыта service_role — вход планировщика (0032)'
 );
 
 -- Строка принадлежит плану того же абонемента: sub3 — тот же ребёнок и
