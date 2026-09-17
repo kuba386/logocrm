@@ -116,37 +116,37 @@ $$;
 
 create temporary table t_ev (name text primary key, id bigint);
 
-insert into t_ev
-select 'reminder', id from (
+with ins_reminder as (
   insert into public.events (center_id, type, payload)
   values ('cccccccc-0000-0000-0000-00000000000a', 'lesson.reminder',
           jsonb_build_object('center_id','cccccccc-0000-0000-0000-00000000000a',
                              'lesson_id','ffffffff-0000-0000-0000-000000000001'))
-  returning id) e;
+  returning id)
+insert into t_ev select 'reminder', id from ins_reminder;
 
-insert into t_ev
-select 'low', id from (
+with ins_low as (
   insert into public.events (center_id, type, payload)
   values ('cccccccc-0000-0000-0000-00000000000a', 'subscription.low_balance',
           jsonb_build_object('center_id','cccccccc-0000-0000-0000-00000000000a',
                              'student_id','eeeeeeee-0000-0000-0000-000000000001',
                              'lessons_left', 2))
-  returning id) e;
+  returning id)
+insert into t_ev select 'low', id from ins_low;
 
-insert into t_ev
-select 'digest', id from (
+with ins_digest as (
   insert into public.events (center_id, type, payload)
   values ('cccccccc-0000-0000-0000-00000000000a', 'digest.daily',
           jsonb_build_object('center_id','cccccccc-0000-0000-0000-00000000000a',
                              'date','2026-10-01','lessons_today',5,'low_balance',1,
                              'debt_tiyin',70000,'installments_overdue',0))
-  returning id) e;
+  returning id)
+insert into t_ev select 'digest', id from ins_digest;
 
-insert into t_ev
-select 'unknown', id from (
+with ins_unknown as (
   insert into public.events (center_id, type, payload)
   values ('cccccccc-0000-0000-0000-00000000000a', 'expense.recorded', '{}'::jsonb)
-  returning id) e;
+  returning id)
+insert into t_ev select 'unknown', id from ins_unknown;
 
 select public.tests_claims(null, null);
 
