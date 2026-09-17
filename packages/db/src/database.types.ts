@@ -1331,6 +1331,155 @@ export type Database = {
           },
         ]
       }
+      message_templates: {
+        Row: {
+          center_id: string | null
+          channel: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          event_type: string
+          id: string
+          is_active: boolean
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string | null
+          channel: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          event_type: string
+          id?: string
+          is_active?: boolean
+          text: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string | null
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          event_type?: string
+          id?: string
+          is_active?: boolean
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_log: {
+        Row: {
+          attempts: number
+          center_id: string
+          channel: string
+          created_at: string
+          error: string | null
+          event_id: number
+          id: string
+          recipient_user_id: string | null
+          sent_at: string | null
+          status: string
+          text: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          center_id: string
+          channel: string
+          created_at?: string
+          error?: string | null
+          event_id: number
+          id?: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          center_id?: string
+          channel?: string
+          created_at?: string
+          error?: string | null
+          event_id?: number
+          id?: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          text?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      telegram_accounts: {
+        Row: {
+          chat_id: number
+          id: string
+          linked_at: string
+          unlinked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          chat_id: number
+          id?: string
+          linked_at?: string
+          unlinked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          chat_id?: number
+          id?: string
+          linked_at?: string
+          unlinked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lesson_confirmations: {
+        Row: {
+          center_id: string
+          confirmed_at: string
+          confirmed_by: string | null
+          id: string
+          lesson_id: string
+          source: string
+          student_id: string
+        }
+        Insert: {
+          center_id: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          lesson_id: string
+          source?: string
+          student_id: string
+        }
+        Update: {
+          center_id?: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          lesson_id?: string
+          source?: string
+          student_id?: string
+        }
+        Relationships: []
+      }
       payment_sources: {
         Row: {
           center_id: string
@@ -2835,6 +2984,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_telegram_link_code: { Args: never; Returns: string }
+      unlink_telegram: { Args: never; Returns: boolean }
+      payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
+      preview_message: { Args: { p_text: string; p_vars?: Json }; Returns: string }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
       payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
       payers_brief: {

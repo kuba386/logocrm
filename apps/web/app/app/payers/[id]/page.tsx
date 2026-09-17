@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { statusLabel, studentAge } from '@/lib/students'
+import { cn } from '@/lib/utils'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
 
 export const metadata = { title: 'Плательщик — LogoCRM' }
@@ -30,7 +31,9 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
 
   if (!payer) notFound()
 
-  const [{ data: children }, { data: teachers }] = await Promise.all([
+  // Бейдж — узкой функцией, а не чтением telegram_accounts: таблица привязок
+  // стойке не положена, ответ нужен один — «да/нет» (0033).
+  const [{ data: children }, { data: teachers }, { data: telegramLinked }] = await Promise.all([
     supabase
       .from('students')
       .select('id, full_name, birth_date, status')
@@ -43,6 +46,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
       .is('deleted_at', null)
       .eq('is_active', true)
       .order('full_name'),
+    supabase.rpc('payer_telegram_linked', { p_payer_id: id }),
   ])
 
   const wa = whatsappNumber(payer.phone)
@@ -53,7 +57,17 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
         <Link href="/app/payers" className="text-sm text-muted-foreground hover:underline">
           ← Все плательщики
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">{payer.full_name}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{payer.full_name}</h1>
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-xs',
+              telegramLinked ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {telegramLinked ? 'Telegram привязан' : 'Telegram не привязан'}
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground">
           {payer.relation ?? 'родитель'} · {formatKgPhone(payer.phone)}
           {payer.email ? ` · ${payer.email}` : ''}
@@ -72,6 +86,18 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
             className={buttonVariants({ variant: 'outline' })}
           >
             WhatsApp
+          </a>
+        ) : null}
+        {!telegramLinked && wa ? (
+          <a
+            href={`https://wa.me/${wa}?text=${encodeURIComponent(
+              'Здравствуйте! Чтобы получать напоминания о занятиях и остаток абонемента, привяжите Telegram: откройте LogoCRM → раздел Telegram → «Получить код».',
+            )}`}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants({ variant: 'outline' })}
+          >
+            Пригласить в бот
           </a>
         ) : null}
         <AddStudentDialog
