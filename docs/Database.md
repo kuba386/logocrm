@@ -410,8 +410,12 @@ reset role;
 | `student_subscription_badge(uuid)` | все роли своего центра | «нет / заканчивается / есть», без сумм |
 | `subscription_lessons_left` / `subscription_state` / `subscription_freeze_days` / `refund_calc` | внутренние | `security invoker`: чужой абонемент даёт **NULL**, а NULL у остатка значит и «безлимит». Из приложения не вызывать — только `subscription_summary` |
 
-`student_balance` — `security_invoker`, фильтрует роль сама (специалисту пуста):
-`debt_tiyin` считается по `attendance`, а её специалист видит по своим занятиям.
+`student_balance` — `security_invoker`, но строки берёт из `students_brief()`
+(definer: owner/admin/registrar/finance — весь центр, parent — свои дети,
+специалисту пуста), а `debt_tiyin` — из `student_debts()` (definer, явный
+центр в теле, `left join` один раз на запрос). Так бухгалтер видит баланс без
+доступа к `students` и `attendance` (0031); `student_balance_pick` остаётся
+invoker.
 
 ### События
 
@@ -477,7 +481,12 @@ end if;
   совпадает с месяцем замка `financial_period_guard` по построению.
 - Join только к `lessons`; к `teachers`/`services`/`payers` — нет: под
   `security_invoker` их RLS (`deleted_at is null`) молча уносит строки
-  архивного специалиста. Имена резолвит интерфейс.
+  архивного специалиста. Имена резолвит интерфейс. С 0031 сам join живёт в
+  `revenue_facts()` (definer, `can_finance`, явный центр): бухгалтер без
+  политики на `lessons`/`attendance` видит ту же выручку, что владелец, а
+  teacher/parent — по-прежнему ноль строк, не ошибку. Цена — definer
+  set-returning не инлайнится, фильтр по месяцу до `attendance` не доходит;
+  на объёмах центра принято сознательно (шапка 0031, Р6).
 - Ноль в `price_tiyin` — два случая, две колонки: `unlimited_visits`
   (безлимит) и `unpriced_visits` (без абонемента, у услуги нет цены —
   деньги не начислены). Безлимиты в выручку не входят ни одной суммой —
@@ -486,6 +495,32 @@ end if;
   `other_tiyin`, чтобы был громким, а не терялся из именованных колонок.
 - Месяц без строки — не ноль: отсутствие строки трактует клиент, в одном
   месте.
+
+### Бухгалтер и свободный текст (0031)
+
+Роль `finance` не читает `students`, `payers`, `lessons`, `attendance`
+целиком — там свободный текст о семье и занятии (`notes`, `custom_fields`,
+`cancel_reason`, `comment`). Колоночных прав по роли нет (ADR-005), поэтому
+то, что бухгалтеру нужно, отдают definer-функции без этих колонок; полный
+список политик `tenant_registrar_*`/`tenant_finance_*` держит `tests/0031`.
+
+| Функция | Кому | Что |
+|---|---|---|
+| `students_brief()` | owner, admin, registrar, finance — центр; parent — свои дети; остальным пусто | ученики без `notes`/`custom_fields`/`source`/`gender`; источник строк `student_balance` и экранов бухгалтера. Зеркало RLS `students` для этих ролей: меняешь политику — меняешь здесь |
+| `payers_brief()` | owner, admin, registrar, finance; остальным пусто | плательщики с контактами, без `notes`/`custom_fields` |
+| `student_debts()` | те же и parent — свои дети; остальным пусто | долг по отметкам без абонемента, строка на ребёнка; `left join` в `student_balance`. Намеренно не скаляр по uuid: у скалярной формы проверка прав строилась на `not (…)`, а у родителя без `membership.payer_id` сравнение давало NULL — и функция отдавала долг любого ребёнка (найдено ревью написанного кода) |
+| `revenue_facts()` | owner, admin, finance; остальным пусто | списанные отметки проведённых занятий — источник `revenue_by_*` |
+| `month_open_lessons_count(date)` | owner, admin, finance; иначе `42501` | тот же запрос, что в `close_month`: planned, без состава или с неотмеченным участником. `close_month` вызывает её — одна копия условия |
+
+Отказ у источников строк — пусто, и без прав, и без `auth.uid()`: их читают
+вью, а вью обязана вести себя как раньше — ноль строк, не исключение (так же
+устроен `cash_by_source`, чей ролевой фильтр остался предикатом в теле).
+`42501` — только у скалярного `month_open_lessons_count`: там «0» значит
+«можно закрывать», и молчать нельзя.
+
+Обе функции, читающие `attendance` по центру (`revenue_facts`,
+`student_debts`), не инлайнятся планировщиком — под них заведён частичный
+индекс `attendance (center_id) where deducted`.
 
 ### Инварианты `payments` (0013, 0030)
 

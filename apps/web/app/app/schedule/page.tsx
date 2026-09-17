@@ -33,6 +33,8 @@ export default async function SchedulePage({
 
   const { data: role } = await supabase.rpc('my_role')
   if (!role) redirect('/select-center')
+  // Бухгалтеру lessons закрыты политикой (0031) — редирект вместо пустой сетки.
+  if (role === 'finance') redirect('/app')
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
   const { data: center } = await supabase

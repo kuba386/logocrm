@@ -61,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const payments = canPayments(role)
 
   const navLinks = [
-    { href: '/app/schedule', label: 'Расписание', show: true },
+    { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
     { href: '/app/students', label: 'Ученики', show: true },
     { href: '/app/payers', label: 'Плательщики', show: payments },
     { href: '/app/groups', label: 'Группы', show: frontDesk },

@@ -1,7 +1,9 @@
 -- pgTAP: роли registrar/finance, шаг 3 — политики, витрины, лестница (0028).
--- Заборы по pg_policies: полный ожидаемый набор tenant_registrar_*/
--- tenant_finance_* и список таблиц с tenant_admin БЕЗ решения по новым
--- ролям. Таблица этапа 7 без вызова apply_role_rls роняет второй.
+-- Забор по pg_policies: список таблиц с tenant_admin БЕЗ решения по новым
+-- ролям. Таблица этапа 7 без вызова apply_role_rls роняет его. Полный
+-- ожидаемый набор tenant_registrar_*/tenant_finance_* — в tests/0031: 0031
+-- сняла tenant_finance_select со students/lessons/attendance/payers, и
+-- финансовые ассерты ниже правлены под это (finance видит 0 строк).
 -- Проверки видимости — is(count, N), не lives_ok: отсутствующая политика
 -- даёт ноль строк, не ошибку. Claims — явно перед каждым блоком.
 
@@ -10,41 +12,11 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(89);
+select plan(88);
 
 
 -- 1-3. Заборы по каталогу политик --------------------------------------------------------
 
-select set_eq(
-  $$ select tablename || ':' || policyname from pg_policies
-      where schemaname = 'public'
-        and (policyname like 'tenant_registrar%' or policyname like 'tenant_finance%') $$,
-  $$ values
-    ('students:tenant_registrar_select'), ('students:tenant_registrar_insert'), ('students:tenant_registrar_update'),
-    ('payers:tenant_registrar_select'), ('payers:tenant_registrar_insert'), ('payers:tenant_registrar_update'),
-    ('groups:tenant_registrar_select'), ('groups:tenant_registrar_insert'), ('groups:tenant_registrar_update'),
-    ('group_students:tenant_registrar_select'), ('group_students:tenant_registrar_insert'), ('group_students:tenant_registrar_update'),
-    ('lessons:tenant_registrar_select'), ('lessons:tenant_registrar_insert'), ('lessons:tenant_registrar_update'),
-    ('attendance:tenant_registrar_select'), ('attendance:tenant_registrar_insert'), ('attendance:tenant_registrar_update'),
-    ('teachers:tenant_registrar_select'), ('rooms:tenant_registrar_select'), ('services:tenant_registrar_select'),
-    ('subscription_types:tenant_registrar_select'), ('subscriptions:tenant_registrar_select'),
-    ('subscription_freezes:tenant_registrar_select'), ('payments:tenant_registrar_select'),
-    ('installment_plans:tenant_registrar_select'), ('installments:tenant_registrar_select'),
-    ('student_payers:tenant_registrar_select'), ('financial_periods:tenant_registrar_select'),
-    ('lesson_participants:tenant_registrar_select'),
-    ('teacher_rates:tenant_finance_select'), ('teacher_rates:tenant_finance_insert'),
-    ('expense_categories:tenant_finance_select'), ('expense_categories:tenant_finance_insert'), ('expense_categories:tenant_finance_update'),
-    ('payment_sources:tenant_finance_select'), ('payment_sources:tenant_finance_insert'), ('payment_sources:tenant_finance_update'),
-    ('payments:tenant_finance_select'), ('expenses:tenant_finance_select'), ('financial_periods:tenant_finance_select'),
-    ('salary_adjustments:tenant_finance_select'), ('salary_runs:tenant_finance_select'),
-    ('teachers:tenant_finance_select'), ('payers:tenant_finance_select'), ('student_payers:tenant_finance_select'),
-    ('students:tenant_finance_select'), ('subscriptions:tenant_finance_select'),
-    ('subscription_freezes:tenant_finance_select'), ('subscription_types:tenant_finance_select'),
-    ('installment_plans:tenant_finance_select'), ('installments:tenant_finance_select'),
-    ('attendance:tenant_finance_select'), ('lessons:tenant_finance_select')
-  $$,
-  'Политики новых ролей — ровно ожидаемый набор (ни одной лишней, ни одной потерянной)'
-);
 select set_eq(
   $$ select t.tablename from pg_policies t
       where t.schemaname = 'public' and t.policyname = 'tenant_admin'
@@ -240,9 +212,9 @@ select is((select count(*)::int from public.expenses), 1, 'finance видит р
 select is((select count(*)::int from public.financial_periods), 1, 'finance видит замок месяца');
 select is((select count(*)::int from public.salary_adjustments), 1, 'finance видит корректировки');
 select is((select count(*)::int from public.salary_runs), 1, 'finance видит снимки зарплаты');
-select is((select count(*)::int from public.students), 3, 'finance видит учеников (двое из фикстуры + один от registrar)');
-select is((select count(*)::int from public.lessons), 3, 'finance видит занятия (витрины выручки — invoker с join lessons)');
-select is((select count(*)::int from public.attendance), 1, 'finance видит отметки');
+select is((select count(*)::int from public.students), 0, 'finance НЕ видит таблицу учеников (0031: ученики — через students_brief)');
+select is((select count(*)::int from public.lessons), 0, 'finance НЕ видит занятий (0031: витрины выручки — через revenue_facts)');
+select is((select count(*)::int from public.attendance), 0, 'finance НЕ видит отметок (0031)');
 select is(
   (select count(*)::int from public.expense_categories where deleted_at is not null), 1,
   'finance видит архивную статью (expense_categories_read_archived — can_finance)');
@@ -275,10 +247,10 @@ select throws_ok(
   $q$ insert into public.teacher_rates (center_id, teacher_id, model, value, valid_from)
       values ('cccccccc-0000-0000-0000-00000000000a', 'aaaaaaaa-0000-0000-0000-000000000001', 'per_lesson', 1, '2026-08-01') $q$,
   '22023', null, 'finance: ставка в месяц с утверждённой зарплатой специалиста — approved_salary_guard');
--- Р5: отступление от ТЗ зафиксировано явно, чтобы не «починили» молча.
-select is(
-  (select notes from public.students where id = 'eeeeeeee-0000-0000-0000-000000000001'), 'заметка приёма',
-  'Р5 (отступление): finance читает students.notes прямым запросом — колоночного разделения по роли нет, см. reports/stage-5.md');
+-- Р5 из 0028 отменено 0031: заметки бухгалтеру закрыты. Подробные проверки — tests/0031.
+select is_empty(
+  $q$ select notes from public.students where id = 'eeeeeeee-0000-0000-0000-000000000001' $q$,
+  'finance не читает students.notes — таблица закрыта (0031 отменяет Р5)');
 reset role;
 
 select is(

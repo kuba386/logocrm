@@ -209,12 +209,24 @@ export function PayInstallmentForm({
   )
 }
 
-export function ClosePeriodForm({ month, monthLabel, plannedCount }: { month: string; monthLabel: string; plannedCount: number }) {
+export function ClosePeriodForm({
+  month,
+  monthLabel,
+  openCount,
+}: {
+  month: string
+  monthLabel: string
+  openCount: number | null
+}) {
   const [state, formAction] = useActionState(closeMonth, initial)
   return (
     <form action={formAction} className="space-y-2">
       <input type="hidden" name="month" value={month} />
-      <p className="text-sm text-muted-foreground">{t('finance', 'closeMonthHint', { count: plannedCount })}</p>
+      <p className="text-sm text-muted-foreground">
+        {openCount === null
+          ? t('finance', 'closeMonthHintUnknown')
+          : t('finance', 'closeMonthHint', { count: openCount })}
+      </p>
       <SubmitButton size="default">{t('finance', 'closeMonth', { month: monthLabel })}</SubmitButton>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />

@@ -116,6 +116,18 @@
 
 ### Безопасность
 
+- `0031_finance_notes_privacy.sql` — бухгалтер больше не читает свободный
+  текст о семье и занятии: с `students`, `payers`, `lessons`, `attendance`
+  снята `tenant_finance_select` (отменяет Р5 из 0028 по решению владельца
+  17.09.2026). Что бухгалтеру нужно, отдают definer-функции без этих
+  колонок: `students_brief()`, `payers_brief()` (источник экранов),
+  `revenue_facts()` (источник `revenue_by_*`), `student_debts()` (долг в
+  `student_balance`, строки — из `students_brief()`),
+  `month_open_lessons_count()` — тот же запрос, что в `close_month`, вместо
+  подсчёта «только planned» на вкладке «Периоды». Полный список политик
+  новых ролей — `tests/0031` (из 0028). `/app/schedule` и блок «Занятий
+  сегодня» бухгалтеру закрыты; `/app/students`, карточка ученика и
+  `/app/finance` читают ученика и плательщика через новые функции.
 - `0007_lock_down_participant_functions.sql` — сняты гранты у `public`, `anon`
   и `authenticated` с четырёх служебных функций: `rebuild_lesson_participants`,
   двух триггерных функций состава и `lesson_slot_conflicts`. В `0006` строка
