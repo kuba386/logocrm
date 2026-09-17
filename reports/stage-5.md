@@ -2,7 +2,7 @@
 
 Дата: 2026-09-12 (в работе)
 PR: #32 (0013–0014), #35 (0016), #37 (0017), #38/#40/#44 (0018–0020), #43 (0021), #42/#45 (0022), #46 (0023), #48 (0024), #49 (0025, параллельная сессия), #51 (0026), #52 (0027), #53 (0028), #54 (0029), #55–#59 (UI: продажа с оплатой, /app/finance, /app/salary, ставки, дашборд/родитель), #60 (0030)
-Миграции: 0013_finance_core, 0014_finance_core_fixes, 0016_expenses, 0017_teacher_rates_and_salary, 0018_installments, 0019_installments_notify_archived, 0020_installment_plans, 0021_revenue_views, 0022_center_scoped_fks, 0023_sell_subscription_paid, 0024_access_hygiene, 0025_mark_lesson_status_role_guard, 0026_roles_registrar_rpc, 0027_roles_finance_rpc, 0028_roles_policies, 0029_salary_runs_and_payment_date, 0030_refund_payment_and_overpay_guard
+Миграции: 0013_finance_core, 0014_finance_core_fixes, 0016_expenses, 0017_teacher_rates_and_salary, 0018_installments, 0019_installments_notify_archived, 0020_installment_plans, 0021_revenue_views, 0022_center_scoped_fks, 0023_sell_subscription_paid, 0024_access_hygiene, 0025_mark_lesson_status_role_guard, 0026_roles_registrar_rpc, 0027_roles_finance_rpc, 0028_roles_policies, 0029_salary_runs_and_payment_date, 0030_refund_payment_and_overpay_guard, 0031_finance_notes_privacy (закрытие Р5, 17.09)
 
 ## Plan
 
@@ -503,10 +503,17 @@ empty states, мобильный вид на preview.
      так реализовано в 0029 по умолчанию. Если нужно наоборот (reopen
      отказывает, пока есть утверждённые снимки) — это ещё можно
      переделать следующей миграцией, старая не трогается.
-- Отступление Р5 (0028): finance читает `students.notes`, `lessons.notes`,
-  `attendance.comment` — оставить до выноса заметок в отдельные таблицы на
-  этапе 7 или закрыть сейчас (тогда витрины выручки и `student_balance` для
-  finance переписываются на definer-функции)?
+- Отступление Р5 (0028) — **закрыто 17.09.2026 по решению владельца
+  («закрыть сейчас»)**, миграция `0031_finance_notes_privacy.sql`. Ревью
+  плана архитектором расширило границу с трёх колонок до «свободного текста
+  о семье и занятии» — в список вошла и `payers.notes`, иначе правило было
+  бы неправдой при зелёном тесте. Витрины выручки и `student_balance` для
+  всех ролей переведены на definer-источники (`revenue_facts`,
+  `students_brief`, `student_debts`); счётчик незакрытых занятий на
+  вкладке «Периоды» стал тем же запросом, что в `close_month`
+  (`month_open_lessons_count`) — до этого экран считал только `planned` и
+  обещал закрытие там, где база отказывала. Забор по `pg_policies` переехал
+  из `tests/0028` в `tests/0031`; `/app/schedule` бухгалтеру закрыт.
 - Удалить единственного владельца или его центр нельзя даже `service_role`
   (0024) — сначала назначается второй владелец; при удалении пользователя
   из дашборда Supabase это будет отказ.

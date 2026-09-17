@@ -18,7 +18,9 @@ export default async function StudentsPage() {
   const { data: role } = await supabase.rpc('my_role')
   if (!role) redirect('/select-center')
 
-  const canSeeContacts = role === 'owner' || role === 'admin'
+  const isAdmin = role === 'owner' || role === 'admin'
+  const isFinance = role === 'finance'
+  const canSeeContacts = isAdmin || isFinance
 
   const { data: teachers } = await supabase
     .from('teachers')
@@ -35,7 +37,7 @@ export default async function StudentsPage() {
 
   let students: StudentRowView[] = []
 
-  if (canSeeContacts) {
+  if (isAdmin) {
     // Владелец и администратор читают таблицу с контактами плательщика.
     const { data } = await supabase
       .from('students')
@@ -45,6 +47,28 @@ export default async function StudentsPage() {
 
     students = (data ?? []).map((row) => {
       const payer = row.payers as unknown as { full_name: string; phone: string } | null
+      return {
+        id: row.id,
+        fullName: row.full_name,
+        birthDate: row.birth_date,
+        status: row.status,
+        teacherId: row.primary_teacher_id,
+        teacherName: row.primary_teacher_id ? (teacherNames.get(row.primary_teacher_id) ?? null) : null,
+        payerName: payer?.full_name ?? null,
+        payerPhone: payer?.phone ?? null,
+      }
+    })
+  } else if (isFinance) {
+    // Бухгалтер — students_brief/payers_brief: колонок с заметками там нет
+    // физически, таблицы ему закрыты (0031).
+    const [{ data: rows }, { data: payers }] = await Promise.all([
+      supabase.rpc('students_brief').order('full_name'),
+      supabase.rpc('payers_brief'),
+    ])
+    const payerById = new Map((payers ?? []).map((p) => [p.id, p]))
+
+    students = (rows ?? []).map((row) => {
+      const payer = row.payer_id ? payerById.get(row.payer_id) : undefined
       return {
         id: row.id,
         fullName: row.full_name,
@@ -83,12 +107,14 @@ export default async function StudentsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Ученики</h1>
           <p className="text-sm text-muted-foreground">
-            {canSeeContacts
+            {isAdmin
               ? 'Контакты родителей — на карточке плательщика.'
-              : 'Вам видны дети, закреплённые за вами.'}
+              : isFinance
+                ? 'Ученики центра: ФИО, статус, специалист, плательщик — без заметок.'
+                : 'Вам видны дети, закреплённые за вами.'}
           </p>
         </div>
-        {canSeeContacts ? <AddStudentDialog teachers={teacherOptions} /> : null}
+        {isAdmin ? <AddStudentDialog teachers={teacherOptions} /> : null}
       </div>
 
       <Card>

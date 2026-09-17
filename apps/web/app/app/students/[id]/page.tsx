@@ -33,8 +33,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   if (!role) redirect('/select-center')
 
   const isAdmin = role === 'owner' || role === 'admin'
+  const isFinance = role === 'finance'
 
-  // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет.
+  // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет;
+  // бухгалтеру — students_brief: ни телефона, ни заметок (0031).
   const { data: base } = isAdmin
     ? await supabase
         .from('students')
@@ -44,11 +46,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         .eq('id', id)
         .is('deleted_at', null)
         .maybeSingle()
-    : await supabase
-        .from('students_teacher_view')
-        .select('id, full_name, birth_date, gender, status, primary_teacher_id, notes, payer_full_name')
-        .eq('id', id)
-        .maybeSingle()
+    : isFinance
+      ? await supabase.rpc('students_brief').eq('id', id).maybeSingle()
+      : await supabase
+          .from('students_teacher_view')
+          .select('id, full_name, birth_date, gender, status, primary_teacher_id, notes, payer_full_name')
+          .eq('id', id)
+          .maybeSingle()
 
   if (!base) notFound()
 
@@ -70,11 +74,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     id: base.id as string,
     fullName: base.full_name ?? '—',
     birthDate: base.birth_date,
-    gender: base.gender,
+    gender: 'gender' in base ? base.gender : null,
     status: base.status ?? 'active',
     primaryTeacherId: base.primary_teacher_id,
     source: 'source' in base ? (base.source ?? null) : null,
-    notes: base.notes,
+    notes: 'notes' in base ? base.notes : null,
   }
 
   const payer = isAdmin && 'payer_id' in base && base.payer_id
@@ -85,7 +89,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           .eq('id', base.payer_id)
           .maybeSingle()
       ).data
-    : null
+    : isFinance && 'payer_id' in base && base.payer_id
+      ? (await supabase.rpc('payers_brief').eq('id', base.payer_id).maybeSingle()).data
+      : null
 
   const payerName = payer?.full_name ?? ('payer_full_name' in base ? base.payer_full_name : null)
 
@@ -327,7 +333,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         <CardHeader>
           <CardTitle>Плательщик</CardTitle>
           <CardDescription>
-            {isAdmin ? 'Контакты для связи с семьёй.' : 'Контакты видны администратору центра.'}
+            {payer ? 'Контакты для связи с семьёй.' : 'Контакты видны администратору центра.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -353,12 +359,14 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     WhatsApp
                   </a>
                 ) : null}
-                <Link
-                  href={`/app/payers/${payer.id}`}
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  Карточка плательщика
-                </Link>
+                {isAdmin ? (
+                  <Link
+                    href={`/app/payers/${payer.id}`}
+                    className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                  >
+                    Карточка плательщика
+                  </Link>
+                ) : null}
               </div>
             </>
           ) : null}

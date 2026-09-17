@@ -2511,6 +2511,7 @@ export type Database = {
         Args: { p_lesson_id: string; p_notes?: string; p_status: string }
         Returns: undefined
       }
+      month_open_lessons_count: { Args: { p_month: string }; Returns: number }
       my_payer_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }
       my_teacher_id: { Args: never; Returns: string }
@@ -2527,6 +2528,19 @@ export type Database = {
         Returns: string
       }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      payers_brief: {
+        Args: never
+        Returns: {
+          center_id: string
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          phone: string
+          phone_alt: string
+          relation: string
+        }[]
+      }
       rebuild_lesson_participants: {
         Args: { p_lesson_id: string }
         Returns: undefined
@@ -2579,6 +2593,18 @@ export type Database = {
         Returns: number
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
+      revenue_facts: {
+        Args: never
+        Returns: {
+          center_id: string
+          lesson_id: string
+          paid_teacher_id: string
+          price_tiyin: number
+          service_id: string
+          starts_at: string
+          subscription_id: string
+        }[]
+      }
       repair_center_scoped_refs: { Args: never; Returns: undefined }
       reschedule_lesson: {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
@@ -2671,9 +2697,29 @@ export type Database = {
           subscription_id: string
         }[]
       }
+      student_debts: {
+        Args: never
+        Returns: {
+          debt_tiyin: number
+          student_id: string
+        }[]
+      }
       student_subscription_badge: {
         Args: { p_student_id: string }
         Returns: string
+      }
+      students_brief: {
+        Args: never
+        Returns: {
+          birth_date: string
+          center_id: string
+          created_at: string
+          full_name: string
+          id: string
+          payer_id: string
+          primary_teacher_id: string
+          status: string
+        }[]
       }
       subscription_current_freeze: {
         Args: { p_on_date?: string; p_subscription_id: string }

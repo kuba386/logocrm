@@ -203,8 +203,10 @@ async function PaymentsTab({
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
       .limit(200),
-    supabase.from('payers').select('id, full_name').is('deleted_at', null).order('full_name'),
-    supabase.from('students').select('id, full_name').is('deleted_at', null).neq('status', 'archived').order('full_name'),
+    // Имена — из definer-источников без заметок (0031): таблицы students и
+    // payers бухгалтеру закрыты, а экран один на все роли.
+    supabase.rpc('payers_brief').order('full_name'),
+    supabase.rpc('students_brief').neq('status', 'archived').order('full_name'),
   ])
   const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
@@ -398,10 +400,10 @@ async function InstallmentsTab({
   const payerIds = [...new Set(live.map((r) => r.payer_id).filter((v): v is string => Boolean(v)))]
   const [{ data: students }, { data: payers }] = await Promise.all([
     studentIds.length
-      ? supabase.from('students').select('id, full_name').in('id', studentIds)
+      ? supabase.rpc('students_brief').in('id', studentIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
     payerIds.length
-      ? supabase.from('payers').select('id, full_name, phone').in('id', payerIds)
+      ? supabase.rpc('payers_brief').in('id', payerIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string; phone: string | null }[] }),
   ])
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
@@ -499,17 +501,13 @@ async function PeriodsTab({
 }) {
   const currentMonth = today.slice(0, 7)
   const previous = shiftMonth(currentMonth, -1)
-  const { first: prevFirst, next: prevNext } = monthBounds(previous)
+  const { first: prevFirst } = monthBounds(previous)
 
-  const [{ data: periods }, { count: plannedCount }] = await Promise.all([
+  // Тот же счётчик, по которому откажет close_month (0031): не только
+  // planned, но и проведённые без отметки участника.
+  const [{ data: periods }, { data: openCount, error: openCountError }] = await Promise.all([
     supabase.from('financial_periods').select('month, closed_at').order('month', { ascending: false }).limit(12),
-    supabase
-      .from('lessons')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'planned')
-      .is('deleted_at', null)
-      .gte('starts_at', startOfDayInZone(prevFirst, timeZone))
-      .lt('starts_at', startOfDayInZone(prevNext, timeZone)),
+    supabase.rpc('month_open_lessons_count', { p_month: prevFirst }),
   ])
   const rows = periods ?? []
   const previousClosed = rows.some((p) => p.month === prevFirst && p.closed_at)
@@ -522,8 +520,15 @@ async function PeriodsTab({
           <CardDescription>Замок месяца: платежи, расходы, отметки и ставки задним числом в закрытый месяц не проходят.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* null — счётчик неизвестен: «0» здесь читалось бы как «можно
+              закрывать», а это ровно то обещание, ради которого счётчик и
+              переписан на условие close_month. */}
           {!previousClosed ? (
-            <ClosePeriodForm month={prevFirst} monthLabel={monthLabel(prevFirst)} plannedCount={plannedCount ?? 0} />
+            <ClosePeriodForm
+              month={prevFirst}
+              monthLabel={monthLabel(prevFirst)}
+              openCount={openCountError ? null : (openCount ?? 0)}
+            />
           ) : null}
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('finance', 'periodsEmpty')}</p>

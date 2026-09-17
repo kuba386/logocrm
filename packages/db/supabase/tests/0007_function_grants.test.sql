@@ -182,7 +182,12 @@ select set_eq(
     ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)'),
     ('can_front_desk(uuid)'),
     ('can_finance(uuid)'),
-    ('can_payments(uuid)')
+    ('can_payments(uuid)'),
+    ('students_brief()'),
+    ('payers_brief()'),
+    ('student_debts()'),
+    ('revenue_facts()'),
+    ('month_open_lessons_count(date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

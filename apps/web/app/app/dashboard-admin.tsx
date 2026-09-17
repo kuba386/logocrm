@@ -10,9 +10,20 @@ import { t } from '@/lib/messages'
  * абонемент, у кого долг, плюс деньги месяца (этап 5): выручка из
  * revenue_by_month, касса из cash_by_source, просрочки из installments_view.
  * Витрины считает база; под registrar выручка и касса пусты по RLS —
- * карточки скрываются флагом finance, а не «покажем нули».
+ * карточки скрываются флагом finance, а не «покажем нули». Под finance
+ * закрыты lessons (0031) — блок занятий скрывается флагом showLessons.
+ * Имена учеников — students_brief(): единственный источник без заметок,
+ * общий для всех четырёх ролей этого дашборда.
  */
-export async function AdminDashboard({ timeZone, finance = true }: { timeZone: string; finance?: boolean }) {
+export async function AdminDashboard({
+  timeZone,
+  finance = true,
+  showLessons = true,
+}: {
+  timeZone: string
+  finance?: boolean
+  showLessons?: boolean
+}) {
   const supabase = await createClient()
 
   const today = isoDayInZone(new Date(), timeZone)
@@ -34,13 +45,15 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
   const cashTotal = (cashRows ?? []).reduce((s, r) => s + (r.total_tiyin ?? 0), 0)
 
   const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtRows }] = await Promise.all([
-    supabase
-      .from('lessons')
-      .select('id, starts_at, status, teacher_id, substitute_teacher_id, student_id, group_id')
-      .is('deleted_at', null)
-      .gte('starts_at', todayStart)
-      .lt('starts_at', todayEnd)
-      .order('starts_at'),
+    showLessons
+      ? supabase
+          .from('lessons')
+          .select('id, starts_at, status, teacher_id, substitute_teacher_id, student_id, group_id')
+          .is('deleted_at', null)
+          .gte('starts_at', todayStart)
+          .lt('starts_at', todayEnd)
+          .order('starts_at')
+      : Promise.resolve({ data: [] }),
     // lessons_left <= 2 сам исключает и «безлимит», и «нет абонемента» —
     // оба приходят из student_balance как null, а null <= 2 в Postgres
     // ложно (и PostgREST это уважает). state <> 'frozen' исключает
@@ -66,7 +79,7 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
   const groupIds = [...new Set(lessons.map((l) => l.group_id).filter((v): v is string => Boolean(v)))]
 
   const [{ data: students }, { data: teachers }, { data: groups }] = await Promise.all([
-    studentIds.length ? supabase.from('students').select('id, full_name').in('id', studentIds) : Promise.resolve({ data: [] }),
+    studentIds.length ? supabase.rpc('students_brief').in('id', studentIds) : Promise.resolve({ data: [] }),
     teacherIds.length ? supabase.from('teachers').select('id, full_name').in('id', teacherIds) : Promise.resolve({ data: [] }),
     groupIds.length ? supabase.from('groups').select('id, name').in('id', groupIds) : Promise.resolve({ data: [] }),
   ])
@@ -89,34 +102,36 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-3xl">{lessons.length}</CardTitle>
-            <CardDescription>
-              Занятий сегодня{lessons.length > 0 ? ` · проведено ${done}, отменено ${cancelled}` : ''}
-            </CardDescription>
-          </CardHeader>
-          {upcoming.length > 0 ? (
-            <CardContent className="space-y-1 text-sm">
-              {upcoming.map((lesson) => {
-                const effectiveTeacher = lesson.substitute_teacher_id ?? lesson.teacher_id
-                const title = lesson.group_id
-                  ? (groupName.get(lesson.group_id) ?? 'Группа')
-                  : (studentName.get(lesson.student_id ?? '') ?? 'Занятие')
-                return (
-                  <p key={lesson.id} className="flex justify-between gap-2">
-                    <span className="truncate">
-                      {timeInZone(lesson.starts_at, timeZone)} {title}
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {effectiveTeacher ? (teacherName.get(effectiveTeacher) ?? '—') : '—'}
-                    </span>
-                  </p>
-                )
-              })}
-            </CardContent>
-          ) : null}
-        </Card>
+        {showLessons ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-3xl">{lessons.length}</CardTitle>
+              <CardDescription>
+                Занятий сегодня{lessons.length > 0 ? ` · проведено ${done}, отменено ${cancelled}` : ''}
+              </CardDescription>
+            </CardHeader>
+            {upcoming.length > 0 ? (
+              <CardContent className="space-y-1 text-sm">
+                {upcoming.map((lesson) => {
+                  const effectiveTeacher = lesson.substitute_teacher_id ?? lesson.teacher_id
+                  const title = lesson.group_id
+                    ? (groupName.get(lesson.group_id) ?? 'Группа')
+                    : (studentName.get(lesson.student_id ?? '') ?? 'Занятие')
+                  return (
+                    <p key={lesson.id} className="flex justify-between gap-2">
+                      <span className="truncate">
+                        {timeInZone(lesson.starts_at, timeZone)} {title}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {effectiveTeacher ? (teacherName.get(effectiveTeacher) ?? '—') : '—'}
+                      </span>
+                    </p>
+                  )
+                })}
+              </CardContent>
+            ) : null}
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -164,7 +179,7 @@ export async function AdminDashboard({ timeZone, finance = true }: { timeZone: s
         </Card>
       </div>
 
-      {lessons.length === 0 ? (
+      {showLessons && lessons.length === 0 ? (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">На сегодня занятий не запланировано.</CardContent>
         </Card>
