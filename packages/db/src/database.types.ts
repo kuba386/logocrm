@@ -214,6 +214,32 @@ export type Database = {
         }
         Relationships: []
       }
+      center_digest_runs: {
+        Row: {
+          center_id: string
+          digest_on: string
+          sent_at: string
+        }
+        Insert: {
+          center_id: string
+          digest_on: string
+          sent_at?: string
+        }
+        Update: {
+          center_id?: string
+          digest_on?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "center_digest_runs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       centers: {
         Row: {
           created_at: string
@@ -255,25 +281,34 @@ export type Database = {
       }
       events: {
         Row: {
+          attempts: number
           center_id: string
+          claimed_at: string | null
           created_at: string
           id: number
+          last_error: string | null
           payload: Json
           processed_at: string | null
           type: string
         }
         Insert: {
+          attempts?: number
           center_id: string
+          claimed_at?: string | null
           created_at?: string
           id?: number
+          last_error?: string | null
           payload?: Json
           processed_at?: string | null
           type: string
         }
         Update: {
+          attempts?: number
           center_id?: string
+          claimed_at?: string | null
           created_at?: string
           id?: number
+          last_error?: string | null
           payload?: Json
           processed_at?: string | null
           type?: string
@@ -804,6 +839,65 @@ export type Database = {
           },
         ]
       }
+      lesson_confirmations: {
+        Row: {
+          center_id: string
+          confirmed_at: string
+          confirmed_by: string | null
+          id: string
+          lesson_id: string
+          source: string
+          student_id: string
+        }
+        Insert: {
+          center_id: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          lesson_id: string
+          source?: string
+          student_id: string
+        }
+        Update: {
+          center_id?: string
+          confirmed_at?: string
+          confirmed_by?: string | null
+          id?: string
+          lesson_id?: string
+          source?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_confirmations_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_confirmations_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_confirmations_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_confirmations_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       lesson_participants: {
         Row: {
           center_id: string
@@ -852,6 +946,39 @@ export type Database = {
             columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      lesson_reminders_sent: {
+        Row: {
+          center_id: string
+          lesson_id: string
+          sent_at: string
+        }
+        Insert: {
+          center_id: string
+          lesson_id: string
+          sent_at?: string
+        }
+        Update: {
+          center_id?: string
+          lesson_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_reminders_sent_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_reminders_sent_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -1035,6 +1162,116 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teachers"
             referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      message_templates: {
+        Row: {
+          center_id: string | null
+          channel: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          event_type: string
+          id: string
+          is_active: boolean
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string | null
+          channel: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          event_type: string
+          id?: string
+          is_active?: boolean
+          text: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string | null
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          event_type?: string
+          id?: string
+          is_active?: boolean
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_log: {
+        Row: {
+          attempts: number
+          center_id: string
+          channel: string
+          created_at: string
+          error: string | null
+          event_id: number
+          id: string
+          recipient_user_id: string | null
+          sent_at: string | null
+          status: string
+          text: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          center_id: string
+          channel: string
+          created_at?: string
+          error?: string | null
+          event_id: number
+          id?: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          center_id?: string
+          channel?: string
+          created_at?: string
+          error?: string | null
+          event_id?: number
+          id?: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_log_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1920,6 +2157,54 @@ export type Database = {
           },
         ]
       }
+      telegram_accounts: {
+        Row: {
+          chat_id: number
+          id: string
+          linked_at: string
+          unlinked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          chat_id: number
+          id?: string
+          linked_at?: string
+          unlinked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          chat_id?: number
+          id?: string
+          linked_at?: string
+          unlinked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      telegram_link_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       cash_by_source: {
@@ -2214,6 +2499,7 @@ export type Database = {
     }
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
+      ack_events: { Args: { p_ids: number[] }; Returns: number }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       approve_salary: {
         Args: { p_month: string; p_teacher_id: string }
@@ -2227,6 +2513,28 @@ export type Database = {
       archive_teacher: { Args: { p_id: string }; Returns: undefined }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
+      bot_balance: {
+        Args: { p_chat_id: number }
+        Returns: {
+          center_name: string
+          debt_tiyin: number
+          full_name: string
+          has_subscription: boolean
+          lessons_left: number
+          student_id: string
+        }[]
+      }
+      bot_today: {
+        Args: { p_chat_id: number }
+        Returns: {
+          center_id: string
+          center_name: string
+          lesson_id: string
+          starts_at: string
+          teacher_name: string
+          title: string
+        }[]
+      }
       calc_lesson_price: {
         Args: { p_lessons: number; p_price_tiyin: number }
         Returns: number
@@ -2273,7 +2581,22 @@ export type Database = {
         Args: { p_center: string; p_lesson: string; p_student: string }
         Returns: undefined
       }
+      claim_events: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          center_id: string
+          created_at: string
+          id: number
+          payload: Json
+          type: string
+        }[]
+      }
       close_month: { Args: { p_month: string }; Returns: undefined }
+      confirm_lesson: {
+        Args: { p_chat_id: number; p_lesson_id: string; p_student_id: string }
+        Returns: boolean
+      }
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
@@ -2356,13 +2679,33 @@ export type Database = {
           student_id: string
         }[]
       }
+      create_telegram_link_code: { Args: never; Returns: string }
       current_center: { Args: never; Returns: string }
+      daily_digest: {
+        Args: never
+        Returns: {
+          center_count: number
+        }[]
+      }
       emit_event: {
         Args: { p_center_id?: string; p_payload?: Json; p_type: string }
         Returns: number
       }
       emit_event_unchecked: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
+        Returns: number
+      }
+      event_messages: {
+        Args: { p_event_id: number }
+        Returns: {
+          channel: string
+          chat_id: number
+          message: string
+          recipient_user_id: string
+        }[]
+      }
+      fail_events: {
+        Args: { p_error?: string; p_ids: number[] }
         Returns: number
       }
       find_payer_by_phone: {
@@ -2375,6 +2718,7 @@ export type Database = {
           relation: string
         }[]
       }
+      format_som: { Args: { p_tiyin: number }; Returns: string }
       freeze_subscription: {
         Args: { p_from: string; p_id: string; p_to?: string }
         Returns: undefined
@@ -2400,6 +2744,12 @@ export type Database = {
         }[]
       }
       is_member: { Args: { p_center_id: string }; Returns: boolean }
+      lesson_reminders: {
+        Args: never
+        Returns: {
+          sent_count: number
+        }[]
+      }
       lesson_slot_conflicts: {
         Args: {
           p_center: string
@@ -2412,6 +2762,10 @@ export type Database = {
           p_teacher: string
         }
         Returns: Json
+      }
+      link_telegram: {
+        Args: { p_chat_id: number; p_code: string }
+        Returns: string
       }
       mark_attendance: {
         Args: {
@@ -2435,6 +2789,41 @@ export type Database = {
       my_role: { Args: never; Returns: string }
       my_teacher_id: { Args: never; Returns: string }
       normalize_kg_phone: { Args: { p_phone: string }; Returns: string }
+      notification_admin_targets: {
+        Args: { p_center_id: string; p_event_type: string }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
+      }
+      notification_begin: {
+        Args: { p_channel: string; p_event_id: number; p_recipient: string }
+        Returns: string
+      }
+      notification_finish: {
+        Args: {
+          p_error?: string
+          p_id: string
+          p_status: string
+          p_text?: string
+        }
+        Returns: boolean
+      }
+      notification_skip: {
+        Args: { p_event_id: number; p_reason: string }
+        Returns: string
+      }
+      notification_targets: {
+        Args: { p_center_id: string; p_event_type: string; p_payer_id: string }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
+      }
       parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
       pay_installment: {
@@ -2447,6 +2836,7 @@ export type Database = {
         Returns: string
       }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
       payers_brief: {
         Args: never
         Returns: {
@@ -2459,6 +2849,10 @@ export type Database = {
           phone_alt: string
           relation: string
         }[]
+      }
+      preview_message: {
+        Args: { p_text: string; p_vars?: Json }
+        Returns: string
       }
       rebuild_lesson_participants: {
         Args: { p_lesson_id: string }
@@ -2510,6 +2904,11 @@ export type Database = {
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
+      }
+      release_stale_claims: { Args: { p_older_than?: string }; Returns: number }
+      render_template: {
+        Args: { p_text: string; p_vars: Json }
+        Returns: string
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
       repair_center_scoped_refs: { Args: never; Returns: undefined }
@@ -2714,6 +3113,7 @@ export type Database = {
           starts_at: string
         }[]
       }
+      telegram_user: { Args: { p_chat_id: number }; Returns: string }
       transfer_remaining: {
         Args: { p_from: string; p_to_student: string }
         Returns: string
@@ -2722,6 +3122,7 @@ export type Database = {
         Args: { p_id: string; p_to?: string }
         Returns: undefined
       }
+      unlink_telegram: { Args: never; Returns: boolean }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
     }

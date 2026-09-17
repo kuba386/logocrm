@@ -1,5 +1,10 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
-import { appEventSchema, baseEventSchema, parseAppEvent } from './events'
+
+import { appEventSchema, appEventTypes, baseEventSchema, parseAppEvent } from './events'
 
 describe('baseEventSchema', () => {
   it('требует формат «сущность.действие»', () => {
@@ -98,5 +103,45 @@ describe('события этапа 1', () => {
     })
     if (event.type !== 'invitation.created') throw new Error('ожидался invitation.created')
     expect(event.payload.teacher_id).toBeNull()
+  })
+})
+
+describe('контракт не расходится с миграциями', () => {
+  // Дрейф уже случался: registrar и finance появились в схеме на этапе 5, а в
+  // перечислении ролей их не было, и события о назначении бухгалтера не
+  // проходили разбор. parseAppEvent неизвестный тип пропускает молча (так и
+  // задумано, ADR-003), поэтому расхождение не всплывает само — только здесь.
+  const migrationsDir = fileURLToPath(new URL('../../db/supabase/migrations', import.meta.url))
+
+  const emittedTypes = new Set<string>(
+    readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.sql'))
+      .flatMap((file) =>
+        readFileSync(join(migrationsDir, file), 'utf8')
+          .split('\n')
+          // Комментарии отрезаем: в шапках миграций типы событий упоминаются
+          // прозой, и они не являются фактом эмиссии.
+          .map((line) => line.split('--')[0] ?? '')
+          .flatMap((line) => [
+            ...line.matchAll(/emit_event(?:_unchecked)?\(\s*'([a-z_]+\.[a-z_]+)'/g),
+          ])
+          .map((match) => match[1] as string),
+      ),
+  )
+
+  it('в миграциях вообще нашлись события — иначе тест зелёный по недосмотру', () => {
+    expect(emittedTypes.size).toBeGreaterThan(30)
+  })
+
+  it('каждый тип, который шлёт SQL, имеет схему в контракте', () => {
+    const known = new Set<string>(appEventTypes)
+    const missing = [...emittedTypes].filter((type) => !known.has(type)).sort()
+    expect(missing).toEqual([])
+  })
+
+  it('appEventTypes выведен из union и совпадает с ним по длине', () => {
+    expect(new Set(appEventTypes).size).toBe(appEventTypes.length)
+    expect(appEventTypes).toContain('digest.daily')
+    expect(appEventTypes).toContain('membership.role_changed')
   })
 })

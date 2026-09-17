@@ -35,6 +35,8 @@ export type LessonView = {
   seriesId: string | null
   notes: string | null
   isMine: boolean
+  /** Сколько родителей нажали «Подтвердить приход» в боте (0033). */
+  confirmedCount: number
 }
 
 function Result({ state }: { state: ScheduleState }) {
@@ -97,6 +99,12 @@ export function LessonPanel({
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Кабинет</dt>
               <dd>{lesson.roomName}</dd>
+            </div>
+          ) : null}
+          {lesson.confirmedCount > 0 ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Подтвердили приход</dt>
+              <dd>{lesson.confirmedCount}</dd>
             </div>
           ) : null}
           {lesson.notes ? (

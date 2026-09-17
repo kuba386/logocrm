@@ -212,5 +212,70 @@
     "colModel": "Модель",
     "colValue": "Значение",
     "colValidFrom": "Действует с"
+  },
+  "integrations": {
+    "title": "Интеграции",
+    "subtitle": "Telegram-бот: напоминания о занятиях и остаток абонемента.",
+    "telegramTitle": "Telegram",
+    "linked": "Чат привязан {at}",
+    "notLinked": "Чат не привязан",
+    "linkHint": "Откройте бота и отправьте команду с кодом. Код действует 15 минут и гасится после первой привязки.",
+    "getCode": "Получить код",
+    "codeReady": "Отправьте боту: /start {code}",
+    "codeFailed": "Не удалось выпустить код",
+    "unlink": "Отвязать",
+    "unlinked": "Чат отвязан",
+    "unlinkFailed": "Не удалось отвязать чат",
+    "botMissing": "Имя бота не задано: переменная NEXT_PUBLIC_TELEGRAM_BOT в окружении.",
+    "openBot": "Открыть бота"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "subtitle": "Тексты сообщений по событиям. Пустой текст центра означает текст платформы.",
+    "eventColumn": "Событие",
+    "channelTelegram": "Telegram",
+    "channelWhatsapp": "WhatsApp",
+    "default": "Текст платформы",
+    "own": "Текст центра",
+    "save": "Сохранить",
+    "saved": "Текст сохранён",
+    "saveFailed": "Не удалось сохранить текст",
+    "reset": "Вернуть текст платформы",
+    "resetDone": "Вернули текст платформы",
+    "active": "Отправлять",
+    "preview": "Предпросмотр",
+    "previewHint": "Так сообщение увидит родитель — подставлены образцовые данные.",
+    "previewFailed": "Не удалось собрать предпросмотр",
+    "placeholders": "Доступные подстановки: {list}",
+    "logTitle": "Журнал отправок",
+    "logSubtitle": "Что и кому ушло за последние две недели.",
+    "logEmpty": "Отправок пока не было.",
+    "colWhen": "Когда",
+    "colEvent": "Событие",
+    "colChannel": "Канал",
+    "colStatus": "Статус",
+    "colText": "Текст",
+    "colError": "Ошибка"
+  },
+  "notificationStatus": {
+    "pending": "в очереди",
+    "sent": "отправлено",
+    "failed": "ошибка",
+    "no_channel": "нет канала",
+    "skipped": "пропущено"
+  },
+  "notificationChannel": {
+    "telegram": "Telegram",
+    "whatsapp_link": "WhatsApp",
+    "none": "—"
+  },
+  "eventType": {
+    "lesson.reminder": "Напоминание о занятии",
+    "subscription.low_balance": "Заканчивается абонемент",
+    "subscription.exhausted": "Абонемент закончился",
+    "student.absent_streak": "Пропуски подряд",
+    "installment.due": "Платёж по рассрочке сегодня",
+    "installment.overdue": "Просроченный платёж",
+    "digest.daily": "Сводка за день"
   }
 }

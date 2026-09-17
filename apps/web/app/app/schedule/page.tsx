@@ -91,6 +91,18 @@ export default async function SchedulePage({
     return true
   })
 
+  // Подтверждения прихода из бота — одним запросом на весь диапазон, не по
+  // занятию: правило «список за период — один запрос» (CLAUDE.md).
+  const lessonIds = filtered.map((row) => row.id)
+  const { data: confirmations } = lessonIds.length
+    ? await supabase.from('lesson_confirmations').select('lesson_id').in('lesson_id', lessonIds)
+    : { data: [] as { lesson_id: string }[] }
+
+  const confirmedCounts = new Map<string, number>()
+  for (const row of confirmations ?? []) {
+    confirmedCounts.set(row.lesson_id, (confirmedCounts.get(row.lesson_id) ?? 0) + 1)
+  }
+
   const lessons: LessonView[] = filtered.map((row) => {
     const effectiveTeacher = row.substitute_teacher_id ?? row.teacher_id
     const title = row.group_id
@@ -111,6 +123,7 @@ export default async function SchedulePage({
       seriesId: row.series_id,
       notes: row.notes,
       isMine: Boolean(myTeacherId) && effectiveTeacher === myTeacherId,
+      confirmedCount: confirmedCounts.get(row.id) ?? 0,
     }
   })
 

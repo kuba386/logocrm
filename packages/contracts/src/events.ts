@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+// Роли — из dto: там они уже перечислены для форм, и второй список
+// разошёлся бы с первым ровно так же, как appEventTypes разошёлся с union.
+import { invitableRoleSchema, roleSchema } from './dto'
+
 /**
  * Контракт outbox-событий (таблица public.events).
  *
@@ -43,7 +47,7 @@ export const membershipCreatedSchema = z.object({
   payload: z.object({
     center_id: z.string().uuid(),
     user_id: z.string().uuid(),
-    role: z.enum(['owner', 'admin', 'teacher', 'parent']),
+    role: roleSchema,
   }),
 })
 export type MembershipCreated = z.infer<typeof membershipCreatedSchema>
@@ -53,7 +57,7 @@ export const membershipRevokedSchema = z.object({
   payload: z.object({
     center_id: z.string().uuid(),
     user_id: z.string().uuid(),
-    role: z.enum(['owner', 'admin', 'teacher', 'parent']),
+    role: roleSchema,
   }),
 })
 export type MembershipRevoked = z.infer<typeof membershipRevokedSchema>
@@ -63,8 +67,8 @@ export const membershipRoleChangedSchema = z.object({
   payload: z.object({
     center_id: z.string().uuid(),
     user_id: z.string().uuid(),
-    role: z.enum(['owner', 'admin', 'teacher', 'parent']),
-    previous_role: z.enum(['owner', 'admin', 'teacher', 'parent']),
+    role: roleSchema,
+    previous_role: roleSchema,
   }),
 })
 export type MembershipRoleChanged = z.infer<typeof membershipRoleChangedSchema>
@@ -74,7 +78,7 @@ export const invitationCreatedSchema = z.object({
   payload: z.object({
     center_id: z.string().uuid(),
     invitation_id: z.string().uuid(),
-    role: z.enum(['admin', 'teacher', 'parent']),
+    role: invitableRoleSchema,
     teacher_id: z.string().uuid().nullable().default(null),
   }),
 })
@@ -487,6 +491,114 @@ export const installmentPlanCancelledSchema = z.object({
 })
 export type InstallmentPlanCancelled = z.infer<typeof installmentPlanCancelledSchema>
 
+
+// --- Справочники центра: архив и восстановление -------------------------------
+
+// Payload у всех один по форме: центр и идентификатор строки. Схемы всё равно
+// перечислены поимённо — discriminatedUnion строится по литералу type, и
+// «общая схема на пять типов» превратила бы неизвестный тип в известный.
+
+const centerRef = z.object({ center_id: z.string().uuid() })
+
+export const attendanceStatusArchivedSchema = z.object({
+  type: z.literal('attendance_status.archived'),
+  payload: centerRef.extend({ status_id: z.string().uuid() }),
+})
+export const attendanceStatusRestoredSchema = z.object({
+  type: z.literal('attendance_status.restored'),
+  payload: centerRef.extend({ status_id: z.string().uuid() }),
+})
+export const attendanceStatusDefaultChangedSchema = z.object({
+  type: z.literal('attendance_status.default_changed'),
+  payload: centerRef.extend({ status_id: z.string().uuid() }),
+})
+export const subscriptionTypeArchivedSchema = z.object({
+  type: z.literal('subscription_type.archived'),
+  payload: centerRef.extend({ subscription_type_id: z.string().uuid() }),
+})
+export const subscriptionTypeRestoredSchema = z.object({
+  type: z.literal('subscription_type.restored'),
+  payload: centerRef.extend({ subscription_type_id: z.string().uuid() }),
+})
+export const paymentSourceArchivedSchema = z.object({
+  type: z.literal('payment_source.archived'),
+  payload: centerRef.extend({ source_id: z.string().uuid() }),
+})
+export const paymentSourceRestoredSchema = z.object({
+  type: z.literal('payment_source.restored'),
+  payload: centerRef.extend({ source_id: z.string().uuid() }),
+})
+export const expenseCategoryArchivedSchema = z.object({
+  type: z.literal('expense_category.archived'),
+  payload: centerRef.extend({ category_id: z.string().uuid() }),
+})
+export const expenseCategoryRestoredSchema = z.object({
+  type: z.literal('expense_category.restored'),
+  payload: centerRef.extend({ category_id: z.string().uuid() }),
+})
+
+export const expenseRecordedSchema = z.object({
+  type: z.literal('expense.recorded'),
+  payload: centerRef.extend({
+    expense_id: z.string().uuid(),
+    category_id: z.string().uuid().nullable(),
+    amount_tiyin: z.number().int(),
+    kind: z.string(),
+  }),
+})
+
+// --- Этап 6: уведомления ------------------------------------------------------
+
+/**
+ * Занятие начнётся не позже чем через 18 часов. Шлётся один раз на занятие
+ * (lesson_reminders_sent, 0032), поэтому обработчик может не дедуплицировать.
+ */
+export const lessonReminderSchema = z.object({
+  type: z.literal('lesson.reminder'),
+  payload: centerRef.extend({
+    lesson_id: z.string().uuid(),
+    starts_at: z.string(),
+    /** null у группового занятия — состав берётся из lesson_participants. */
+    student_id: z.string().uuid().nullable(),
+    group_id: z.string().uuid().nullable(),
+    teacher_id: z.string().uuid().nullable(),
+  }),
+})
+
+/** Родитель нажал «Подтвердить приход» в боте (0033). */
+export const lessonConfirmedSchema = z.object({
+  type: z.literal('lesson.confirmed'),
+  payload: centerRef.extend({
+    lesson_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+/** Сводка за день владельцу и администраторам (0032, daily_digest). */
+export const digestDailySchema = z.object({
+  type: z.literal('digest.daily'),
+  payload: centerRef.extend({
+    date: z.string(),
+    lessons_today: z.number().int().nonnegative(),
+    low_balance: z.number().int().nonnegative(),
+    debt_tiyin: z.number().int(),
+    installments_overdue: z.number().int().nonnegative(),
+  }),
+})
+
+/**
+ * Событие не удалось обработать три раза подряд и ушло в терминал (0032).
+ * Само по себе оно event.failed не порождает — иначе очередь росла бы из себя.
+ */
+export const eventFailedSchema = z.object({
+  type: z.literal('event.failed'),
+  payload: centerRef.extend({
+    event_id: z.number().int().positive(),
+    event_type: z.string(),
+    attempts: z.number().int().positive(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -527,6 +639,20 @@ export const appEventSchema = z.discriminatedUnion('type', [
   installmentOverdueSchema,
   installmentPlanCreatedSchema,
   installmentPlanCancelledSchema,
+  attendanceStatusArchivedSchema,
+  attendanceStatusRestoredSchema,
+  attendanceStatusDefaultChangedSchema,
+  subscriptionTypeArchivedSchema,
+  subscriptionTypeRestoredSchema,
+  paymentSourceArchivedSchema,
+  paymentSourceRestoredSchema,
+  expenseCategoryArchivedSchema,
+  expenseCategoryRestoredSchema,
+  expenseRecordedSchema,
+  lessonReminderSchema,
+  lessonConfirmedSchema,
+  digestDailySchema,
+  eventFailedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
@@ -534,36 +660,15 @@ export type AppEvent = z.infer<typeof appEventSchema>
 export const storedEventSchema = z.intersection(appEventSchema, eventEnvelopeSchema)
 export type StoredEvent = z.infer<typeof storedEventSchema>
 
-export const appEventTypes = [
-  'center.created',
-  'membership.created',
-  'membership.revoked',
-  'membership.role_changed',
-  'invitation.created',
-  'payer.created',
-  'student.created',
-  'student.archived',
-  'student.restored',
-  'lesson.created',
-  'lesson.cancelled',
-  'lesson.substituted',
-  'lesson.rescheduled',
-  'teacher.vacation',
-  'teacher.archived',
-  'teacher.restored',
-  'salary.calculated',
-  'salary.adjustment_recorded',
-  'salary.run_cancelled',
-  'payment.received',
-  'payment.refunded',
-  'period.closed',
-  'period.reopened',
-  'installment.due',
-  'installment.overdue',
-  'installment_plan.created',
-  'installment_plan.cancelled',
-] as const
-export type AppEventType = (typeof appEventTypes)[number]
+/**
+ * Список типов выводится из самого union, а не пишется рядом руками: до 0034
+ * они разошлись — в массиве не было ни одного события этапа 4.
+ */
+export const appEventTypes = appEventSchema.options.map(
+  (option) => option.shape.type.value,
+) as AppEvent['type'][]
+
+export type AppEventType = AppEvent['type']
 
 /**
  * Разбирает строку из public.events. Неизвестный тип — не ошибка приложения:
