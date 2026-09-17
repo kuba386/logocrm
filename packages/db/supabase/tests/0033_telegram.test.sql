@@ -115,8 +115,10 @@ insert into public.subscription_types (id, center_id, name, kind, lessons_count,
 -- group_students, а joined_at по умолчанию — сегодня (грабли из 0017).
 insert into public.groups (id, center_id, name, teacher_id) values
   ('9a9a9a9a-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','Группа','aaaaaaaa-0000-0000-0000-000000000001');
-insert into public.group_students (group_id, student_id, joined_at) values
-  ('9a9a9a9a-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002', current_date - 7);
+-- center_id явно: его проверяет BEFORE-триггер group_students_check_center_refs
+-- (0022), а current_center() в фикстуре пуст.
+insert into public.group_students (center_id, group_id, student_id, joined_at) values
+  ('cccccccc-0000-0000-0000-00000000000a','9a9a9a9a-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002', current_date - 7);
 
 insert into public.lessons (id, center_id, teacher_id, student_id, group_id, service_id, status, starts_at, ends_at) values
   ('ffffffff-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',null,'bbbbbbbb-0000-0000-0000-000000000001','planned',   now() + interval '1 hour', now() + interval '1 hour 45 minutes'),

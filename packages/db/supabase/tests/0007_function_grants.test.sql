@@ -187,7 +187,11 @@ select set_eq(
     ('payers_brief()'),
     ('student_debts()'),
     ('revenue_facts()'),
-    ('month_open_lessons_count(date)')
+    ('month_open_lessons_count(date)'),
+    ('create_telegram_link_code()'),
+    ('unlink_telegram()'),
+    ('payer_telegram_linked(uuid)'),
+    ('preview_message(text,jsonb)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
