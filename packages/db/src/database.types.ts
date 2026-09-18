@@ -3191,6 +3191,7 @@ export type Database = {
         Args: { p_homework_id: string }
         Returns: boolean
       }
+      clinical_role_allowed: { Args: { p_role: string }; Returns: boolean }
       clinical_teacher_sees: {
         Args: { p_student_id: string }
         Returns: boolean
