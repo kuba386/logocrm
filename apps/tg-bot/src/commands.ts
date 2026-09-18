@@ -88,15 +88,17 @@ export async function handleBalance(chatId: number): Promise<void> {
 }
 
 export async function handleConfirm(chatId: number, payload: string): Promise<string> {
-  // callback_data: confirm:<lesson_id>:<student_id> — ребёнок обязателен,
-  // у родителя может быть двое детей в одной группе (0033 Р6).
-  const [, lessonId, studentId] = payload.split(':')
-  if (!lessonId || !studentId) return 'Не удалось разобрать кнопку'
+  // callback_data: c:<event_id>:<student_id>. Ребёнок обязателен — у родителя
+  // может быть двое детей в одной группе (0033 Р6); занятие достаётся из
+  // события, потому что пара uuid не помещается в лимит Telegram
+  // в 64 байта (0035 Р2). Строку собирает SQL, здесь только разбор.
+  const [prefix, eventId, studentId] = payload.split(':')
+  if (prefix !== 'c' || !eventId || !studentId) return 'Не удалось разобрать кнопку'
 
   try {
-    const created = await rpc<boolean>('confirm_lesson', {
+    const created = await rpc<boolean>('confirm_lesson_by_event', {
       p_chat_id: chatId,
-      p_lesson_id: lessonId,
+      p_event_id: Number(eventId),
       p_student_id: studentId,
     })
     return created ? 'Спасибо, отметили' : 'Уже подтверждено'

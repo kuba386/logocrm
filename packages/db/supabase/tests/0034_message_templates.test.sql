@@ -29,7 +29,9 @@ select ok(
 );
 select ok(
   has_function_privilege('bot_worker', 'public.event_messages(bigint)', 'EXECUTE')
-  and has_function_privilege('bot_worker', 'public.notification_begin(bigint,uuid,text)', 'EXECUTE')
+  -- Сигнатура получила ребёнка в 0035: два сообщения одному родителю
+  -- о разных детях больше не схлопываются в одну строку журнала.
+  and has_function_privilege('bot_worker', 'public.notification_begin(bigint,uuid,text,uuid)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.event_messages(bigint)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.event_messages(bigint)', 'EXECUTE'),
   'Сборка сообщений — дверь только для bot_worker'
