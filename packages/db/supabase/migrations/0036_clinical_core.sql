@@ -114,6 +114,8 @@ $$;
 comment on function public.seed_goal_stages(uuid) is
   'Семь этапов по умолчанию. Постановка и дифференциация — от владельца-логопеда: первой в промте не было вовсе, а с неё начинается половина случаев; вторая не часть автоматизации, а отдельный этап, без которого цель закрывать рано.';
 
+revoke all on function public.seed_goal_stages(uuid) from public, anon, authenticated, service_role;
+
 create or replace function public.centers_seed_goal_stages()
   returns trigger
   language plpgsql
@@ -125,6 +127,8 @@ begin
   return null;
 end;
 $$;
+
+revoke all on function public.centers_seed_goal_stages() from public, anon, authenticated, service_role;
 
 drop trigger if exists centers_seed_goal_stages on public.centers;
 create trigger centers_seed_goal_stages
