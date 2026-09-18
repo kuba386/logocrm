@@ -1037,21 +1037,36 @@ export type Database = {
       homework_exercises: {
         Row: {
           center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
           exercise_id: string
           homework_id: string
+          id: string
           sort: number
+          updated_at: string
         }
         Insert: {
-          center_id: string
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
           exercise_id: string
           homework_id: string
+          id?: string
           sort?: number
+          updated_at?: string
         }
         Update: {
           center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
           exercise_id?: string
           homework_id?: string
+          id?: string
           sort?: number
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1362,13 +1377,13 @@ export type Database = {
       lesson_notes: {
         Row: {
           approved_at: string | null
+          approved_by: string | null
           center_id: string
           conduct_key: string | null
           cost_tiyin: number | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
-          goals_touched: Json
           id: string
           lesson_id: string
           model: string | null
@@ -1385,13 +1400,13 @@ export type Database = {
         }
         Insert: {
           approved_at?: string | null
+          approved_by?: string | null
           center_id?: string
           conduct_key?: string | null
           cost_tiyin?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          goals_touched?: Json
           id?: string
           lesson_id: string
           model?: string | null
@@ -1408,13 +1423,13 @@ export type Database = {
         }
         Update: {
           approved_at?: string | null
+          approved_by?: string | null
           center_id?: string
           conduct_key?: string | null
           cost_tiyin?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          goals_touched?: Json
           id?: string
           lesson_id?: string
           model?: string | null
@@ -3170,6 +3185,11 @@ export type Database = {
           payload: Json
           type: string
         }[]
+      }
+      clinical_goal_visible: { Args: { p_goal_id: string }; Returns: boolean }
+      clinical_homework_visible: {
+        Args: { p_homework_id: string }
+        Returns: boolean
       }
       clinical_teacher_sees: {
         Args: { p_student_id: string }
