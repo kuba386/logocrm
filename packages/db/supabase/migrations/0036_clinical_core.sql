@@ -94,6 +94,27 @@
 -- =============================================================================
 
 
+-- 0. Кому клиника положена вообще ----------------------------------------------------------------
+
+-- Список ролей, которым клиника положена, в одном месте. Он нужен в четырёх
+-- предикатах, и расписанный руками разъехался бы: роль, добавленная в 7b или
+-- 7c, не увидела бы клинику нигде, а забор tests/0028 этого не поймал бы — он
+-- ищет политики tenant_registrar_*/tenant_finance_*, а не отсутствие роли.
+create or replace function public.clinical_role_allowed(p_role text)
+  returns boolean
+  language sql
+  immutable
+as $$
+  select coalesce(p_role, '') in ('owner', 'admin', 'teacher', 'parent');
+$$;
+
+comment on function public.clinical_role_allowed(text) is
+  'Положена ли роли клиника вообще. Единственное место, где перечислены роли: правится один раз и падает в одном тесте.';
+
+revoke all on function public.clinical_role_allowed(text) from public, anon;
+grant execute on function public.clinical_role_allowed(text) to authenticated;
+
+
 -- 1. Справочник этапов ---------------------------------------------------------------------------
 
 create table if not exists public.goal_stages (
@@ -198,24 +219,6 @@ end $$;
 
 
 -- 2. Кто видит клинику ---------------------------------------------------------------------------
-
--- Список ролей, которым клиника положена, в одном месте. Он нужен в четырёх
--- предикатах, и расписанный руками разъехался бы: роль, добавленная в 7b или
--- 7c, не увидела бы клинику нигде, а забор tests/0028 этого не поймал бы — он
--- ищет политики tenant_registrar_*/tenant_finance_*, а не отсутствие роли.
-create or replace function public.clinical_role_allowed(p_role text)
-  returns boolean
-  language sql
-  immutable
-as $$
-  select coalesce(p_role, '') in ('owner', 'admin', 'teacher', 'parent');
-$$;
-
-comment on function public.clinical_role_allowed(text) is
-  'Положена ли роли клиника вообще. Единственное место, где перечислены роли: правится один раз и падает в одном тесте.';
-
-revoke all on function public.clinical_role_allowed(text) from public, anon;
-grant execute on function public.clinical_role_allowed(text) to authenticated;
 
 
 -- Объявлено здесь, а не в разделе про политики: функции ниже читают goals и
