@@ -25,11 +25,30 @@ Content-Type: application/json
      нет родителя). Зовём `notification_skip` с причиной и переходим к
      `ack_events`: тишина в журнале неотличима от «всё доставлено».
 3. Для каждого сообщения:
-   1. `notification_begin` → `{"p_event_id", "p_recipient", "p_channel"}`.
+   1. `notification_begin` → `{"p_event_id", "p_recipient", "p_channel",
+      "p_subject_id"}`. Последний — `subject_id` из ответа `event_messages`
+      (ребёнок, о котором сообщение). Без него два сообщения одному
+      родителю о разных детях схлопнутся в одну строку журнала, и второе
+      молча не уйдёт (0035).
       **Ответ `null` — не отправлять**: сообщение уже ушло или исчерпало
       попытки.
    2. Если `channel = "telegram"` — `sendMessage` в Telegram Bot API на
       `chat_id` из ответа `event_messages`.
+      **Если в ответе есть `action`** (сейчас это напоминание о занятии) —
+      добавь к запросу клавиатуру, скопировав поля как есть, ничего не
+      собирая вручную:
+
+      ```json
+      "reply_markup": {
+        "inline_keyboard": [[
+          { "text": "{{ $json.action.label }}",
+            "callback_data": "{{ $json.action.callback_data }}" }
+        ]]
+      }
+      ```
+
+      Формат `callback_data` разбирает бот, поэтому строку целиком готовит
+      база — в сценарии её собирать нельзя (0035).
       Если `channel = "whatsapp_link"` — **ничего не отправляем**: у
       получателя нет бота, кнопку со ссылкой покажет интерфейс. Сразу
       `notification_finish` со статусом `no_channel`.
