@@ -68,6 +68,7 @@ from unnest(array[
   'public.homework_status_transition()',
   'public.lesson_notes_approval_transition()',
   'public.clinical_check_lesson_participant()',
+  'public.goals_student_immutable()',
   'public.notification_log_transition()',
   'public.notification_log_subject_required()'
 ]) as func,
@@ -203,6 +204,7 @@ select set_eq(
     ('preview_message(text,jsonb)'),
     ('clinical_teacher_sees(uuid)'),
     ('clinical_goal_visible(uuid)'),
+    ('clinical_role_allowed(text)'),
     ('clinical_homework_visible(uuid)'),
     ('clinical_visible_to_caller(uuid)'),
     ('student_diagnostics_brief(uuid)'),

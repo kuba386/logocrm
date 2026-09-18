@@ -60,6 +60,14 @@
 --       родителю, и спрятать его задним числом хуже, чем выпустить новое.
 --       Цель, наоборот, разрешено открыть заново — звук откатывается, и это
 --       обычная практика; триггер просто снимает achieved_at.
+--       Прямой PATCH от администратора триггер не запрещает — он его
+--       нормализует, и это сознательно: у owner/admin политика tenant_admin
+--       открыта на запись, а отнимать её у них ради одной колонки значит
+--       заводить колоночные гранты, которых в проекте нет нигде. Цена
+--       записана здесь, чтобы 0037 её не проглядел: событие
+--       lesson.note_approved эмитит ЭТОТ триггер, а не RPC. Иначе
+--       утверждение получит два пути — через функцию с уведомлением
+--       родителю и через PATCH без него, — и они разъедутся.
 --   Р9. Заметка, прогресс и ДЗ проверяют состав занятия триггером. FK на
 --       lesson_participants невозможен: rebuild_lesson_participants (0006)
 --       удаляет и перекладывает строки, restrict заблокировал бы смену
@@ -79,9 +87,10 @@
 --
 -- Цена: clinical_teacher_sees — definer stable, планировщик её не
 -- встраивает и зовёт построчно, а под ней подзапрос к lesson_participants.
--- Для карточки ребёнка (десятки строк) это нормально; если лента прогресса
--- вырастет до тысяч точек, решение по ребёнку придётся кешировать. Тот же
--- разбор, что у definer-функций в 0031 (docs/Database.md).
+-- У goal_progress уровней два: политика зовёт clinical_goal_visible, та —
+-- clinical_teacher_sees. Для карточки ребёнка (десятки строк) это нормально;
+-- если лента прогресса вырастет до тысяч точек, решение по ребёнку придётся
+-- кешировать. Тот же разбор, что у definer-функций в 0031 (docs/Database.md).
 -- =============================================================================
 
 
@@ -128,7 +137,7 @@ create policy goal_stages_read_all on public.goal_stages
   using (
     center_id = public.current_center()
     and deleted_at is null
-    and coalesce(public.my_role(), '') in ('owner', 'admin', 'teacher', 'parent')
+    and public.clinical_role_allowed(public.my_role())
   );
 
 revoke all on table public.goal_stages from public, anon, authenticated, service_role;
@@ -189,6 +198,25 @@ end $$;
 
 
 -- 2. Кто видит клинику ---------------------------------------------------------------------------
+
+-- Список ролей, которым клиника положена, в одном месте. Он нужен в четырёх
+-- предикатах, и расписанный руками разъехался бы: роль, добавленная в 7b или
+-- 7c, не увидела бы клинику нигде, а забор tests/0028 этого не поймал бы — он
+-- ищет политики tenant_registrar_*/tenant_finance_*, а не отсутствие роли.
+create or replace function public.clinical_role_allowed(p_role text)
+  returns boolean
+  language sql
+  immutable
+as $$
+  select coalesce(p_role, '') in ('owner', 'admin', 'teacher', 'parent');
+$$;
+
+comment on function public.clinical_role_allowed(text) is
+  'Положена ли роли клиника вообще. Единственное место, где перечислены роли: правится один раз и падает в одном тесте.';
+
+revoke all on function public.clinical_role_allowed(text) from public, anon;
+grant execute on function public.clinical_role_allowed(text) to authenticated;
+
 
 -- Объявлено здесь, а не в разделе про политики: функции ниже читают goals и
 -- homework и должны стоять рядом со своими таблицами, а обе опираются на эту.
@@ -335,6 +363,9 @@ begin
   if new.status = 'achieved' then
     if tg_op = 'INSERT' or old.status is distinct from 'achieved' then
       new.achieved_at := now();
+    else
+      -- Уже была достигнута: присланную дату не принимаем.
+      new.achieved_at := old.achieved_at;
     end if;
   else
     new.achieved_at := null;
@@ -345,6 +376,34 @@ end;
 $$;
 
 revoke all on function public.goals_sync_achieved_at() from public, anon, authenticated, service_role;
+
+-- Ребёнка у цели не переставляют. Иначе весь хвост goal_progress, записанный
+-- на занятиях одного ребёнка, одним PATCH переезжает к другому: триггер
+-- состава занятия висит на goal_progress и при правке goals не срабатывает,
+-- FK пропускает — центр тот же. Цель, заведённую не на того ребёнка,
+-- закрывают deleted_at и заводят новую.
+create or replace function public.goals_student_immutable()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if new.student_id is distinct from old.student_id then
+    raise exception 'Цель нельзя переставить на другого ребёнка: закройте её и заведите новую'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.goals_student_immutable() from public, anon, authenticated, service_role;
+
+drop trigger if exists goals_student_immutable on public.goals;
+create trigger goals_student_immutable
+  before update on public.goals
+  for each row execute function public.goals_student_immutable();
 
 drop trigger if exists goals_sync_achieved_at on public.goals;
 create trigger goals_sync_achieved_at
@@ -476,7 +535,7 @@ create policy exercise_library_read_all on public.exercise_library
   for select to authenticated
   using (
     deleted_at is null
-    and coalesce(public.my_role(), '') in ('owner', 'admin', 'teacher', 'parent')
+    and public.clinical_role_allowed(public.my_role())
     and (center_id is null or center_id = public.current_center())
   );
 
@@ -571,6 +630,7 @@ as $$
      where h.id = p_homework_id
        and h.center_id = public.current_center()
        and h.deleted_at is null
+       and public.clinical_role_allowed(public.my_role())
        and (
          coalesce(public.my_role(), '') in ('owner', 'admin')
          or public.clinical_teacher_sees(h.student_id)
@@ -693,8 +753,11 @@ create table if not exists public.lesson_notes (
   -- не остаётся.
   constraint lesson_notes_approved_at_matches_status
     check ((status = 'approved') = (approved_at is not null)),
+  -- Симметрично, а не «approved_by пуст или статус approved»: утверждение без
+  -- автора должно падать громко. Иначе воркер 7b или бэкфилл без auth.uid()
+  -- запишет «утверждено неизвестно кем», и это пройдёт незамеченным.
   constraint lesson_notes_approved_by_matches_status
-    check (approved_by is null or status = 'approved'),
+    check ((status = 'approved') = (approved_by is not null)),
   constraint lesson_notes_lesson_fk
     foreign key (lesson_id, center_id) references public.lessons (id, center_id) on delete cascade,
   constraint lesson_notes_student_fk
@@ -737,6 +800,13 @@ begin
     if tg_op = 'INSERT' or old.status <> 'approved' then
       new.approved_at := now();
       new.approved_by := auth.uid();
+    else
+      -- Уже было утверждено: метку и автора не переписывают. Без этой ветки
+      -- прямой PATCH approved_by с чужим uuid проходит — проверка перехода
+      -- не срабатывает, потому что статус не менялся, и подделка выглядит
+      -- как гарантия.
+      new.approved_at := old.approved_at;
+      new.approved_by := old.approved_by;
     end if;
   else
     new.approved_at := null;
@@ -777,7 +847,10 @@ begin
     return new;
   end if;
 
-  if tg_table_name = 'goal_progress' then
+  -- Откуда брать ребёнка, задаётся аргументом триггера, а не именем таблицы:
+  -- по tg_table_name это ломается при переименовании и молча ловит любую
+  -- будущую таблицу с колонкой student_id.
+  if tg_argv[0] = 'goal' then
     select g.student_id into v_student from public.goals g where g.id = new.goal_id;
   else
     v_student := new.student_id;
@@ -787,13 +860,20 @@ begin
     raise exception 'Не найден ребёнок для проверки состава занятия' using errcode = '42704';
   end if;
 
+  -- Отменённое и архивное занятие отбиваются здесь же. Иначе правило про
+  -- отменённое занятие работало бы только на чтение (Р10), и получилась бы
+  -- заметка, которую её автор прочитать не может, а родитель может.
   if not exists (
-    select 1 from public.lesson_participants lp
+    select 1
+      from public.lesson_participants lp
+      join public.lessons l on l.id = lp.lesson_id
      where lp.lesson_id = new.lesson_id
        and lp.student_id = v_student
        and lp.deleted_at is null
+       and l.deleted_at is null
+       and l.status <> 'cancelled'
   ) then
-    raise exception 'Ребёнок не участвует в этом занятии' using errcode = '42704';
+    raise exception 'Ребёнок не участвует в этом занятии или занятие отменено' using errcode = '42704';
   end if;
 
   return new;
@@ -805,17 +885,17 @@ revoke all on function public.clinical_check_lesson_participant() from public, a
 drop trigger if exists goal_progress_check_participant on public.goal_progress;
 create trigger goal_progress_check_participant
   before insert or update of lesson_id, goal_id on public.goal_progress
-  for each row execute function public.clinical_check_lesson_participant();
+  for each row execute function public.clinical_check_lesson_participant('goal');
 
 drop trigger if exists homework_check_participant on public.homework;
 create trigger homework_check_participant
   before insert or update of lesson_id, student_id on public.homework
-  for each row execute function public.clinical_check_lesson_participant();
+  for each row execute function public.clinical_check_lesson_participant('student');
 
 drop trigger if exists lesson_notes_check_participant on public.lesson_notes;
 create trigger lesson_notes_check_participant
   before insert or update of lesson_id, student_id on public.lesson_notes
-  for each row execute function public.clinical_check_lesson_participant();
+  for each row execute function public.clinical_check_lesson_participant('student');
 
 
 -- 8. Видимость специалиста -----------------------------------------------------------------------
@@ -889,6 +969,7 @@ as $$
           and s.center_id = public.current_center()
           and s.deleted_at is null
      )
+     and public.clinical_role_allowed(public.my_role())
      and (
        coalesce(public.my_role(), '') in ('owner', 'admin')
        or public.clinical_teacher_sees(p_student_id)
@@ -995,6 +1076,11 @@ begin
      where n.student_id = p_student_id
        and n.center_id = public.current_center()
        and n.deleted_at is null
+       -- Тот же фильтр, что в clinical_teacher_sees: отменённое и удалённое
+       -- занятие выпадает у обоих. Иначе родитель и специалист видят разные
+       -- истории одного ребёнка.
+       and l.deleted_at is null
+       and l.status <> 'cancelled'
        -- Черновик родителю не показывается ни при каких условиях: он ещё
        -- не проверен специалистом.
        and n.status = 'approved'
