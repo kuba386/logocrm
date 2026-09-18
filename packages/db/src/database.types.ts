@@ -1227,6 +1227,7 @@ export type Database = {
           recipient_user_id: string | null
           sent_at: string | null
           status: string
+          subject_id: string | null
           text: string | null
           updated_at: string
         }
@@ -1241,6 +1242,7 @@ export type Database = {
           recipient_user_id?: string | null
           sent_at?: string | null
           status?: string
+          subject_id?: string | null
           text?: string | null
           updated_at?: string
         }
@@ -1255,6 +1257,7 @@ export type Database = {
           recipient_user_id?: string | null
           sent_at?: string | null
           status?: string
+          subject_id?: string | null
           text?: string | null
           updated_at?: string
         }
@@ -1272,6 +1275,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_log_subject_fk"
+            columns: ["subject_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "notification_log_subject_fk"
+            columns: ["subject_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -2597,6 +2614,10 @@ export type Database = {
         Args: { p_chat_id: number; p_lesson_id: string; p_student_id: string }
         Returns: boolean
       }
+      confirm_lesson_by_event: {
+        Args: { p_chat_id: number; p_event_id: number; p_student_id: string }
+        Returns: boolean
+      }
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
@@ -2698,10 +2719,12 @@ export type Database = {
       event_messages: {
         Args: { p_event_id: number }
         Returns: {
+          action: Json
           channel: string
           chat_id: number
           message: string
           recipient_user_id: string
+          subject_id: string
         }[]
       }
       fail_events: {
@@ -2799,7 +2822,12 @@ export type Database = {
         }[]
       }
       notification_begin: {
-        Args: { p_channel: string; p_event_id: number; p_recipient: string }
+        Args: {
+          p_channel: string
+          p_event_id: number
+          p_recipient: string
+          p_subject_id?: string
+        }
         Returns: string
       }
       notification_finish: {
