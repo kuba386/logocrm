@@ -230,7 +230,8 @@ create temporary table t_log (name text primary key, id uuid);
 
 insert into t_log values ('first',
   public.notification_begin((select id from t_ev where name = 'low'),
-                            '77777777-7777-7777-7777-777777777777', 'telegram'));
+                            '77777777-7777-7777-7777-777777777777', 'telegram',
+                            'eeeeeeee-0000-0000-0000-000000000001'));
 
 select isnt((select id from t_log where name = 'first'), null, 'Первый захват отправки заводит строку');
 select is(
@@ -239,7 +240,8 @@ select is(
 
 select is(
   public.notification_begin((select id from t_ev where name = 'low'),
-                            '77777777-7777-7777-7777-777777777777', 'telegram'),
+                            '77777777-7777-7777-7777-777777777777', 'telegram',
+                            'eeeeeeee-0000-0000-0000-000000000001'),
   (select id from t_log where name = 'first'),
   'Повторный захват недоставленного — тот же id: обработчик упал между захватом и отправкой');
 
@@ -248,7 +250,8 @@ select is(
   'Отправка закрывается');
 select is(
   public.notification_begin((select id from t_ev where name = 'low'),
-                            '77777777-7777-7777-7777-777777777777', 'telegram'),
+                            '77777777-7777-7777-7777-777777777777', 'telegram',
+                            'eeeeeeee-0000-0000-0000-000000000001'),
   null, 'После успешной отправки второй раз не шлём — повтор пачки ничего не дублирует');
 
 select throws_ok(
@@ -260,13 +263,15 @@ select throws_ok(
 -- Неудача и повтор: единственный путь назад.
 insert into t_log values ('second',
   public.notification_begin((select id from t_ev where name = 'low'),
-                            '88888888-8888-8888-8888-888888888888', 'whatsapp_link'));
+                            '88888888-8888-8888-8888-888888888888', 'whatsapp_link',
+                            'eeeeeeee-0000-0000-0000-000000000001'));
 select is(
   public.notification_finish((select id from t_log where name = 'second'), 'failed', 'телеграм не ответил'), true,
   'Неудачная отправка помечается failed');
 select is(
   public.notification_begin((select id from t_ev where name = 'low'),
-                            '88888888-8888-8888-8888-888888888888', 'whatsapp_link'),
+                            '88888888-8888-8888-8888-888888888888', 'whatsapp_link',
+                            'eeeeeeee-0000-0000-0000-000000000001'),
   (select id from t_log where name = 'second'),
   'После неудачи сообщение можно отправить снова — иначе оно потеряно навсегда');
 

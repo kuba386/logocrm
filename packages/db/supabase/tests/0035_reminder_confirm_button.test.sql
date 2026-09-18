@@ -207,12 +207,16 @@ select throws_ok(
   '22023', null,
   'Захват без ребёнка отбивается триггером, а не возвращает дедуп к прежнему поведению');
 
--- Р6: строка, записанная до 0035. Триггер такие больше не пропускает,
--- поэтому для имитации он на время выключается — в бою эти строки уже лежат.
+-- Р6: строка, записанная до 0035. Её не пропустят оба триггера — и новый
+-- (ребёнок обязателен), и прежний (заводится только pending/skipped/
+-- no_channel, 0034). Для имитации выключаем оба: в бою такие строки уже
+-- лежат, и ни один триггер на них не срабатывал.
 alter table public.notification_log disable trigger notification_log_subject_required;
+alter table public.notification_log disable trigger notification_log_transition;
 insert into public.notification_log (center_id, event_id, recipient_user_id, channel, status, subject_id)
 select 'cccccccc-0000-0000-0000-00000000000a', id, '77777777-7777-7777-7777-777777777777', 'whatsapp_link', 'sent', null
   from t_ev where name = 'digest';
+alter table public.notification_log enable trigger notification_log_transition;
 alter table public.notification_log enable trigger notification_log_subject_required;
 
 select is(
