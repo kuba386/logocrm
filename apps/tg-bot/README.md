@@ -10,7 +10,8 @@
 | `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
 | `TELEGRAM_WEBHOOK_SECRET` | произвольная строка; Telegram шлёт её заголовком, без неё вебхук открыт всем |
 | `SUPABASE_URL` | URL проекта |
-| `SUPABASE_BOT_JWT` | JWT с claim `role: bot_worker` — **не** `service_role` |
+| `SUPABASE_PUBLISHABLE_KEY` | публичный ключ `sb_publishable_…` (Project Settings → API Keys) — идёт в заголовок `apikey`; шлюз принимает там только штатные ключи проекта, самоподписанный JWT отбивает «Invalid API key» |
+| `SUPABASE_BOT_JWT` | JWT с claim `role: bot_worker` — **не** `service_role`; идёт только в `Authorization: Bearer` |
 | `PORT` | по умолчанию 8080 |
 
 **Почему не `service_role`.** У него остаются все таблицы: `0024` снимал
