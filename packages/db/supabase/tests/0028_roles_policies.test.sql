@@ -23,8 +23,10 @@ select set_eq(
         and not exists (select 1 from pg_policies r
                          where r.schemaname = 'public' and r.tablename = t.tablename
                            and (r.policyname like 'tenant_registrar%' or r.policyname like 'tenant_finance%')) $$,
-  $$ values ('attendance_statuses'), ('invitations'), ('message_templates') $$,
-  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations и message_templates (0034 — тексты уведомлений это настройка центра, не работа стойки и не деньги); новая таблица роняет'
+  $$ values ('attendance_statuses'), ('invitations'), ('message_templates'),
+            ('goal_stages'), ('diagnostics'), ('goals'), ('goal_progress'),
+            ('exercise_library'), ('homework'), ('lesson_notes') $$,
+  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations, message_templates (0034 — настройка центра) и семь клинических таблиц (0036 — ни стойке, ни бухгалтеру не положены, FEATURE_MATRIX сноска ⁵); новая таблица роняет'
 );
 select is(
   (select count(*)::int from pg_policies where schemaname = 'public' and policyname like 'tenant_%' and cmd = 'DELETE'),

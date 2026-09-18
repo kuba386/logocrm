@@ -60,7 +60,12 @@ from unnest(array[
   'public.memberships_last_owner_guard()',
   'public.apply_role_rls(text, text, text, boolean)',
   'public.salary_runs_immutable()',
-  'public.payments_no_overpay()'
+  'public.payments_no_overpay()',
+  'public.seed_goal_stages(uuid)',
+  'public.centers_seed_goal_stages()',
+  'public.homework_exercises_check_center_refs()',
+  'public.notification_log_transition()',
+  'public.notification_log_subject_required()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -191,7 +196,12 @@ select set_eq(
     ('create_telegram_link_code()'),
     ('unlink_telegram()'),
     ('payer_telegram_linked(uuid)'),
-    ('preview_message(text,jsonb)')
+    ('preview_message(text,jsonb)'),
+    ('clinical_teacher_sees(uuid)'),
+    ('clinical_visible_to_caller(uuid)'),
+    ('student_diagnostics_brief(uuid)'),
+    ('student_goals_brief(uuid)'),
+    ('student_notes_brief(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
