@@ -566,10 +566,16 @@ select throws_ok(
   '42704', null,
   'Упражнение чужого центра отбивается триггером, а не проверкой в функции');
 
-select throws_ok(
-  $q$ update public.exercise_library set title = 'Переписали платформу'
-       where id = 'dddd0000-0000-0000-0000-000000000001' $q$,
-  '42501', null,
+-- Отказа тут не будет: политика tenant_admin сравнивает center_id с
+-- current_center(), у платформенной строки он пуст, NULL = значение даёт
+-- NULL — строка просто не видна на запись, и update проходит вхолостую.
+-- Поэтому проверяем результат, а не исключение.
+update public.exercise_library set title = 'Переписали платформу'
+ where id = 'dddd0000-0000-0000-0000-000000000001';
+
+select is(
+  (select title from public.exercise_library where id = 'dddd0000-0000-0000-0000-000000000001'),
+  'Упражнение платформы',
   'Библиотеку платформы центр не правит: иначе один центр переписал бы её всем');
 reset role;
 
