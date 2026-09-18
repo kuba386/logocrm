@@ -102,6 +102,11 @@ begin
 end;
 $$;
 
+-- Клеймы владельца на время фикстуры: роль остаётся postgres (RLS не мешает
+-- заводить данные), но auth.uid() перестаёт быть пустым — иначе created_by и
+-- approved_by заполнить нечем, и «кто утвердил» проверять не на чем.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+
 -- Клинические данные заводит владелец (запись специалиста — RPC в 0037).
 insert into public.diagnostics (center_id, student_id, teacher_id, conclusion, sounds, speech_areas) values
   ('cccccccc-0000-0000-0000-00000000000a','eeeeeeee-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000001',
