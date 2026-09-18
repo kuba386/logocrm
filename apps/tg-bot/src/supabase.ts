@@ -8,7 +8,7 @@ export async function rpc<T>(name: string, args: Record<string, unknown>): Promi
   const response = await fetch(`${env.supabaseUrl}/rest/v1/rpc/${name}`, {
     method: 'POST',
     headers: {
-      apikey: env.botJwt,
+      apikey: env.publishableKey,
       Authorization: `Bearer ${env.botJwt}`,
       'Content-Type': 'application/json',
     },

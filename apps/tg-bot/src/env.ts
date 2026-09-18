@@ -14,6 +14,12 @@ export const env = {
   webhookSecret: required('TELEGRAM_WEBHOOK_SECRET'),
   supabaseUrl: required('SUPABASE_URL'),
   /**
+   * Публичный ключ проекта (sb_publishable_…) — только для заголовка apikey.
+   * Шлюз Supabase принимает в нём лишь штатные ключи проекта; самоподписанный
+   * JWT там отбивается «Invalid API key» ещё до PostgREST.
+   */
+  publishableKey: required('SUPABASE_PUBLISHABLE_KEY'),
+  /**
    * JWT с claim `role: bot_worker` — не service_role. У service_role
    * остаются все таблицы (0024 снимал гранты только у public/anon/
    * authenticated), и утечка такого ключа открыла бы карточки детей всех
