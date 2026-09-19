@@ -211,7 +211,25 @@ select set_eq(
     ('clinical_visible_to_caller(uuid)'),
     ('student_diagnostics_brief(uuid)'),
     ('student_goals_brief(uuid)'),
-    ('student_notes_brief(uuid)')
+    ('student_notes_brief(uuid)'),
+    ('record_diagnostic(uuid,text,jsonb,jsonb,date,uuid)'),
+    ('update_diagnostic(uuid,text,jsonb,jsonb,date)'),
+    ('archive_diagnostic(uuid)'),
+    ('create_goal(uuid,uuid,text,text,text,date)'),
+    ('update_goal(uuid,text,text,text,uuid,date)'),
+    ('set_goal_status(uuid,text)'),
+    ('archive_goal(uuid)'),
+    ('record_goal_progress(uuid,integer,text,uuid,date,uuid)'),
+    ('update_goal_progress(uuid,integer,text)'),
+    ('archive_goal_progress(uuid)'),
+    ('assign_homework(uuid,text,uuid[],uuid,date,uuid)'),
+    ('update_homework(uuid,date,text,uuid[])'),
+    ('submit_homework(uuid,text)'),
+    ('review_homework(uuid,text)'),
+    ('archive_homework(uuid)'),
+    ('write_lesson_note(uuid,uuid,jsonb,text,uuid)'),
+    ('approve_lesson_note(uuid)'),
+    ('archive_lesson_note(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

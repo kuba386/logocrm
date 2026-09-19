@@ -555,14 +555,18 @@ reset role;
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 
+-- Прямая запись в homework_exercises закрыта 0038 — состав задания теперь
+-- меняется только через update_homework, ей и проверяются оба случая.
 select lives_ok(
-  $q$ insert into public.homework_exercises (homework_id, exercise_id)
-      values ('aaaa0000-0000-0000-0000-000000000002', 'dddd0000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.update_homework('aaaa0000-0000-0000-0000-000000000002', null,
+        'Задание второму ребёнку',
+        array['dddd0000-0000-0000-0000-000000000002','dddd0000-0000-0000-0000-000000000001']::uuid[]) $q$,
   'Упражнение платформы добавляется в ДЗ — составной FK это бы запретил (Р7)');
 
 select throws_ok(
-  $q$ insert into public.homework_exercises (homework_id, exercise_id)
-      values ('aaaa0000-0000-0000-0000-000000000001', 'dddd0000-0000-0000-0000-000000000003') $q$,
+  $q$ select public.update_homework('aaaa0000-0000-0000-0000-000000000001', null,
+        'Повторять слоги пять минут в день',
+        array['dddd0000-0000-0000-0000-000000000001','dddd0000-0000-0000-0000-000000000003']::uuid[]) $q$,
   '42704', null,
   'Упражнение чужого центра отбивается триггером, а не проверкой в функции');
 
