@@ -202,6 +202,8 @@ select set_eq(
     ('unlink_telegram()'),
     ('payer_telegram_linked(uuid)'),
     ('preview_message(text,jsonb)'),
+    ('upsert_message_template(text,text,text,boolean)'),
+    ('reset_message_template(text,text)'),
     ('clinical_teacher_sees(uuid)'),
     ('clinical_goal_visible(uuid)'),
     ('clinical_role_allowed(text)'),

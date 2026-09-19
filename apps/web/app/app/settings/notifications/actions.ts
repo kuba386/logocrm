@@ -15,6 +15,12 @@ function text(formData: FormData, key: string): string {
  * Строка центра перекрывает текст платформы (0034 Р1). Пустой текст — не
  * «молчать»: для тишины есть флаг «Отправлять», а вернуться к тексту
  * платформы — отдельная кнопка.
+ *
+ * Запись — через RPC upsert_message_template (0037), не insert/update
+ * таблицы напрямую: center_id и права проверяются внутри функции. Прямой
+ * insert без center_id падал RLS (таблица не проходит целиком под
+ * apply_tenant_rls — center_id nullable ради строк-дефолтов платформы), а
+ * insert-then-select здесь был бы гонкой на двух кликах «Сохранить» подряд.
  */
 export async function saveTemplate(_prev: TemplateState, formData: FormData): Promise<TemplateState> {
   const eventType = text(formData, 'eventType')
@@ -25,44 +31,28 @@ export async function saveTemplate(_prev: TemplateState, formData: FormData): Pr
   if (!eventType || !channel || !body) return { message: t('notifications', 'saveFailed') }
 
   const supabase = await createClient()
-
-  const { data: existing, error: readError } = await supabase
-    .from('message_templates')
-    .select('id')
-    .eq('event_type', eventType)
-    .eq('channel', channel)
-    .not('center_id', 'is', null)
-    .is('deleted_at', null)
-    .maybeSingle()
-  if (readError) return toAppError(readError, t('notifications', 'saveFailed'))
-
-  const { error } = existing
-    ? await supabase
-        .from('message_templates')
-        .update({ text: body, is_active: isActive })
-        .eq('id', existing.id)
-    : await supabase
-        .from('message_templates')
-        .insert({ event_type: eventType, channel, text: body, is_active: isActive })
+  const { error } = await supabase.rpc('upsert_message_template', {
+    p_event_type: eventType,
+    p_channel: channel,
+    p_text: body,
+    p_is_active: isActive,
+  })
   if (error) return toAppError(error, t('notifications', 'saveFailed'))
 
   revalidatePath('/app/settings/notifications')
   return { notice: t('notifications', 'saved') }
 }
 
-/** Убрать текст центра — дальше действует текст платформы. */
+/** Убрать текст центра — дальше действует текст платформы. RPC reset_message_template (0037): прямой update({deleted_at}) не проходил RLS на returning * обновлённой строки. */
 export async function resetTemplate(_prev: TemplateState, formData: FormData): Promise<TemplateState> {
   const eventType = text(formData, 'eventType')
   const channel = text(formData, 'channel')
 
   const supabase = await createClient()
-  const { error } = await supabase
-    .from('message_templates')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('event_type', eventType)
-    .eq('channel', channel)
-    .not('center_id', 'is', null)
-    .is('deleted_at', null)
+  const { error } = await supabase.rpc('reset_message_template', {
+    p_event_type: eventType,
+    p_channel: channel,
+  })
   if (error) return toAppError(error, t('notifications', 'saveFailed'))
 
   revalidatePath('/app/settings/notifications')
