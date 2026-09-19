@@ -1790,7 +1790,29 @@ export type Database = {
             referencedRelation: "centers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "message_templates_event_type_fk"
+            columns: ["event_type"]
+            isOneToOne: false
+            referencedRelation: "notification_event_types"
+            referencedColumns: ["event_type"]
+          },
         ]
+      }
+      notification_event_types: {
+        Row: {
+          description: string
+          event_type: string
+        }
+        Insert: {
+          description: string
+          event_type: string
+        }
+        Update: {
+          description?: string
+          event_type?: string
+        }
+        Relationships: []
       }
       notification_log: {
         Row: {
@@ -3535,6 +3557,17 @@ export type Database = {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
       }
+      reset_message_template: {
+        Args: { p_channel: string; p_event_type: string }
+        Returns: boolean
+      }
+      resolve_template: {
+        Args: { p_center_id: string; p_channel: string; p_event_type: string }
+        Returns: {
+          message_text: string
+          should_send: boolean
+        }[]
+      }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
       restore_expense_category: { Args: { p_id: string }; Returns: undefined }
       restore_payment_source: { Args: { p_id: string }; Returns: undefined }
@@ -3775,6 +3808,15 @@ export type Database = {
         Returns: undefined
       }
       unlink_telegram: { Args: never; Returns: boolean }
+      upsert_message_template: {
+        Args: {
+          p_channel: string
+          p_event_type: string
+          p_is_active: boolean
+          p_text: string
+        }
+        Returns: string
+      }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
     }
