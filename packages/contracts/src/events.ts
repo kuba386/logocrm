@@ -642,6 +642,15 @@ export const lessonNoteApprovedSchema = z.object({
   }),
 })
 
+/**
+ * Занятие проведено через complete_lesson (0039) — один факт на занятие,
+ * даже если внутри легло несколько attendance.marked/homework.assigned.
+ */
+export const lessonCompletedSchema = z.object({
+  type: z.literal('lesson.completed'),
+  payload: lessonRef,
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -701,6 +710,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   homeworkAssignedSchema,
   homeworkSubmittedSchema,
   lessonNoteApprovedSchema,
+  lessonCompletedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
