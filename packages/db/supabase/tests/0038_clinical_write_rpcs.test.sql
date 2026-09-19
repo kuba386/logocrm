@@ -52,7 +52,8 @@ insert into public.services (id, center_id, name, default_price_tiyin) values
   ('2bbbbbbb-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','Логопед',70000);
 
 insert into public.payers (id, center_id, full_name, phone) values
-  ('2ddddddd-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','Родитель','+996700000101');
+  ('2ddddddd-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','Родитель','+996700000101'),
+  ('2ddddddd-0000-0000-0000-000000000002','2ccccccc-0000-0000-0000-00000000000b','Родитель центра Б','+996700000102');
 
 insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) values
   ('21111111-1111-1111-1111-111111111111','2ccccccc-0000-0000-0000-00000000000a','owner',    null, null),
@@ -65,7 +66,7 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
 insert into public.students (id, center_id, full_name, payer_id) values
   ('2eeeeeee-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','Ребёнок','2ddddddd-0000-0000-0000-000000000001'),
   ('2eeeeeee-0000-0000-0000-000000000002','2ccccccc-0000-0000-0000-00000000000a','Ребёнок с отменённым занятием','2ddddddd-0000-0000-0000-000000000001'),
-  ('2eeeeeee-0000-0000-0000-000000000003','2ccccccc-0000-0000-0000-00000000000b','Ребёнок центра Б', null);
+  ('2eeeeeee-0000-0000-0000-000000000003','2ccccccc-0000-0000-0000-00000000000b','Ребёнок центра Б','2ddddddd-0000-0000-0000-000000000002');
 
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
   ('2fffffff-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2aaaaaaa-0000-0000-0000-000000000001','2eeeeeee-0000-0000-0000-000000000001','2bbbbbbb-0000-0000-0000-000000000001','planned',   now() + interval '1 hour', now() + interval '1 hour 45 minutes'),

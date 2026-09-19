@@ -146,7 +146,8 @@ begin
     if tg_op = 'INSERT' or old.status is distinct from 'achieved' then
       new.achieved_at := now();
       perform public.emit_clinical_event('goal.achieved',
-        jsonb_build_object('goal_id', new.id, 'student_id', new.student_id), new.center_id);
+        jsonb_build_object('center_id', new.center_id, 'goal_id', new.id, 'student_id', new.student_id),
+        new.center_id);
     else
       -- Уже была достигнута: присланную дату не принимаем.
       new.achieved_at := old.achieved_at;
@@ -179,7 +180,8 @@ begin
 
   if new.status = 'submitted' and old.status is distinct from 'submitted' then
     perform public.emit_clinical_event('homework.submitted',
-      jsonb_build_object('homework_id', new.id, 'student_id', new.student_id), new.center_id);
+      jsonb_build_object('center_id', new.center_id, 'homework_id', new.id, 'student_id', new.student_id),
+      new.center_id);
   end if;
 
   return new;
@@ -206,7 +208,8 @@ begin
       new.approved_at := now();
       new.approved_by := auth.uid();
       perform public.emit_clinical_event('lesson.note_approved',
-        jsonb_build_object('lesson_note_id', new.id, 'student_id', new.student_id, 'lesson_id', new.lesson_id),
+        jsonb_build_object('center_id', new.center_id, 'lesson_note_id', new.id,
+          'student_id', new.student_id, 'lesson_id', new.lesson_id),
         new.center_id);
     else
       -- Уже было утверждено: метку и автора не переписывают.
@@ -311,7 +314,7 @@ begin
   returning id into v_id;
 
   perform public.emit_event('diagnostic.created',
-    jsonb_build_object('diagnostic_id', v_id, 'student_id', p_student_id), v_center);
+    jsonb_build_object('center_id', v_center, 'diagnostic_id', v_id, 'student_id', p_student_id), v_center);
 
   return v_id;
 end;
@@ -779,7 +782,7 @@ begin
   end if;
 
   perform public.emit_event('homework.assigned',
-    jsonb_build_object('homework_id', v_id, 'student_id', p_student_id), v_center);
+    jsonb_build_object('center_id', v_center, 'homework_id', v_id, 'student_id', p_student_id), v_center);
 
   return v_id;
 end;

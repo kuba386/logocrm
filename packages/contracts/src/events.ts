@@ -599,6 +599,49 @@ export const eventFailedSchema = z.object({
   }),
 })
 
+// --- Клиническое ядро: точечные RPC записи (0038) -----------------------------
+
+export const diagnosticCreatedSchema = z.object({
+  type: z.literal('diagnostic.created'),
+  payload: centerRef.extend({
+    diagnostic_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const goalAchievedSchema = z.object({
+  type: z.literal('goal.achieved'),
+  payload: centerRef.extend({
+    goal_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const homeworkAssignedSchema = z.object({
+  type: z.literal('homework.assigned'),
+  payload: centerRef.extend({
+    homework_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const homeworkSubmittedSchema = z.object({
+  type: z.literal('homework.submitted'),
+  payload: centerRef.extend({
+    homework_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const lessonNoteApprovedSchema = z.object({
+  type: z.literal('lesson.note_approved'),
+  payload: centerRef.extend({
+    lesson_note_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    lesson_id: z.string().uuid(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -653,6 +696,11 @@ export const appEventSchema = z.discriminatedUnion('type', [
   lessonConfirmedSchema,
   digestDailySchema,
   eventFailedSchema,
+  diagnosticCreatedSchema,
+  goalAchievedSchema,
+  homeworkAssignedSchema,
+  homeworkSubmittedSchema,
+  lessonNoteApprovedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
