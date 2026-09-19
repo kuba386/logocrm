@@ -84,11 +84,19 @@ select is(
   '4ccccccc-0000-0000-0000-00000000000a'::uuid,
   'новая строка получила center_id вызывающего, а не NULL');
 
-select results_eq(
-  $q$ select save_exercise('Автоматизация Р в словах — правка', id, 'звукопроизношение', 'р', 'setting')
-        from public.exercise_library where title = 'Автоматизация Р в словах' $q$,
-  $q$ select id from public.exercise_library where title = 'Автоматизация Р в словах — правка' $q$,
-  'update по своему id меняет ту же строку');
+-- results_eq здесь не годится принципиально: он открывает оба курсора до
+-- первой выборки, поэтому второй запрос получает снимок ДО правки и нового
+-- названия не видит. Падало «have: (uuid), want: NULL» — при том что функция
+-- отрабатывала верно. Сравниваем идентификаторы: совпадение и есть
+-- доказательство, что правка изменила строку, а не завела вторую.
+create temporary table t_exercise_before as
+  select id from public.exercise_library where title = 'Автоматизация Р в словах';
+
+select is(
+  public.save_exercise('Автоматизация Р в словах — правка',
+    (select id from t_exercise_before), 'звукопроизношение', 'р', 'setting'),
+  (select id from t_exercise_before),
+  'update по своему id возвращает тот же id — строка та же, новой не появилось');
 
 
 -- 2. Чужой центр и платформа — один и тот же код отказа ------------------------------------------
@@ -164,8 +172,11 @@ select throws_ok(
 select throws_ok(
   $q$ update public.exercise_library set title = 'Мимо RPC' where id = '4eeeeeee-0000-0000-0000-000000000001' $q$,
   '42501', null, 'прямой update закрыт даже владельцу (0040)');
-select is((select count(*)::int from public.exercise_library), 4,
-  'select при этом жив: политика видимости не пострадала');
+-- Три, а не четыре: под владельцем центра А видны платформенная строка и две
+-- свои, а упражнение центра Б отсекает та же политика 0036. Ожидание «4»
+-- считало содержимое таблицы целиком, как от postgres, — мимо RLS.
+select is((select count(*)::int from public.exercise_library), 3,
+  'select при этом жив: своё и платформа видны, чужой центр — нет');
 
 reset role;
 
