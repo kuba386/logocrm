@@ -3240,6 +3240,10 @@ export type Database = {
         Returns: boolean
       }
       close_month: { Args: { p_month: string }; Returns: undefined }
+      complete_lesson: {
+        Args: { p?: Json; p_lesson_id: string }
+        Returns: undefined
+      }
       confirm_lesson: {
         Args: { p_chat_id: number; p_lesson_id: string; p_student_id: string }
         Returns: boolean
