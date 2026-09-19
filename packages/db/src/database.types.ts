@@ -3117,16 +3117,33 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       ack_events: { Args: { p_ids: number[] }; Returns: number }
       age_years: { Args: { p_birth_date: string }; Returns: number }
+      approve_lesson_note: { Args: { p_id: string }; Returns: undefined }
       approve_salary: {
         Args: { p_month: string; p_teacher_id: string }
         Returns: string
       }
       archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      archive_diagnostic: { Args: { p_id: string }; Returns: boolean }
       archive_expense_category: { Args: { p_id: string }; Returns: undefined }
+      archive_goal: { Args: { p_id: string }; Returns: boolean }
+      archive_goal_progress: { Args: { p_id: string }; Returns: boolean }
+      archive_homework: { Args: { p_id: string }; Returns: boolean }
+      archive_lesson_note: { Args: { p_id: string }; Returns: boolean }
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       archive_teacher: { Args: { p_id: string }; Returns: undefined }
+      assign_homework: {
+        Args: {
+          p_conduct_key?: string
+          p_due_on?: string
+          p_exercise_ids?: string[]
+          p_free_text?: string
+          p_lesson_id?: string
+          p_student_id: string
+        }
+        Returns: string
+      }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
       bot_balance: {
@@ -3235,6 +3252,17 @@ export type Database = {
         Args: { p_city?: string; p_name: string }
         Returns: string
       }
+      create_goal: {
+        Args: {
+          p_area?: string
+          p_sound?: string
+          p_stage_id: string
+          p_student_id: string
+          p_target_date?: string
+          p_title: string
+        }
+        Returns: string
+      }
       create_installment_plan: {
         Args: {
           p_expected_remaining_tiyin?: number
@@ -3320,6 +3348,10 @@ export type Database = {
         Returns: {
           center_count: number
         }[]
+      }
+      emit_clinical_event: {
+        Args: { p_center_id: string; p_payload: Json; p_type: string }
+        Returns: number
       }
       emit_event: {
         Args: { p_center_id?: string; p_payload?: Json; p_type: string }
@@ -3507,6 +3539,17 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: undefined
       }
+      record_diagnostic: {
+        Args: {
+          p_conclusion?: string
+          p_date?: string
+          p_sounds?: Json
+          p_speech_areas?: Json
+          p_student_id: string
+          p_teacher_id?: string
+        }
+        Returns: string
+      }
       record_expense: {
         Args: {
           p_amount_tiyin: number
@@ -3515,6 +3558,17 @@ export type Database = {
           p_kind?: string
           p_paid_on?: string
           p_source_id?: string
+        }
+        Returns: string
+      }
+      record_goal_progress: {
+        Args: {
+          p_conduct_key?: string
+          p_date?: string
+          p_goal_id: string
+          p_lesson_id?: string
+          p_note?: string
+          p_score: number
         }
         Returns: string
       }
@@ -3585,6 +3639,10 @@ export type Database = {
           starts_at: string
           subscription_id: string
         }[]
+      }
+      review_homework: {
+        Args: { p_id: string; p_teacher_feedback?: string }
+        Returns: undefined
       }
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
@@ -3658,6 +3716,10 @@ export type Database = {
         Args: { p_id: string }
         Returns: undefined
       }
+      set_goal_status: {
+        Args: { p_id: string; p_status: string }
+        Returns: undefined
+      }
       slugify: { Args: { p_text: string }; Returns: string }
       student_balance_pick: {
         Args: { p_student_id: string }
@@ -3723,6 +3785,10 @@ export type Database = {
           primary_teacher_id: string
           status: string
         }[]
+      }
+      submit_homework: {
+        Args: { p_id: string; p_parent_note?: string }
+        Returns: undefined
       }
       subscription_current_freeze: {
         Args: { p_on_date?: string; p_subscription_id: string }
@@ -3808,6 +3874,40 @@ export type Database = {
         Returns: undefined
       }
       unlink_telegram: { Args: never; Returns: boolean }
+      update_diagnostic: {
+        Args: {
+          p_conclusion?: string
+          p_date?: string
+          p_id: string
+          p_sounds?: Json
+          p_speech_areas?: Json
+        }
+        Returns: undefined
+      }
+      update_goal: {
+        Args: {
+          p_area?: string
+          p_id: string
+          p_sound?: string
+          p_stage_id?: string
+          p_target_date?: string
+          p_title?: string
+        }
+        Returns: undefined
+      }
+      update_goal_progress: {
+        Args: { p_id: string; p_note?: string; p_score?: number }
+        Returns: undefined
+      }
+      update_homework: {
+        Args: {
+          p_due_on?: string
+          p_exercise_ids?: string[]
+          p_free_text?: string
+          p_id: string
+        }
+        Returns: undefined
+      }
       upsert_message_template: {
         Args: {
           p_channel: string
@@ -3819,6 +3919,16 @@ export type Database = {
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
+      write_lesson_note: {
+        Args: {
+          p_lesson_id: string
+          p_parent_summary?: string
+          p_soap?: Json
+          p_student_id: string
+          p_teacher_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
