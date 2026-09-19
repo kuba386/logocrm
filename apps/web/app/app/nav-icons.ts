@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CalendarDays,
   Contact,
   GraduationCap,
@@ -19,6 +20,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   '/app': LayoutDashboard,
   '/app/schedule': CalendarDays,
   '/app/students': GraduationCap,
+  '/app/library': BookOpen,
   '/app/payers': Contact,
   '/app/groups': Users,
   '/app/debts': Receipt,
