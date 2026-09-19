@@ -283,11 +283,17 @@ reset role;
 select public.tests_claims('21111111-1111-1111-1111-111111111111','2ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 
+-- Отдельным оператором, а не подзапросом в одном select с проверкой:
+-- снимок для сканирования homework_exercises берётся независимо от
+-- порядка вычисления join — новую строку join в том же select не видит.
+select public.assign_homework('2eeeeeee-0000-0000-0000-000000000001', 'Дубли', array[
+  '2c000000-0000-0000-0000-000000000001','2c000000-0000-0000-0000-000000000001',
+  '2c000000-0000-0000-0000-000000000002']::uuid[]);
+
 select is(
   (select count(*)::int from public.homework_exercises he
-    join public.assign_homework('2eeeeeee-0000-0000-0000-000000000001', 'Дубли', array[
-      '2c000000-0000-0000-0000-000000000001','2c000000-0000-0000-0000-000000000001',
-      '2c000000-0000-0000-0000-000000000002']::uuid[]) as hw(id) on he.homework_id = hw.id),
+    join public.homework h on h.id = he.homework_id
+   where h.free_text = 'Дубли'),
   2, 'Повтор exercise_id в списке схлопывается в одну строку (Р7)');
 
 select throws_ok(
