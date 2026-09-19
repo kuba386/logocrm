@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, lessonCard, lessonsThisWeek, openBishkekYesterdayWeek, openWeek, studentCards } from './helpers'
+import { lessonCard, lessonsThisWeek, openBishkekYesterdayWeek, openWeek, studentCards } from './helpers'
 
 // Пункт 5 чек-листа: специалист видит только своё, отмечает занятие
 // проведённым, создавать не может.
@@ -51,7 +51,16 @@ test('5б. Специалист отмечает занятие проведён
   await expect(page.getByRole('heading', { name: 'Провести занятие' })).toBeVisible()
   // Форма уже пришла с отметкой посещения по умолчанию — «Завершить» без
   // правок сохраняет её и переводит занятие в «Проведено» одним вызовом.
-  await actAndAwait(page, 'Завершить', 'Занятие проведено')
+  //
+  // Не actAndAwait: та же причина, что у FreezeForm в
+  // attendance-subscriptions.spec.ts — успешный completeLesson делает
+  // revalidatePath на этот же путь, RSC-страница
+  // тут же меняет status на 'done' и подменяет CompleteLessonForm (с её
+  // <p role="status">) на статичный renderDone — уведомление формы
+  // размонтируется раньше, чем toContainText успевает его прочитать.
+  // Ждём напрямую итоговый экран.
+  await page.getByRole('button', { name: 'Завершить' }).click()
+  await expect(page.getByRole('heading', { name: 'Занятие проведено' })).toBeVisible({ timeout: 20_000 })
 })
 
 // Этап 4, п.5 чек-листа (docs/Roadmap/stages.md): специалист отмечает
