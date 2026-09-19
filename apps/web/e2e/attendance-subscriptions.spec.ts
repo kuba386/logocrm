@@ -2,7 +2,13 @@ import { expect, test, type Page } from '@playwright/test'
 import { formatSom } from '@logocrm/core'
 
 import { STUDENTS } from './fixtures'
-import { actAndAwait, bishkekYesterdayIso, lessonCard, openBishkekYesterdayWeek, studentCards } from './helpers'
+import {
+  actAndAwait,
+  bishkekBeforeLessonsIso,
+  lessonCard,
+  openBishkekYesterdayWeek,
+  studentCards,
+} from './helpers'
 
 // Пункты 1-4 чек-листа приёмки этапа 4 (docs/Roadmap/stages.md). Пункты 5 и 6
 // (специалист и родитель) — в teacher.spec.ts/parent.spec.ts, они читают
@@ -24,12 +30,18 @@ import { actAndAwait, bishkekYesterdayIso, lessonCard, openBishkekYesterdayWeek,
 // (packages/db/supabase/fixtures/e2e.sql) датированы вчера по Бишкеку, а не
 // фиксированной будущей датой, как у остальной фикстуры: «Отметить
 // посещение» доступно только для уже начавшихся занятий (lesson-panel.tsx,
-// canMarkAttendance). «Дата начала» абонемента ниже проставлена тем же вчера
-// явно, не через пустое поле — sell_subscription без явной даты берёт
-// center_today() (0010:256), и абонемент датировался бы СЕГОДНЯ, позже
-// вчерашних занятий; составной кандидат на списание требует s.starts_at <=
-// v_lesson_date (0010:861) — молчаливо переставало бы находиться. Обе даты —
-// из одной и той же bishkekYesterdayIso(), а не вычисляются порознь.
+// canMarkAttendance). «Дата начала» абонемента ниже проставлена явно, не
+// через пустое поле — sell_subscription без явной даты берёт center_today()
+// (0010:256), и абонемент датировался бы СЕГОДНЯ, позже вчерашних занятий;
+// составной кандидат на списание требует s.starts_at <= v_lesson_date
+// (0010:861) — молчаливо переставало бы находиться.
+//
+// Берётся bishkekBeforeLessonsIso() — на день раньше занятий, а не «то же
+// самое вчера». Совпадение дат было иллюзией: фикстура считает вчера в psql
+// при посеве, тест — в браузере минутой позже, и если между этими моментами
+// проходит полночь Бишкека (18:00 UTC), даты расходятся на день. Так упал
+// прогон 19.09 — фикстура легла в 23:59 по Бишкеку, тесты начались в 00:00,
+// абонемент оказался позже занятий, и остаток молча не списался.
 
 test.describe.configure({ mode: 'serial' })
 
@@ -115,7 +127,7 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // Явно вчера по Бишкеку — та же дата, что у занятий фикстуры (см.
   // комментарий вверху файла). Пустое поле взяло бы center_today() и
   // разошлось бы с занятиями на день.
-  await page.locator('#startsAt').fill(bishkekYesterdayIso())
+  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
 
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
@@ -176,7 +188,7 @@ test('Этап 4, п.3: отметить посещение во время за
   // Та же дата, что у занятия Тимура в фикстуре (e2e.sql, a0006, 15:00) —
   // иначе s.starts_at > v_lesson_date и абонемент вообще не попал бы в
   // кандидаты (0015:1064), тест проверял бы не то исключение.
-  await page.locator('#startsAt').fill(bishkekYesterdayIso())
+  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
   // Замораживаем сразу же, открытым концом, с той же даты — абонемент
@@ -184,7 +196,7 @@ test('Этап 4, п.3: отметить посещение во время за
   // занятия (subscription_freezes.period @> v_lesson_date).
   await page.reload()
   await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
-  await page.getByLabel('С', { exact: true }).fill(bishkekYesterdayIso())
+  await page.getByLabel('С', { exact: true }).fill(bishkekBeforeLessonsIso())
 
   // Не actAndAwait: как и в тесте «Заморозка с датой окончания…» ниже,
   // успешная заморозка размонтирует FreezeForm вместе с её уведомлением
@@ -238,7 +250,7 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
   const optionValue = await typeSelect.locator('option', { hasText: SMALL_TYPE }).getAttribute('value')
   if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
   await typeSelect.selectOption(optionValue)
-  await page.locator('#startsAt').fill(bishkekYesterdayIso())
+  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
   await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
 
   // Три занятия Амины в фикстуре (e2e.sql, a0007-a0009): 15:45, 16:30,
