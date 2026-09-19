@@ -279,6 +279,86 @@ export type Database = {
         }
         Relationships: []
       }
+      diagnostics: {
+        Row: {
+          attachments: Json
+          center_id: string
+          conclusion: string | null
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          date: string
+          deleted_at: string | null
+          id: string
+          sounds: Json
+          speech_areas: Json
+          student_id: string
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          attachments?: Json
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          sounds?: Json
+          speech_areas?: Json
+          student_id: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attachments?: Json
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          sounds?: Json
+          speech_areas?: Json
+          student_id?: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostics_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagnostics_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "diagnostics_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "diagnostics_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       events: {
         Row: {
           attempts: number
@@ -314,6 +394,71 @@ export type Database = {
           type?: string
         }
         Relationships: []
+      }
+      exercise_library: {
+        Row: {
+          age_from: number | null
+          age_to: number | null
+          area: string | null
+          center_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          instructions: string | null
+          is_active: boolean
+          media_url: string | null
+          sound: string | null
+          stage_code: string | null
+          tags: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          age_from?: number | null
+          age_to?: number | null
+          area?: string | null
+          center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          media_url?: string | null
+          sound?: string | null
+          stage_code?: string | null
+          tags?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          age_from?: number | null
+          age_to?: number | null
+          area?: string | null
+          center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          media_url?: string | null
+          sound?: string | null
+          stage_code?: string | null
+          tags?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_library_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       expense_categories: {
         Row: {
@@ -464,6 +609,203 @@ export type Database = {
           },
         ]
       }
+      goal_progress: {
+        Row: {
+          center_id: string
+          conduct_key: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          deleted_at: string | null
+          goal_id: string
+          id: string
+          lesson_id: string | null
+          note: string | null
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          conduct_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          goal_id: string
+          id?: string
+          lesson_id?: string | null
+          note?: string | null
+          score: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          conduct_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          goal_id?: string
+          id?: string
+          lesson_id?: string | null
+          note?: string | null
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_progress_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goal_progress_goal_fk"
+            columns: ["goal_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "goal_progress_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      goal_stages: {
+        Row: {
+          center_id: string
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          sort: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          sort?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          sort?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_stages_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goals: {
+        Row: {
+          achieved_at: string | null
+          area: string | null
+          center_id: string
+          created_at: string
+          created_by: string | null
+          custom_fields: Json
+          deleted_at: string | null
+          id: string
+          sound: string | null
+          stage_id: string
+          status: string
+          student_id: string
+          target_date: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          achieved_at?: string | null
+          area?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          sound?: string | null
+          stage_id: string
+          status?: string
+          student_id: string
+          target_date?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          achieved_at?: string | null
+          area?: string | null
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          custom_fields?: Json
+          deleted_at?: string | null
+          id?: string
+          sound?: string | null
+          stage_id?: string
+          status?: string
+          student_id?: string
+          target_date?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goals_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goals_stage_fk"
+            columns: ["stage_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "goal_stages"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "goals_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "goals_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       group_students: {
         Row: {
           center_id: string
@@ -605,6 +947,140 @@ export type Database = {
             columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      homework: {
+        Row: {
+          assigned_at: string
+          center_id: string
+          conduct_key: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          due_on: string | null
+          free_text: string | null
+          id: string
+          lesson_id: string | null
+          parent_note: string | null
+          status: string
+          student_id: string
+          teacher_feedback: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string
+          center_id?: string
+          conduct_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          due_on?: string | null
+          free_text?: string | null
+          id?: string
+          lesson_id?: string | null
+          parent_note?: string | null
+          status?: string
+          student_id: string
+          teacher_feedback?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string
+          center_id?: string
+          conduct_key?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          due_on?: string | null
+          free_text?: string | null
+          id?: string
+          lesson_id?: string | null
+          parent_note?: string | null
+          status?: string
+          student_id?: string
+          teacher_feedback?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homework_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homework_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "homework_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "homework_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      homework_exercises: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          exercise_id: string
+          homework_id: string
+          id: string
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          exercise_id: string
+          homework_id: string
+          id?: string
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          exercise_id?: string
+          homework_id?: string
+          id?: string
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "homework_exercises_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_library"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "homework_exercises_homework_fk"
+            columns: ["homework_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "homework"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -891,6 +1367,107 @@ export type Database = {
           },
           {
             foreignKeyName: "lesson_confirmations_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      lesson_notes: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          center_id: string
+          conduct_key: string | null
+          cost_tiyin: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          lesson_id: string
+          model: string | null
+          parent_summary: string | null
+          raw_transcript: string | null
+          soap: Json
+          source: string
+          status: string
+          student_id: string
+          teacher_id: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          center_id?: string
+          conduct_key?: string | null
+          cost_tiyin?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          lesson_id: string
+          model?: string | null
+          parent_summary?: string | null
+          raw_transcript?: string | null
+          soap?: Json
+          source?: string
+          status?: string
+          student_id: string
+          teacher_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          center_id?: string
+          conduct_key?: string | null
+          cost_tiyin?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          lesson_id?: string
+          model?: string | null
+          parent_summary?: string | null
+          raw_transcript?: string | null
+          soap?: Json
+          source?: string
+          status?: string
+          student_id?: string
+          teacher_id?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_notes_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_notes_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_notes_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_notes_student_fk"
             columns: ["student_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
@@ -2609,6 +3186,20 @@ export type Database = {
           type: string
         }[]
       }
+      clinical_goal_visible: { Args: { p_goal_id: string }; Returns: boolean }
+      clinical_homework_visible: {
+        Args: { p_homework_id: string }
+        Returns: boolean
+      }
+      clinical_role_allowed: { Args: { p_role: string }; Returns: boolean }
+      clinical_teacher_sees: {
+        Args: { p_student_id: string }
+        Returns: boolean
+      }
+      clinical_visible_to_caller: {
+        Args: { p_student_id: string }
+        Returns: boolean
+      }
       close_month: { Args: { p_month: string }; Returns: undefined }
       confirm_lesson: {
         Args: { p_chat_id: number; p_lesson_id: string; p_student_id: string }
@@ -2985,6 +3576,7 @@ export type Database = {
         Args: { p_center_id: string }
         Returns: undefined
       }
+      seed_goal_stages: { Args: { p_center_id: string }; Returns: undefined }
       seed_payment_sources: {
         Args: { p_center_id: string }
         Returns: undefined
@@ -3048,6 +3640,38 @@ export type Database = {
         Returns: {
           debt_tiyin: number
           student_id: string
+        }[]
+      }
+      student_diagnostics_brief: {
+        Args: { p_student_id: string }
+        Returns: {
+          conclusion: string
+          date: string
+          id: string
+          teacher_name: string
+        }[]
+      }
+      student_goals_brief: {
+        Args: { p_student_id: string }
+        Returns: {
+          area: string
+          id: string
+          last_score: number
+          sound: string
+          stage_sort: number
+          stage_title: string
+          status: string
+          target_date: string
+          title: string
+        }[]
+      }
+      student_notes_brief: {
+        Args: { p_student_id: string }
+        Returns: {
+          id: string
+          lesson_at: string
+          lesson_id: string
+          parent_summary: string
         }[]
       }
       student_subscription_badge: {
