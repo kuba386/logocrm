@@ -63,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const navLinks = [
     { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
     { href: '/app/students', label: 'Ученики', show: true },
+    { href: '/app/library', label: 'Библиотека', show: role === 'teacher' || isAdmin },
     { href: '/app/payers', label: 'Плательщики', show: payments },
     { href: '/app/groups', label: 'Группы', show: frontDesk },
     { href: '/app/debts', label: 'Долги', show: payments },
@@ -78,10 +79,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Нижние вкладки (Stitch: specialist-day-mobile.png, parent-cabinet-mobile.png)
   // только там, где разделов мало — у admin/finance/registrar их 5-7,
-  // в таб-бар не влезут, им гамбургер. «Отметки»/«Задания» из макетов
-  // не заведены: у отметки посещения нет отдельного роута (она в
-  // расписании, docs/Roadmap/stages.md этап 4), а «Задания» — этап 7,
-  // ещё не реализован. Дашборд ролей — уже отдельная страница с своим
+  // в таб-бар не влезут, им гамбургер. «Отметки» из макетов не заведена:
+  // у отметки посещения нет отдельного роута (она в расписании,
+  // docs/Roadmap/stages.md этап 4). «Задания» — теперь /app/library
+  // (этап 7a). Дашборд ролей — уже отдельная страница с своим
   // содержимым (dashboard-teacher.tsx/dashboard-parent.tsx), не дубль
   // расписания, поэтому явная вкладка на него, хотя в макете её нет.
   const bottomTabs =
@@ -90,6 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           { href: '/app', label: 'Дашборд' },
           { href: '/app/schedule', label: 'Расписание' },
           { href: '/app/students', label: 'Ученики' },
+          { href: '/app/library', label: 'Библиотека' },
           { href: '/app/my-salary', label: 'Зарплата' },
         ]
       : role === 'parent'
