@@ -230,7 +230,8 @@ select set_eq(
     ('write_lesson_note(uuid,uuid,jsonb,text,uuid)'),
     ('approve_lesson_note(uuid)'),
     ('archive_lesson_note(uuid)'),
-    ('complete_lesson(uuid,jsonb)')
+    ('complete_lesson(uuid,jsonb)'),
+    ('save_exercise(text,uuid,text,text,text,text,text,integer,integer,text[],boolean)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

@@ -16,9 +16,10 @@ function optional(formData: FormData, key: string): string | undefined {
 }
 
 /**
- * Каталог упражнений: как «Услуги» (settings/services) — редактируют
- * owner/admin, RLS (tenant_admin) сама режет чужой центр и платформенные
- * строки (center_id is null правит только миграция, не экран).
+ * Каталог упражнений — как «Услуги» (settings/services) по кругу
+ * редакторов (owner/admin), но не прямым insert/update: 0040 закрыла
+ * exercise_library на грант и завела save_exercise — тем же приёмом, что
+ * 0038 сделала для остальных клинических таблиц (reports/stage-7.md, Р10).
  */
 export async function saveExercise(_prev: LibraryState, formData: FormData): Promise<LibraryState> {
   const id = text(formData, 'id')
@@ -30,22 +31,19 @@ export async function saveExercise(_prev: LibraryState, formData: FormData): Pro
   const tags = optional(formData, 'tags')
 
   const supabase = await createClient()
-  const payload = {
-    title,
-    area: optional(formData, 'area') ?? null,
-    sound: optional(formData, 'sound') ?? null,
-    stage_code: optional(formData, 'stageCode') ?? null,
-    instructions: optional(formData, 'instructions') ?? null,
-    media_url: optional(formData, 'mediaUrl') ?? null,
-    age_from: ageFrom ? Number(ageFrom) : null,
-    age_to: ageTo ? Number(ageTo) : null,
-    tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-    is_active: formData.get('isActive') === 'on',
-  }
-
-  const { error } = id
-    ? await supabase.from('exercise_library').update(payload).eq('id', id)
-    : await supabase.from('exercise_library').insert(payload)
+  const { error } = await supabase.rpc('save_exercise', {
+    p_title: title,
+    p_id: id || undefined,
+    p_area: optional(formData, 'area'),
+    p_sound: optional(formData, 'sound'),
+    p_stage_code: optional(formData, 'stageCode'),
+    p_instructions: optional(formData, 'instructions'),
+    p_media_url: optional(formData, 'mediaUrl'),
+    p_age_from: ageFrom ? Number(ageFrom) : undefined,
+    p_age_to: ageTo ? Number(ageTo) : undefined,
+    p_tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+    p_is_active: formData.get('isActive') === 'on',
+  })
 
   if (error) return toAppError(error, 'Не удалось сохранить упражнение')
 
@@ -60,6 +58,11 @@ export async function assignExerciseToStudent(
   const studentId = text(formData, 'studentId')
   const exerciseId = text(formData, 'exerciseId')
   const dueInDays = optional(formData, 'dueInDays')
+  // Повторный клик «Добавить» (без оптимистичного UI ответ ждём, кнопка не
+  // блокирована) не должен выдать упражнение дважды — assign_homework (0038)
+  // принимает p_conduct_key и возвращает тот же id повторно, если он уже
+  // встречался.
+  const conductKey = optional(formData, 'conductKey')
 
   if (!studentId) return { message: 'Выберите ученика' }
 
@@ -81,6 +84,7 @@ export async function assignExerciseToStudent(
     p_student_id: studentId,
     p_exercise_ids: [exerciseId],
     p_due_on: dueOn,
+    p_conduct_key: conductKey,
   })
 
   if (error) return toAppError(error, 'Не удалось выдать задание')

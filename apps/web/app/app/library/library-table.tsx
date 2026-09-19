@@ -52,11 +52,15 @@ function AssignDialog({
   onClose: () => void
 }) {
   const [state, formAction] = useActionState(assignExerciseToStudent, initial)
+  // Один ключ на диалог: повторный клик «Добавить» на этом же открытии не
+  // должен выдать упражнение дважды (см. actions.ts).
+  const [conductKey] = useState(() => crypto.randomUUID())
 
   return (
     <Dialog open={open} onClose={onClose} title="Добавить в домашнее задание" description={exercise.title}>
       <form action={formAction} className="space-y-3">
         <input type="hidden" name="exerciseId" value={exercise.id} />
+        <input type="hidden" name="conductKey" value={conductKey} />
         <div className="space-y-1">
           <Label htmlFor={`student-${exercise.id}`}>Ученик</Label>
           <Select id={`student-${exercise.id}`} name="studentId" defaultValue="" required>
