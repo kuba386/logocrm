@@ -17,6 +17,9 @@ import {
   type SubscriptionTypeOption,
   type SubscriptionView,
 } from './subscriptions-panel'
+import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
+import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
+import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
@@ -34,6 +37,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   const isAdmin = role === 'owner' || role === 'admin'
   const isFinance = role === 'finance'
+  const isTeacher = role === 'teacher'
+  const isParent = role === 'parent'
+  // Клиника положена тем же ролям, что в 0036 (registrar/finance — ни строки).
+  const clinicalAllowed = isAdmin || isTeacher || isParent
+  const canWriteClinical = isAdmin || isTeacher
 
   // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет;
   // бухгалтеру — students_brief: ни телефона, ни заметок (0031).
@@ -294,6 +302,166 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Клиника (0036/0038): те же роли, что уже проверяет RLS. Родителю —
+  // узкие definer-функции (Р4 в 0036: карта звуков и заметка специалиста
+  // родителю не положены физически), admin/teacher — полные таблицы, RLS
+  // сама сузит видимость у teacher по clinical_teacher_sees.
+  let clinicalSection: {
+    diagnostics: DiagnosticEntry[]
+    goals: GoalEntry[]
+    stages: GoalStageOption[]
+    homework: HomeworkEntry[]
+    exercises: ExerciseOption[]
+  } | null = null
+
+  if (clinicalAllowed && isParent) {
+    const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }] = await Promise.all([
+      supabase.rpc('student_diagnostics_brief', { p_student_id: id }),
+      supabase.rpc('student_goals_brief', { p_student_id: id }),
+      supabase
+        .from('homework')
+        .select('id, status, free_text, due_on, parent_note, teacher_feedback, assigned_at')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('assigned_at', { ascending: false }),
+    ])
+
+    clinicalSection = {
+      diagnostics: (diagRows ?? []).map((d) => ({
+        id: d.id,
+        date: d.date,
+        conclusion: d.conclusion,
+        teacherName: d.teacher_name,
+        sounds: {},
+        speechAreas: {},
+      })),
+      goals: (goalRows ?? []).map((g) => ({
+        id: g.id,
+        title: g.title,
+        area: g.area,
+        sound: g.sound,
+        stageTitle: g.stage_title,
+        status: g.status,
+        targetDate: g.target_date,
+        progress:
+          g.last_score != null ? [{ id: g.id, date: g.target_date ?? '', score: g.last_score, note: null }] : [],
+      })),
+      stages: [],
+      homework: (homeworkRows ?? []).map((h) => ({
+        id: h.id,
+        status: h.status,
+        freeText: h.free_text,
+        dueOn: h.due_on,
+        parentNote: h.parent_note,
+        teacherFeedback: h.teacher_feedback,
+        exerciseTitles: [],
+      })),
+      exercises: [],
+    }
+  } else if (clinicalAllowed) {
+    const [{ data: diagRows }, { data: goalRows }, { data: stageRows }, { data: homeworkRows }, { data: exerciseRows }] =
+      await Promise.all([
+        supabase
+          .from('diagnostics')
+          .select('id, date, conclusion, sounds, speech_areas, teacher_id')
+          .eq('student_id', id)
+          .is('deleted_at', null)
+          .order('date', { ascending: false }),
+        supabase
+          .from('goals')
+          .select('id, title, area, sound, status, target_date, stage_id')
+          .eq('student_id', id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
+        supabase.from('goal_stages').select('id, title').is('deleted_at', null).order('sort'),
+        supabase
+          .from('homework')
+          .select('id, status, free_text, due_on, parent_note, teacher_feedback, assigned_at')
+          .eq('student_id', id)
+          .is('deleted_at', null)
+          .order('assigned_at', { ascending: false }),
+        supabase
+          .from('exercise_library')
+          .select('id, title, sound')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('title'),
+      ])
+
+    const teacherIds = [...new Set((diagRows ?? []).map((d) => d.teacher_id).filter((v): v is string => Boolean(v)))]
+    const goalIds = (goalRows ?? []).map((g) => g.id)
+    const homeworkIds = (homeworkRows ?? []).map((h) => h.id)
+
+    const [{ data: diagTeacherRows }, { data: progressRows }, { data: homeworkExerciseRows }] = await Promise.all([
+      teacherIds.length
+        ? supabase.from('teachers').select('id, full_name').in('id', teacherIds)
+        : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+      goalIds.length
+        ? supabase
+            .from('goal_progress')
+            .select('id, goal_id, date, score, note')
+            .in('goal_id', goalIds)
+            .is('deleted_at', null)
+            .order('date', { ascending: false })
+        : Promise.resolve({ data: [] as { id: string; goal_id: string; date: string; score: number; note: string | null }[] }),
+      homeworkIds.length
+        ? supabase.from('homework_exercises').select('homework_id, exercise_id').in('homework_id', homeworkIds).is('deleted_at', null)
+        : Promise.resolve({ data: [] as { homework_id: string; exercise_id: string }[] }),
+    ])
+
+    const stageTitleById = new Map((stageRows ?? []).map((s) => [s.id, s.title]))
+    const teacherNameById = new Map((diagTeacherRows ?? []).map((t) => [t.id, t.full_name]))
+    const exerciseTitleById = new Map((exerciseRows ?? []).map((e) => [e.id, e.title]))
+
+    const progressByGoal = new Map<string, GoalEntry['progress']>()
+    for (const row of progressRows ?? []) {
+      const list = progressByGoal.get(row.goal_id) ?? []
+      list.push({ id: row.id, date: row.date, score: row.score, note: row.note })
+      progressByGoal.set(row.goal_id, list)
+    }
+
+    const exerciseIdsByHomework = new Map<string, string[]>()
+    for (const row of homeworkExerciseRows ?? []) {
+      const list = exerciseIdsByHomework.get(row.homework_id) ?? []
+      list.push(row.exercise_id)
+      exerciseIdsByHomework.set(row.homework_id, list)
+    }
+
+    clinicalSection = {
+      diagnostics: (diagRows ?? []).map((d) => ({
+        id: d.id,
+        date: d.date,
+        conclusion: d.conclusion,
+        teacherName: d.teacher_id ? (teacherNameById.get(d.teacher_id) ?? null) : null,
+        sounds: (d.sounds ?? {}) as Record<string, string>,
+        speechAreas: (d.speech_areas ?? {}) as Record<string, number>,
+      })),
+      goals: (goalRows ?? []).map((g) => ({
+        id: g.id,
+        title: g.title,
+        area: g.area,
+        sound: g.sound,
+        stageTitle: stageTitleById.get(g.stage_id) ?? null,
+        status: g.status,
+        targetDate: g.target_date,
+        progress: progressByGoal.get(g.id) ?? [],
+      })),
+      stages: (stageRows ?? []).map((s) => ({ id: s.id, title: s.title })),
+      homework: (homeworkRows ?? []).map((h) => ({
+        id: h.id,
+        status: h.status,
+        freeText: h.free_text,
+        dueOn: h.due_on,
+        parentNote: h.parent_note,
+        teacherFeedback: h.teacher_feedback,
+        exerciseTitles: (exerciseIdsByHomework.get(h.id) ?? [])
+          .map((exerciseId) => exerciseTitleById.get(exerciseId))
+          .filter((t): t is string => Boolean(t)),
+      })),
+      exercises: (exerciseRows ?? []).map((e) => ({ id: e.id, title: e.title, sound: e.sound })),
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -399,6 +567,54 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </span>
           </CardContent>
         </Card>
+      ) : null}
+
+      {clinicalSection ? (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Диагностика</CardTitle>
+              <CardDescription>Карта звуков и речевые области.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DiagnosticsPanel
+                studentId={id}
+                entries={clinicalSection.diagnostics}
+                canWrite={canWriteClinical}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Цели</CardTitle>
+              <CardDescription>Прогресс по звукам и этапам работы.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GoalsPanel
+                studentId={id}
+                goals={clinicalSection.goals}
+                stages={clinicalSection.stages}
+                canWrite={canWriteClinical}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Домашние задания</CardTitle>
+              <CardDescription>Выдача, сдача и фидбек.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HomeworkPanel
+                studentId={id}
+                homework={clinicalSection.homework}
+                exercises={clinicalSection.exercises}
+                canWrite={canWriteClinical}
+              />
+            </CardContent>
+          </Card>
+        </>
       ) : null}
 
       {isAdmin ? (
