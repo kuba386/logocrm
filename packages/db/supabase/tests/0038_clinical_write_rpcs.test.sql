@@ -87,22 +87,22 @@ insert into public.diagnostics (id, center_id, student_id, conclusion) values
   ('2d000000-0000-0000-0000-000000000002','2ccccccc-0000-0000-0000-00000000000b','2eeeeeee-0000-0000-0000-000000000003','Диагноз центра Б');
 
 insert into public.goal_progress (id, center_id, goal_id, score, created_by) values
-  ('2p000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2bbbb000-0000-0000-0000-000000000001', 50, '21111111-1111-1111-1111-111111111111');
+  ('2b000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2bbbb000-0000-0000-0000-000000000001', 50, '21111111-1111-1111-1111-111111111111');
 
 insert into public.exercise_library (id, center_id, title) values
-  ('2ex00000-0000-0000-0000-000000000001', null, 'Упражнение платформы'),
-  ('2ex00000-0000-0000-0000-000000000002', '2ccccccc-0000-0000-0000-00000000000a', 'Упражнение центра А'),
-  ('2ex00000-0000-0000-0000-000000000003', '2ccccccc-0000-0000-0000-00000000000b', 'Упражнение центра Б');
+  ('2c000000-0000-0000-0000-000000000001', null, 'Упражнение платформы'),
+  ('2c000000-0000-0000-0000-000000000002', '2ccccccc-0000-0000-0000-00000000000a', 'Упражнение центра А'),
+  ('2c000000-0000-0000-0000-000000000003', '2ccccccc-0000-0000-0000-00000000000b', 'Упражнение центра Б');
 
 insert into public.homework (id, center_id, student_id, free_text) values
-  ('2h000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2eeeeeee-0000-0000-0000-000000000001','Существующее задание'),
-  ('2h000000-0000-0000-0000-000000000002','2ccccccc-0000-0000-0000-00000000000b','2eeeeeee-0000-0000-0000-000000000003','Задание центра Б');
+  ('2a000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2eeeeeee-0000-0000-0000-000000000001','Существующее задание'),
+  ('2a000000-0000-0000-0000-000000000002','2ccccccc-0000-0000-0000-00000000000b','2eeeeeee-0000-0000-0000-000000000003','Задание центра Б');
 
 -- created_by — сам ведущий специалист, а не владелец (клеймы фикстуры на
 -- этот момент): иначе «автор правит черновик» ниже доказывал бы то же,
 -- что уже доказано у update_goal, но на чужих данных.
 insert into public.lesson_notes (id, center_id, lesson_id, student_id, status, created_by) values
-  ('2n000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2fffffff-0000-0000-0000-000000000001','2eeeeeee-0000-0000-0000-000000000001','draft','24444444-4444-4444-4444-444444444444');
+  ('2f000000-0000-0000-0000-000000000001','2ccccccc-0000-0000-0000-00000000000a','2fffffff-0000-0000-0000-000000000001','2eeeeeee-0000-0000-0000-000000000001','draft','24444444-4444-4444-4444-444444444444');
 
 
 -- 1. Прямая запись во все шесть таблиц закрыта (Р9) --------------------------------------------
@@ -122,17 +122,17 @@ select throws_ok(
               (select id from public.goal_stages where code = 'setting' limit 1), 'x') $q$,
   '42501', null, 'goals: прямой insert закрыт');
 select throws_ok(
-  $q$ update public.goal_progress set score = 10 where id = '2p000000-0000-0000-0000-000000000001' $q$,
+  $q$ update public.goal_progress set score = 10 where id = '2b000000-0000-0000-0000-000000000001' $q$,
   '42501', null, 'goal_progress: прямой update закрыт');
 select throws_ok(
-  $q$ update public.homework set free_text = 'x' where id = '2h000000-0000-0000-0000-000000000001' $q$,
+  $q$ update public.homework set free_text = 'x' where id = '2a000000-0000-0000-0000-000000000001' $q$,
   '42501', null, 'homework: прямой update закрыт');
 select throws_ok(
   $q$ insert into public.homework_exercises (homework_id, exercise_id)
-      values ('2h000000-0000-0000-0000-000000000001','2ex00000-0000-0000-0000-000000000001') $q$,
+      values ('2a000000-0000-0000-0000-000000000001','2c000000-0000-0000-0000-000000000001') $q$,
   '42501', null, 'homework_exercises: прямой insert закрыт');
 select throws_ok(
-  $q$ update public.lesson_notes set parent_summary = 'x' where id = '2n000000-0000-0000-0000-000000000001' $q$,
+  $q$ update public.lesson_notes set parent_summary = 'x' where id = '2f000000-0000-0000-0000-000000000001' $q$,
   '42501', null, 'lesson_notes: прямой update закрыт');
 select is((select count(*)::int from public.diagnostics), 1,
   'select при этом жив: политика видимости не пострадала');
@@ -264,7 +264,7 @@ reset role;
 select public.tests_claims('25555555-5555-5555-5555-555555555555','2ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.update_goal_progress('2p000000-0000-0000-0000-000000000001', 99) $q$,
+  $q$ select public.update_goal_progress('2b000000-0000-0000-0000-000000000001', 99) $q$,
   '42501', null, 'update_goal_progress: не автор — отказ');
 reset role;
 
@@ -286,13 +286,13 @@ set local role authenticated;
 select is(
   (select count(*)::int from public.homework_exercises he
     join public.assign_homework('2eeeeeee-0000-0000-0000-000000000001', 'Дубли', array[
-      '2ex00000-0000-0000-0000-000000000001','2ex00000-0000-0000-0000-000000000001',
-      '2ex00000-0000-0000-0000-000000000002']::uuid[]) as hw(id) on he.homework_id = hw.id),
+      '2c000000-0000-0000-0000-000000000001','2c000000-0000-0000-0000-000000000001',
+      '2c000000-0000-0000-0000-000000000002']::uuid[]) as hw(id) on he.homework_id = hw.id),
   2, 'Повтор exercise_id в списке схлопывается в одну строку (Р7)');
 
 select throws_ok(
   $q$ select public.assign_homework('2eeeeeee-0000-0000-0000-000000000001', 'чужой центр', array[
-      '2ex00000-0000-0000-0000-000000000001','2ex00000-0000-0000-0000-000000000003']::uuid[]) $q$,
+      '2c000000-0000-0000-0000-000000000001','2c000000-0000-0000-0000-000000000003']::uuid[]) $q$,
   '42704', null, 'Упражнение чужого центра где угодно в списке — вся вставка падает');
 select is(
   (select count(*)::int from public.homework where student_id = '2eeeeeee-0000-0000-0000-000000000001'
@@ -307,8 +307,8 @@ select is(
   'Повтор с тем же conduct_key — то же задание, а не второе');
 
 select lives_ok(
-  $q$ select public.update_homework('2h000000-0000-0000-0000-000000000001', null, 'Поправили состав',
-        array['2ex00000-0000-0000-0000-000000000002']::uuid[]) $q$,
+  $q$ select public.update_homework('2a000000-0000-0000-0000-000000000001', null, 'Поправили состав',
+        array['2c000000-0000-0000-0000-000000000002']::uuid[]) $q$,
   'Замена состава ДЗ живёт, пока задание не увидел родитель');
 
 reset role;
@@ -316,10 +316,10 @@ reset role;
 select public.tests_claims('27777777-7777-7777-7777-777777777777','2ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select lives_ok(
-  $q$ select public.submit_homework('2h000000-0000-0000-0000-000000000001', 'Сделали') $q$,
+  $q$ select public.submit_homework('2a000000-0000-0000-0000-000000000001', 'Сделали') $q$,
   'Родитель сдаёт своё задание');
 select throws_ok(
-  $q$ select public.submit_homework('2h000000-0000-0000-0000-000000000001', 'ещё раз') $q$,
+  $q$ select public.submit_homework('2a000000-0000-0000-0000-000000000001', 'ещё раз') $q$,
   '23514', null, 'Повторная сдача уже сданного — явная ошибка, а не тихий перезаход');
 reset role;
 
@@ -333,13 +333,13 @@ set local role authenticated;
 -- у кого прав достаточно, иначе непонятно, какая из двух причин отказа
 -- сработала.
 select throws_ok(
-  $q$ select public.update_homework('2h000000-0000-0000-0000-000000000001', null, 'поздно') $q$,
+  $q$ select public.update_homework('2a000000-0000-0000-0000-000000000001', null, 'поздно') $q$,
   '23514', null, 'Состав уже увиденного родителем задания не меняется');
 select throws_ok(
-  $q$ select public.review_homework('2p000000-0000-0000-0000-000000000001', 'не то ДЗ') $q$,
+  $q$ select public.review_homework('2b000000-0000-0000-0000-000000000001', 'не то ДЗ') $q$,
   '42704', null, 'review_homework по несуществующему в этой таблице id — не найдено');
 select lives_ok(
-  $q$ select public.review_homework('2h000000-0000-0000-0000-000000000001', 'Молодец') $q$,
+  $q$ select public.review_homework('2a000000-0000-0000-0000-000000000001', 'Молодец') $q$,
   'Специалист проверяет сданное задание');
 reset role;
 
@@ -359,7 +359,7 @@ set local role authenticated;
 select is(
   (select public.write_lesson_note('2fffffff-0000-0000-0000-000000000001', '2eeeeeee-0000-0000-0000-000000000001',
      '{"plan":"a"}'::jsonb)),
-  '2n000000-0000-0000-0000-000000000001'::uuid,
+  '2f000000-0000-0000-0000-000000000001'::uuid,
   'write_lesson_note на существующий (lesson_id, student_id) правит ту же строку, а не заводит вторую');
 
 select is(
@@ -368,10 +368,10 @@ select is(
   1, 'Строка по-прежнему одна');
 
 select lives_ok(
-  $q$ select public.approve_lesson_note('2n000000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.approve_lesson_note('2f000000-0000-0000-0000-000000000001') $q$,
   'Утверждение заметки');
 select lives_ok(
-  $q$ select public.approve_lesson_note('2n000000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.approve_lesson_note('2f000000-0000-0000-0000-000000000001') $q$,
   'Повторное утверждение — холостой ход, а не ошибка');
 
 select throws_ok(
@@ -390,7 +390,7 @@ select is(
 -- postgres, в обход RPC, тем же приёмом, что 0036 доказывает approved→draft.
 select throws_ok(
   $q$ update public.lesson_notes set soap = '{"plan":"прямой patch администратора"}'::jsonb
-       where id = '2n000000-0000-0000-0000-000000000001' $q$,
+       where id = '2f000000-0000-0000-0000-000000000001' $q$,
   '23514', null,
   'И прямой PATCH мимо RPC тоже падает — держит триггер lesson_notes_lock_approved_content, а не функция');
 
@@ -406,7 +406,7 @@ reset role;
 select public.tests_claims('21111111-1111-1111-1111-111111111111','2ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select isnt(
-  (select public.archive_lesson_note('2n000000-0000-0000-0000-000000000001')), null,
+  (select public.archive_lesson_note('2f000000-0000-0000-0000-000000000001')), null,
   'archive_lesson_note владельцу доступен даже для утверждённой заметки — архив не то же самое, что правка содержимого');
 reset role;
 
@@ -423,19 +423,19 @@ select throws_ok(
   $q$ select public.set_goal_status('2bbbb000-0000-0000-0000-000000000001', 'paused') $q$,
   '42704', null, 'set_goal_status не находит цель центра А из центра Б');
 select throws_ok(
-  $q$ select public.update_goal_progress('2p000000-0000-0000-0000-000000000001', 1) $q$,
+  $q$ select public.update_goal_progress('2b000000-0000-0000-0000-000000000001', 1) $q$,
   '42704', null, 'update_goal_progress не находит запись центра А из центра Б');
 select throws_ok(
-  $q$ select public.update_homework('2h000000-0000-0000-0000-000000000001', null, 'x') $q$,
+  $q$ select public.update_homework('2a000000-0000-0000-0000-000000000001', null, 'x') $q$,
   '42704', null, 'update_homework не находит задание центра А из центра Б');
 select throws_ok(
-  $q$ select public.submit_homework('2h000000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.submit_homework('2a000000-0000-0000-0000-000000000001') $q$,
   '42704', null, 'submit_homework не находит задание центра А из центра Б');
 select throws_ok(
-  $q$ select public.review_homework('2h000000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.review_homework('2a000000-0000-0000-0000-000000000001') $q$,
   '42704', null, 'review_homework не находит задание центра А из центра Б');
 select throws_ok(
-  $q$ select public.approve_lesson_note('2n000000-0000-0000-0000-000000000001') $q$,
+  $q$ select public.approve_lesson_note('2f000000-0000-0000-0000-000000000001') $q$,
   '42704', null, 'approve_lesson_note не находит заметку центра А из центра Б');
 select is(
   (select public.archive_diagnostic('2d000000-0000-0000-0000-000000000001')), false,
