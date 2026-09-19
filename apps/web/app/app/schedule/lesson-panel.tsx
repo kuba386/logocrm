@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import {
   cancelLesson,
@@ -10,7 +11,7 @@ import {
   type ScheduleState,
 } from './actions'
 import { AttendancePanel } from './attendance-panel'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -115,16 +116,14 @@ export function LessonPanel({
           ) : null}
         </dl>
 
-        {/* Специалисту доступны только два перехода, и то на своём занятии. */}
+        {/* Специалисту доступны только два перехода, и то на своём занятии.
+            «Провёл» ведёт на экран «Провести занятие» (0039) — посещение,
+            прогресс, заметка и ДЗ одним вызовом, а не голый переход статуса. */}
         {lesson.isMine && lesson.status === 'planned' ? (
           <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-            <form action={statusAction}>
-              <input type="hidden" name="lessonId" value={lesson.id} />
-              <input type="hidden" name="status" value="done" />
-              <Button type="submit" size="sm">
-                Провёл
-              </Button>
-            </form>
+            <Link href={`/app/schedule/lessons/${lesson.id}/complete`} className={buttonVariants({ size: 'sm' })}>
+              Провёл
+            </Link>
             <form action={statusAction}>
               <input type="hidden" name="lessonId" value={lesson.id} />
               <input type="hidden" name="status" value="cancelled" />
