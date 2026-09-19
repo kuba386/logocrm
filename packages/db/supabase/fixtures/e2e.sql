@@ -331,3 +331,27 @@ begin
      'e0000000-0000-0000-0000-0000000000e5', v_l3, v_l3 + interval '45 min')
   on conflict (id) do nothing;
 end $$;
+
+
+-- Прошедшее, ещё не проведённое занятие Айлин — чек-лист этапа 7, п.«Провёл»
+-- (teacher.spec.ts, 5б). complete_lesson (0039) проверяет starts_at <=
+-- now() по-настоящему: неделя TEACHER_WEEK датирована 2027 годом нарочно,
+-- чтобы не зависеть от реальных часов (см. teacher.spec.ts), и той же
+-- причине никогда не окажется в прошлом по факту. Вчера по Бишкеку — тот
+-- же приём, что у Данияра/Тимура/Амины выше. Час 09:00, до блока Данияра
+-- (11:15) у того же специалиста (b1) — EXCLUDE по effective_teacher_id
+-- иначе отбил бы вставку.
+do $$
+declare
+  v_l1 timestamptz := (
+    date_trunc('day', now() at time zone 'Asia/Bishkek') - interval '1 day' + interval '9 hours'
+  ) at time zone 'Asia/Bishkek';
+begin
+  insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at)
+  values (
+    'e0000000-0000-0000-0000-0000000a0010', 'e0000000-0000-0000-0000-0000000000c1',
+    'e0000000-0000-0000-0000-0000000000f1', 'e0000000-0000-0000-0000-0000000000b1',
+    'e0000000-0000-0000-0000-0000000000e1', v_l1, v_l1 + interval '45 min'
+  )
+  on conflict (id) do nothing;
+end $$;

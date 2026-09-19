@@ -37,9 +37,14 @@ test('5. Специалист не может создавать занятия 
 })
 
 test('5б. Специалист отмечает занятие проведённым', async ({ page }) => {
-  await openWeek(page, TEACHER_WEEK)
+  // complete_lesson (0039) проверяет starts_at <= now() по-настоящему —
+  // TEACHER_WEEK датирована 2027 годом нарочно (не зависеть от реальных
+  // часов) и никогда не окажется в прошлом по факту. Отдельное, взаправду
+  // прошедшее занятие Айлин — «вчера по Бишкеку» (e2e.sql), тот же приём,
+  // что у чек-листа этапа 4.
+  await openBishkekYesterdayWeek(page)
 
-  await lessonCard(page, '11:00', STUDENTS.ailin).click()
+  await lessonCard(page, '09:00', STUDENTS.ailin).click()
   // «Провёл» (0039) — ссылка на экран «Провести занятие», не кнопка формы:
   // getByRole('button', ...) её не найдёт.
   await page.getByRole('link', { name: 'Провёл' }).click()
