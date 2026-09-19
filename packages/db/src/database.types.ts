@@ -3663,6 +3663,22 @@ export type Database = {
           total_tiyin: number
         }[]
       }
+      save_exercise: {
+        Args: {
+          p_age_from?: number
+          p_age_to?: number
+          p_area?: string
+          p_id?: string
+          p_instructions?: string
+          p_is_active?: boolean
+          p_media_url?: string
+          p_sound?: string
+          p_stage_code?: string
+          p_tags?: string[]
+          p_title: string
+        }
+        Returns: string
+      }
       seed_attendance_statuses: {
         Args: { p_center_id: string }
         Returns: undefined

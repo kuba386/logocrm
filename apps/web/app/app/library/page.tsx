@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CatalogForm } from '@/components/ui/catalog-form'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 import { saveExercise } from './actions'
 import { LibraryTable, type ExerciseRow, type StageOption, type StudentOption } from './library-table'
 
@@ -95,8 +96,15 @@ export default async function LibraryPage() {
                   <Input id="sound" name="sound" placeholder="р" />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="stageCode">Этап (код)</Label>
-                  <Input id="stageCode" name="stageCode" placeholder="words" />
+                  <Label htmlFor="stageCode">Этап</Label>
+                  <Select id="stageCode" name="stageCode" defaultValue="">
+                    <option value="">Без этапа</option>
+                    {stages.map((stage) => (
+                      <option key={stage.code} value={stage.code}>
+                        {stage.title}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="ageFrom">Возраст от</Label>
