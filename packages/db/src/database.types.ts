@@ -3579,6 +3579,10 @@ export type Database = {
         Args: { p_student_id: string }
         Returns: boolean
       }
+      clinical_teacher_taught: {
+        Args: { p_student_id: string; p_teacher_id: string }
+        Returns: boolean
+      }
       clinical_visible_to_caller: {
         Args: { p_student_id: string }
         Returns: boolean
@@ -3831,6 +3835,25 @@ export type Database = {
           p_text?: string
         }
         Returns: boolean
+      }
+      notification_homework_recipients: {
+        Args: { p_center_id: string; p_homework_id: string }
+        Returns: {
+          user_id: string
+        }[]
+      }
+      notification_homework_targets: {
+        Args: {
+          p_center_id: string
+          p_event_type: string
+          p_homework_id: string
+        }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
       }
       notification_skip: {
         Args: { p_event_id: number; p_reason: string }
