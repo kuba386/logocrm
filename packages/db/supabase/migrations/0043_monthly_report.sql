@@ -49,6 +49,15 @@
 --  Р10. Реестр закрыт на запись: политика только на чтение, руками, а не
 --       через apply_tenant_rls — она дала бы owner/admin право обнулить
 --       счётчик отправок и разослать второй раз (довод 0032).
+--  Р11. «Пустой месяц» считается по занятиям и заметкам, но НЕ по целям:
+--       месяц с одними оценками, без единой отметки посещения и без
+--       резюме, отправить нельзя. Оценки без занятий означают, что данные
+--       завели задним числом, и рассылать по ним отчёт семье рано.
+--  Р12. Родитель читает отчёт за любой месяц, даже если центр его не
+--       рассылал. Разделение из Р3 — про исходящие сообщения, а не про
+--       доступ: всё содержимое отчёта родителю и так открыто в кабинете,
+--       и прятать его до нажатия кнопки значило бы прятать от него его же
+--       данные. Кнопка решает, уйдёт ли сообщение, а не увидит ли он.
 -- =============================================================================
 
 
@@ -107,6 +116,12 @@ begin
      where a.student_id = p_student_id
        and a.center_id = v_center
        and l.deleted_at is null
+       -- Отменённое занятие не считается: attendance не имеет deleted_at
+       -- (0009, сознательно), поэтому отмена задним числом отметку не
+       -- убирает. Без этого фильтра родитель получил бы «Занятий: 3» с
+       -- датой, которой по расписанию центра не было, а специалист видел
+       -- бы два — тот же довод, что в student_notes_brief (0036).
+       and l.status <> 'cancelled'
        -- Р8: по дате занятия, а не по времени отметки.
        and (l.starts_at at time zone v_tz)::date >= p_from
        and (l.starts_at at time zone v_tz)::date <= p_to
@@ -145,11 +160,11 @@ create or replace function public.student_goal_dynamics_brief(
   set search_path = ''
 as $$
 begin
-  if not public.clinical_visible_to_caller(p_student_id) then
-    return;
-  end if;
   if p_from is null or p_to is null then
     raise exception 'Укажите период' using errcode = '22023';
+  end if;
+  if not public.clinical_visible_to_caller(p_student_id) then
+    return;
   end if;
 
   return query
@@ -196,7 +211,7 @@ create table if not exists public.monthly_reports (
   period_month    date not null check (period_month = date_trunc('month', period_month)::date),
 
   generated_at    timestamptz not null default now(),
-  generated_by    uuid,
+  generated_by    uuid references auth.users (id) on delete set null,
   -- Р9: то, что специалист хочет сказать родителю от себя.
   teacher_comment text,
   -- Р4: снимок на момент отправки, а не пересчёт при каждом открытии.
@@ -209,7 +224,7 @@ create table if not exists public.monthly_reports (
   sent_count      integer not null default 0 check (sent_count >= 0),
   first_sent_at   timestamptz,
   last_sent_at    timestamptz,
-  last_event_id   bigint,
+  last_event_id   bigint references public.events (id) on delete set null,
 
   constraint monthly_reports_student_fk
     foreign key (student_id, center_id) references public.students (id, center_id) on delete cascade,
@@ -234,6 +249,12 @@ create policy monthly_reports_admin_read on public.monthly_reports
     and coalesce(public.my_role(), '') in ('owner', 'admin')
   );
 
+-- generated_at/generated_by перетираются при повторной отправке, поэтому
+-- «кто и когда отправил второй раз» без аудита не восстановить, а счётчик
+-- знает только сколько раз. Строки читают те же owner/admin, что и саму
+-- таблицу, — новой поверхности аудит не открывает.
+call public.apply_audit('monthly_reports');
+
 revoke all on table public.monthly_reports from public, anon, authenticated, service_role;
 grant select on public.monthly_reports to authenticated;
 
@@ -256,6 +277,8 @@ declare
   v_notes   jsonb;
   v_total   integer := 0;
   v_absent  integer := 0;
+  v_tz      text;
+  v_sent    public.monthly_reports;
 begin
   if auth.uid() is null or v_center is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -268,19 +291,31 @@ begin
   -- родителя. Р6: по архивному ребёнку узкие функции молчат, и вместо
   -- пустой страницы, неотличимой от «занятий не было», честный отказ.
   if not public.clinical_visible_to_caller(p_student_id) then
-    if exists (select 1 from public.students s
-                where s.id = p_student_id and s.center_id = v_center and s.deleted_at is not null) then
+    -- Р6: «в архиве» говорим только тому, кто и так вправе знать про этого
+    -- ребёнка. Иначе по произвольному uuid любой отличал бы архивного
+    -- ребёнка этого центра от всего остального — оракул существования.
+    if exists (
+      select 1 from public.students s
+       where s.id = p_student_id and s.center_id = v_center and s.deleted_at is not null
+         and (coalesce(public.my_role(), '') in ('owner', 'admin')
+              or public.parent_of_student(s.id)
+              or public.teacher_teaches_student(s.id))
+    ) then
       raise exception 'Ребёнок в архиве — отчёт недоступен' using errcode = '42704';
     end if;
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
   v_to := (v_month + interval '1 month' - interval '1 day')::date;
+  v_tz := public.center_timezone(v_center);
+
+  select * into v_sent from public.monthly_reports r
+   where r.center_id = v_center and r.student_id = p_student_id and r.period_month = v_month;
 
   -- Р1: только узкие функции. Ни одного select из attendance,
   -- goal_progress, lesson_notes, diagnostics.
   select coalesce(jsonb_agg(jsonb_build_object(
-           'date',   to_char(a.lesson_at at time zone public.center_timezone(v_center), 'DD.MM.YYYY'),
+           'date',   to_char(a.lesson_at at time zone v_tz, 'DD.MM.YYYY'),
            'status', a.status_name
          ) order by a.lesson_at), '[]'::jsonb),
          count(*)::integer,
@@ -299,13 +334,13 @@ begin
     from public.student_goal_dynamics_brief(p_student_id, v_month, v_to) g;
 
   select coalesce(jsonb_agg(jsonb_build_object(
-           'date',    to_char(n.lesson_at at time zone public.center_timezone(v_center), 'DD.MM.YYYY'),
+           'date',    to_char(n.lesson_at at time zone v_tz, 'DD.MM.YYYY'),
            'summary', n.parent_summary
          ) order by n.lesson_at), '[]'::jsonb)
     into v_notes
     from public.student_notes_brief(p_student_id) n
-   where (n.lesson_at at time zone public.center_timezone(v_center))::date >= v_month
-     and (n.lesson_at at time zone public.center_timezone(v_center))::date <= v_to;
+   where (n.lesson_at at time zone v_tz)::date >= v_month
+     and (n.lesson_at at time zone v_tz)::date <= v_to;
 
   return jsonb_build_object(
     'student_id',      p_student_id,
@@ -316,11 +351,20 @@ begin
     'attendance',      v_att,
     'goals',           v_goals,
     'notes',           v_notes,
-    'teacher_comment', (select r.teacher_comment from public.monthly_reports r
-                         where r.center_id = v_center and r.student_id = p_student_id
-                           and r.period_month = v_month),
+    'teacher_comment', v_sent.teacher_comment,
     'is_empty',        (v_total = 0 and jsonb_array_length(v_notes) = 0),
-    'generated_at',    now()
+    'generated_at',    now(),
+    -- Р4 на экране: числа выше пересчитаны живьём, а это — то, что
+    -- родитель реально получил. Без них экран молча показывал бы другие
+    -- числа, чем лежат у родителя в переписке, и кто прав — не сказал бы
+    -- никто. Интерфейс обязан показать расхождение, а не спрятать его.
+    'sent',            case when v_sent.sent_count > 0 then jsonb_build_object(
+                         'count',      v_sent.sent_count,
+                         'last_at',    v_sent.last_sent_at,
+                         'summary',    v_sent.summary_text,
+                         'stats',      v_sent.stats,
+                         'is_stale',   (v_sent.stats -> 'lessons_total') is distinct from to_jsonb(v_total)
+                       ) else null end
   );
 end;
 $$;
@@ -407,20 +451,27 @@ begin
      where center_id = v_center and student_id = p_student_id and period_month = v_month
      for update;
 
+    -- Сначала «кому нельзя», потом «как повторить»: иначе специалист
+    -- получал совет повторить с подтверждением и по этому совету — отказ.
+    if v_row.sent_count > 0 and v_role not in ('owner', 'admin') then
+      raise exception 'Повторную отправку делает администрация' using errcode = '42501';
+    end if;
+
     if v_row.sent_count > 0 and not p_force then
       raise exception 'Отчёт за этот месяц уже отправляли % — повторите с явным подтверждением',
         to_char(v_row.last_sent_at at time zone public.center_timezone(v_center), 'DD.MM.YYYY HH24:MI')
         using errcode = '23505';
     end if;
 
-    if v_row.sent_count > 0 and v_role not in ('owner', 'admin') then
-      raise exception 'Повторную отправку делает администрация' using errcode = '42501';
-    end if;
-
+    -- returning обязателен: без него v_row остаётся снимком ДО правки, и
+    -- новый комментарий специалиста лёг бы в колонку, но не попал ни в
+    -- выжимку родителю, ни в summary_text. Снимок и колонка разошлись бы
+    -- внутри одной строки — ровно то, что Р4 обещает не допускать.
     update public.monthly_reports
        set teacher_comment = coalesce(nullif(trim(coalesce(p_comment, '')), ''), teacher_comment),
            generated_at = now(), generated_by = auth.uid()
-     where id = v_row.id;
+     where id = v_row.id
+    returning * into v_row;
   end if;
 
   -- Р4: текст замораживается здесь и уходит в событие целиком. Иначе
@@ -497,11 +548,19 @@ on conflict (event_type) do nothing;
 -- Текст whatsapp намеренно пустой по содержанию: он попадает в кнопку
 -- копирования на экране администратора, то есть клиника покидает
 -- защищённый канал руками. Выжимка с числами — только в Telegram.
+-- Уникальности у message_templates не было вовсе, поэтому «on conflict do
+-- nothing» в 0034 ничего не гасил: повторный прогон дал бы дубли, а
+-- resolve_template молча берёт limit 1. Заводим её здесь, до вставки.
+create unique index if not exists message_templates_default_key
+  on public.message_templates (center_id, event_type, channel)
+  nulls not distinct
+  where deleted_at is null;
+
 insert into public.message_templates (center_id, event_type, channel, text) values
   (null, 'report.monthly_ready', 'telegram', '{summary}'),
   (null, 'report.monthly_ready', 'whatsapp_link',
    'Здравствуйте! Отчёт за {month} по {child} готов — расскажем на занятии или пришлём в приложении.')
-on conflict do nothing;
+on conflict (center_id, event_type, channel) where deleted_at is null do nothing;
 
 
 -- Переиздание целиком: у event_messages нельзя изменить тело через
@@ -654,7 +713,7 @@ end;
 $$;
 
 comment on function public.event_messages(bigint) is
-  'Событие → кому и что отправить. Получатели, подстановка и формат денег — здесь, а не в сценарии n8n (0034 Р2). Ветка report.monthly_ready подставляет готовый текст из события, а не пересчитывает отчёт (0043 Р4).';
+  'Событие → кому и что отправить. Получатели, подстановка и формат денег — здесь, а не в сценарии n8n (0034 Р2). Ветка report.monthly_ready подставляет готовый текст из события, а не пересчитывает отчёт (0043 Р4). Пустой результат значит «получателей нет» — воркер обязан записать это строкой skipped, а не промолчать.';
 
 revoke all on function public.event_messages(bigint) from public, anon, authenticated, service_role;
 grant execute on function public.event_messages(bigint) to bot_worker;
