@@ -88,8 +88,12 @@ create table if not exists public.lesson_voice_requests (
     foreign key (lesson_id, center_id) references public.lessons (id, center_id) on delete cascade,
   constraint lesson_voice_requests_student_fk
     foreign key (student_id, center_id) references public.students (id, center_id) on delete cascade,
-  constraint lesson_voice_requests_armed_before_consumed
-    check (consumed_at is null or armed_at is not null)
+  -- Отменённый токен (выдали новый, старый погасили) — законное состояние
+  -- без armed_at: иначе пришлось бы подделывать «бот принял» у записи,
+  -- которой бот не видел, и статистика «сколько диктовок дошло» врала бы.
+  cancelled_at timestamptz,
+  constraint lesson_voice_requests_cancelled_xor_consumed
+    check (cancelled_at is null or consumed_at is null)
 );
 
 comment on table public.lesson_voice_requests is
@@ -99,15 +103,18 @@ create unique index if not exists lesson_voice_requests_token_key
   on public.lesson_voice_requests (token);
 -- Р9: один живой токен на пользователя.
 create unique index if not exists lesson_voice_requests_live_idx
-  on public.lesson_voice_requests (requested_by) where consumed_at is null;
+  on public.lesson_voice_requests (requested_by) where consumed_at is null and cancelled_at is null;
 create index if not exists lesson_voice_requests_chat_idx
-  on public.lesson_voice_requests (chat_id) where consumed_at is null;
+  on public.lesson_voice_requests (chat_id) where consumed_at is null and cancelled_at is null;
 
 alter table public.lesson_voice_requests enable row level security;
 
 revoke all on table public.lesson_voice_requests from public, anon, authenticated, service_role;
 
-call public.apply_audit('lesson_voice_requests');
+-- apply_audit здесь НЕ вызывается. audit_trigger кладёт всю строку в
+-- audit_log, а его читают owner/admin центра — то есть токен и личный
+-- chat_id специалиста утекли бы туда, ровно мимо решения Р3. Прецедент
+-- telegram_link_codes (0033) аудита не имеет по той же причине.
 
 
 create or replace function public.request_voice_note(p_lesson_id uuid, p_student_id uuid)
@@ -165,8 +172,8 @@ begin
 
   -- Р9: прежний живой токен гасится, иначе старая ссылка остаётся рабочей.
   update public.lesson_voice_requests
-     set consumed_at = now(), armed_at = coalesce(armed_at, now())
-   where requested_by = v_uid and consumed_at is null;
+     set cancelled_at = now()
+   where requested_by = v_uid and consumed_at is null and cancelled_at is null;
 
   v_token := encode(extensions.gen_random_bytes(12), 'hex');
 
@@ -275,7 +282,11 @@ begin
       where r.chat_id = p_chat_id
         and r.armed_at is not null
         and r.consumed_at is null
-        and r.expires_at > now()
+        and r.cancelled_at is null
+        -- Окно считается от армирования, а не от выдачи токена: специалист
+        -- нажал кнопку, отвлёкся на звонок, вошёл в чат на 13-й минуте и
+        -- надиктовал четыре — диктовка уже произнесена, терять её нельзя.
+        and r.armed_at > now() - interval '30 minutes'
       order by r.armed_at desc
       limit 1
       for update skip locked
@@ -371,6 +382,34 @@ begin
     return null;
   end if;
 
+  -- Б3: всё, на чём упадёт запись, проверяется ЗДЕСЬ — до Whisper и Claude.
+  -- Иначе отказ приходит после двух платных вызовов, работа становится
+  -- терминальной, и диктовка не восстанавливается никогда.
+  if v_request.center_id <> v_event.center_id then
+    return null;
+  end if;
+  if not exists (
+    select 1 from public.students s
+     where s.id = v_request.student_id and s.deleted_at is null
+  ) then
+    return null;
+  end if;
+  if not exists (
+    select 1 from public.lessons l
+     where l.id = v_request.lesson_id and l.deleted_at is null and l.status <> 'cancelled'
+  ) then
+    return null;
+  end if;
+  if exists (
+    select 1 from public.lesson_notes n
+     where n.lesson_id = v_request.lesson_id and n.student_id = v_request.student_id
+       and n.deleted_at is null
+       and (n.status = 'approved'
+            or (n.source = 'voice' and n.conduct_key is distinct from v_request.id))
+  ) then
+    return null;
+  end if;
+
   select * into v_job from public.ai_jobs where event_id = p_event_id for update;
 
   if found then
@@ -378,11 +417,27 @@ begin
     if v_job.status in ('done', 'failed') then
       return null;
     end if;
+    -- В2: пока прогон свеж, работа занята. Без этого release_stale_claims
+    -- возвращает событие за спину живому обработчику, и Whisper с Claude
+    -- оплачиваются второй раз. Порог меньше того, с которым очередь
+    -- возвращает пачки (10 минут), — иначе окна не остаётся вовсе.
+    if v_job.started_at > now() - interval '8 minutes' then
+      return null;
+    end if;
     update public.ai_jobs
        set attempts = attempts + 1, started_at = now()
      where event_id = p_event_id;
   else
-    insert into public.ai_jobs (event_id, center_id) values (p_event_id, v_event.center_id);
+    -- В7: голый insert на гонке двух прогонов падал бы на первичном ключе,
+    -- и воркер разобрал бы это как сбой — терминал по причине, которой нет.
+    insert into public.ai_jobs (event_id, center_id)
+    values (p_event_id, v_event.center_id)
+    on conflict (event_id) do nothing
+    returning * into v_job;
+
+    if v_job.event_id is null then
+      return null;
+    end if;
   end if;
 
   return jsonb_build_object(
@@ -414,13 +469,13 @@ begin
 
   update public.ai_jobs
      set status = 'done', finished_at = now(), last_error = null
-   where event_id = p_event_id;
+   where event_id = p_event_id and status = 'running';
 
   -- Обещание «аудио не храним» выполнимо не полностью: копия остаётся у
   -- Telegram. Но file_id из очереди убираем — по нему файл и достаётся.
   update public.events
      set payload = payload - 'file_id'
-   where id = p_event_id;
+   where id = p_event_id and type = 'lesson.voice_received';
 end;
 $$;
 
@@ -434,21 +489,46 @@ create or replace function public.ai_job_fail(p_event_id bigint, p_reason text)
   security definer
   set search_path = ''
 as $$
+declare
+  v_center     uuid;
+  v_request_id uuid;
 begin
   if auth.uid() is not null then
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
+  select e.center_id, (e.payload ->> 'voice_request_id')::uuid
+    into v_center, v_request_id
+    from public.events e where e.id = p_event_id;
+  if v_center is null then
+    raise exception 'Событие не найдено' using errcode = '42704';
+  end if;
+
   -- Терминально: повтор упрётся в ai_job_begin → null и не потратит ни цента.
   update public.ai_jobs
      set status = 'failed', finished_at = now(), last_error = p_reason
-   where event_id = p_event_id;
+   where event_id = p_event_id and status = 'running';
 
   update public.events
      set payload = payload - 'file_id'
-   where id = p_event_id;
+   where id = p_event_id and type = 'lesson.voice_received';
 
   perform public.fail_events(array[p_event_id], p_reason);
+
+  -- В1: без этого провал не виден вообще никому. ai_jobs закрыта грантами,
+  -- event.failed до третьей попытки не дойдёт (работа терминальна уже
+  -- сейчас), в чат ничего не уходит — на экране вечное ожидание, а в
+  -- реестре списанные деньги без объяснения. Доставку в чат специалиста
+  -- делает n8n тем же notification_begin/finish, что и успех.
+  perform public.emit_event_unchecked(
+    'lesson.voice_failed',
+    jsonb_build_object(
+      'center_id',        v_center,
+      'voice_request_id', v_request_id,
+      'reason',           p_reason
+    ),
+    v_center
+  );
 end;
 $$;
 
@@ -481,6 +561,11 @@ comment on table public.ai_usage is
   'Источник истины по деньгам за ИИ: по строке на каждый вызов API (Р12). Колонки model/tokens_*/cost_tiyin в lesson_notes — витрина одной суммы для карточки, не учёт. Закрыта на запись: пишет только ai_usage_record, иначе владелец правил бы собственный счётчик.';
 
 create index if not exists ai_usage_center_idx on public.ai_usage (center_id, created_at desc);
+-- Повтор вызова из n8n (таймаут на ответе PostgREST при прошедшей записи)
+-- иначе кладёт вторую строку на тот же вызов API, и «источник истины по
+-- деньгам» начинает врать. Законная вторая строка — другого kind.
+create unique index if not exists ai_usage_event_kind_key
+  on public.ai_usage (event_id, kind) where event_id is not null;
 
 alter table public.ai_usage enable row level security;
 
@@ -558,13 +643,20 @@ begin
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
+  if p_from is null or p_to is null then
+    raise exception 'Укажите период' using errcode = '22023';
+  end if;
+
+  -- Границы — в поясе центра, а не сервера: иначе вызовы с полуночи до
+  -- шести утра по Бишкеку уезжают в соседний месяц, сумма за период не
+  -- сходится со строками, и этап 8 будет тарифицировать по этим числам.
   return query
     select u.kind, count(*)::integer, sum(u.tokens_in)::bigint,
            sum(u.tokens_out)::bigint, sum(u.cost_tiyin)::bigint
       from public.ai_usage u
      where u.center_id = v_center
-       and u.created_at >= p_from
-       and u.created_at < (p_to + 1)
+       and u.created_at >= (p_from::timestamp at time zone public.center_timezone(v_center))
+       and u.created_at <  ((p_to + 1)::timestamp at time zone public.center_timezone(v_center))
      group by u.kind
      order by u.kind;
 end;
@@ -574,7 +666,267 @@ revoke all on function public.ai_usage_summary(date, date) from public, anon, se
 grant execute on function public.ai_usage_summary(date, date) to authenticated;
 
 
--- 5. Запись черновика ----------------------------------------------------------------------------
+-- 5. Предложенные ИИ оценки целей ----------------------------------------------------------------
+
+-- Б1: ИИ НЕ пишет goal_progress напрямую. student_goals_brief (0036) отдаёт
+-- родителю last_score прямо из goal_progress без всякого фильтра по
+-- утверждению — то есть оценка, которую поставила модель и не смотрел
+-- человек, появлялась бы в кабинете родителя через минуту после диктовки,
+-- пока сам специалист видит ещё неутверждённый черновик. Главное обещание
+-- этапа («публикует человек») для оценок не выполнялось бы вовсе.
+--
+-- Поэтому предложения лежат отдельно и переезжают в goal_progress только в
+-- approve_lesson_note. Отдельной таблицей, а не jsonb в заметке: 0036 Р7
+-- уже отказался от goals_touched jsonb ровно потому, что массив
+-- идентификаторов ничем не проверяется и однажды покажет цель другого
+-- ребёнка. Здесь связь держат составные FK и триггер.
+create table if not exists public.lesson_note_goal_scores (
+  id         uuid primary key default gen_random_uuid(),
+  center_id  uuid not null references public.centers (id) on delete cascade,
+  note_id    uuid not null,
+  goal_id    uuid not null,
+  score      integer not null check (score between 0 and 100),
+  note       text,
+  created_at timestamptz not null default now(),
+
+  constraint lesson_note_goal_scores_note_fk
+    foreign key (note_id, center_id) references public.lesson_notes (id, center_id) on delete cascade,
+  constraint lesson_note_goal_scores_goal_fk
+    foreign key (goal_id, center_id) references public.goals (id, center_id) on delete cascade,
+  constraint lesson_note_goal_scores_pair_key unique (note_id, goal_id)
+);
+
+comment on table public.lesson_note_goal_scores is
+  'Оценки целей, предложенные моделью. В goal_progress они попадают только при утверждении заметки человеком (Б1): родителю виден last_score из goal_progress без фильтра по статусу, поэтому запись туда напрямую обошла бы утверждение.';
+
+create index if not exists lesson_note_goal_scores_note_idx
+  on public.lesson_note_goal_scores (note_id);
+
+-- Цель обязана принадлежать тому же ребёнку, что и заметка. Составной FK
+-- этого не выражает: он проверяет только совпадение центра, а на групповом
+-- занятии цель соседа — законная строка того же центра.
+create or replace function public.lesson_note_goal_scores_check_student()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_student uuid;
+  v_goal    uuid;
+begin
+  select n.student_id into v_student from public.lesson_notes n where n.id = new.note_id;
+  select g.student_id into v_goal    from public.goals g        where g.id = new.goal_id;
+
+  if v_student is null or v_goal is null or v_student <> v_goal then
+    raise exception 'Оценка по цели другого ребёнка' using errcode = '42704';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.lesson_note_goal_scores_check_student()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists lesson_note_goal_scores_check_student on public.lesson_note_goal_scores;
+create trigger lesson_note_goal_scores_check_student
+  before insert or update on public.lesson_note_goal_scores
+  for each row execute function public.lesson_note_goal_scores_check_student();
+
+alter table public.lesson_note_goal_scores enable row level security;
+
+-- Видно тем же, кому видна сама заметка: родителю таблица lesson_notes
+-- закрыта целиком (0036 Р4), значит и предложения ему недоступны.
+call public.apply_tenant_rls('lesson_note_goal_scores', false);
+
+drop policy if exists lesson_note_goal_scores_teacher_read on public.lesson_note_goal_scores;
+create policy lesson_note_goal_scores_teacher_read on public.lesson_note_goal_scores
+  for select to authenticated
+  using (
+    center_id = public.current_center()
+    and exists (
+      select 1 from public.lesson_notes n
+       where n.id = lesson_note_goal_scores.note_id and n.deleted_at is null
+    )
+  );
+
+revoke all on table public.lesson_note_goal_scores from public, anon, authenticated, service_role;
+grant select on public.lesson_note_goal_scores to authenticated;
+
+
+-- Утверждение переиздаётся: вместе со статусом заметки переносит
+-- предложенные оценки в goal_progress. До утверждения их нет нигде, кроме
+-- экрана специалиста.
+create or replace function public.approve_lesson_note(p_id uuid)
+  returns void
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_center uuid := public.current_center();
+  v_role   text := coalesce(public.my_role(), '');
+  v_row    public.lesson_notes;
+  v_date   date;
+  v_item   record;
+begin
+  if auth.uid() is null then
+    raise exception 'Требуется авторизация' using errcode = '42501';
+  end if;
+  if v_center is null then
+    raise exception 'Не определён центр' using errcode = '42501';
+  end if;
+
+  select * into v_row from public.lesson_notes
+   where id = p_id and center_id = v_center and deleted_at is null;
+  if not found then
+    raise exception 'Заметка не найдена' using errcode = '42704';
+  end if;
+
+  if not (v_role in ('owner', 'admin') or v_row.created_by = auth.uid()) then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
+  -- Повторное утверждение — холостой ход, а не ошибка (0038).
+  if v_row.status = 'approved' then
+    return;
+  end if;
+
+  update public.lesson_notes set status = 'approved' where id = p_id;
+
+  select (l.starts_at at time zone public.center_timezone(v_center))::date
+    into v_date
+    from public.lessons l where l.id = v_row.lesson_id;
+
+  -- Б2: conduct_key оставляем пустым и пропускаем цели, по которым за это
+  -- занятие оценка уже есть. Занять ключ lesson_id нельзя: им гасит повторы
+  -- complete_lesson (0039), и ручная оценка, поставленная ПОСЛЕ утверждения,
+  -- молча не записалась бы — ровно тот отказ, который 0039 Р3 называет
+  -- недопустимым. Так ручная всегда выигрывает, а потеряться не может
+  -- ничего.
+  for v_item in
+    select s.goal_id, s.score, s.note
+      from public.lesson_note_goal_scores s
+     where s.note_id = p_id
+       and not exists (
+         select 1 from public.goal_progress gp
+          where gp.goal_id = s.goal_id
+            and gp.lesson_id = v_row.lesson_id
+            and gp.deleted_at is null
+       )
+  loop
+    insert into public.goal_progress
+      (center_id, goal_id, lesson_id, date, score, note, created_by)
+    values
+      (v_center, v_item.goal_id, v_row.lesson_id,
+       coalesce(v_date, public.center_today(v_center)), v_item.score, v_item.note,
+       coalesce(v_row.created_by, auth.uid()));
+  end loop;
+end;
+$$;
+
+comment on function public.approve_lesson_note(uuid) is
+  'Утверждение заметки. Вместе со статусом переносит предложенные моделью оценки в goal_progress: до этого момента их не видит ни родитель, ни витрина прогресса (0041 Б1).';
+
+revoke all on function public.approve_lesson_note(uuid) from public, anon, service_role;
+grant execute on function public.approve_lesson_note(uuid) to authenticated;
+
+
+-- Переиздание write_lesson_note: править существующую заметку может тот,
+-- кто видит ребёнка, а не только её автор.
+--
+-- В11: автором голосового черновика стал заказчик диктовки (Р2), а прежняя
+-- версия пускала правку только автору или owner/admin. Занятие вёл один
+-- специалист и надиктовал резюме, закрывает второй (замена, группа на
+-- двоих) — complete_lesson идёт в write_lesson_note, получает 42501 и
+-- падает ЦЕЛИКОМ: ни посещаемости, ни списания, ни статуса занятия.
+-- Специалист видит «Недостаточно прав» на кнопке «Провести» без всякого
+-- объяснения. Право по видимости ребёнка — тот же приём, что у
+-- update_homework (0038 Р2).
+create or replace function public.write_lesson_note(
+  p_lesson_id      uuid,
+  p_student_id     uuid,
+  p_soap           jsonb default null,
+  p_parent_summary text default null,
+  p_teacher_id     uuid default null
+)
+  returns uuid
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_center     uuid := public.current_center();
+  v_role       text := coalesce(public.my_role(), '');
+  v_teacher_id uuid;
+  v_row        public.lesson_notes;
+  v_id         uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Требуется авторизация' using errcode = '42501';
+  end if;
+  if v_center is null then
+    raise exception 'Не определён центр' using errcode = '42501';
+  end if;
+
+  select * into v_row from public.lesson_notes
+   where lesson_id = p_lesson_id and student_id = p_student_id
+     and center_id = v_center and deleted_at is null;
+
+  if found then
+    -- Второй рубеж — триггер lesson_notes_lock_approved_content (0038);
+    -- эта проверка только даёт понятное сообщение до похода в базу.
+    if v_row.status = 'approved' then
+      raise exception 'Утверждённую заметку нельзя изменить — заведите новую на следующем занятии'
+        using errcode = '23514';
+    end if;
+
+    if not (v_role in ('owner', 'admin') or public.clinical_teacher_sees(p_student_id)) then
+      raise exception 'Недостаточно прав' using errcode = '42501';
+    end if;
+
+    update public.lesson_notes
+       set soap           = coalesce(p_soap, soap),
+           parent_summary = coalesce(p_parent_summary, parent_summary)
+     where id = v_row.id;
+
+    return v_row.id;
+  end if;
+
+  if not exists (
+    select 1 from public.students s
+     where s.id = p_student_id and s.center_id = v_center and s.deleted_at is null
+  ) then
+    raise exception 'Ученик не найден' using errcode = '42704';
+  end if;
+
+  if not (v_role in ('owner', 'admin') or public.clinical_teacher_sees(p_student_id)) then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
+  if v_role = 'teacher' then
+    v_teacher_id := public.my_teacher_id();
+  elsif p_teacher_id is not null then
+    if not exists (select 1 from public.teachers t where t.id = p_teacher_id and t.center_id = v_center) then
+      raise exception 'Специалист не найден' using errcode = '42704';
+    end if;
+    v_teacher_id := p_teacher_id;
+  end if;
+
+  insert into public.lesson_notes (center_id, lesson_id, student_id, teacher_id, soap, parent_summary)
+  values (v_center, p_lesson_id, p_student_id, v_teacher_id, coalesce(p_soap, '{}'::jsonb), p_parent_summary)
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.write_lesson_note(uuid, uuid, jsonb, text, uuid) from public, anon, service_role;
+grant execute on function public.write_lesson_note(uuid, uuid, jsonb, text, uuid) to authenticated;
+
+
+-- 6. Запись черновика ----------------------------------------------------------------------------
 
 create or replace function public.ai_write_lesson_note(p_event_id bigint, p jsonb)
   returns jsonb
@@ -612,6 +964,9 @@ begin
   if p ? 'goals' and jsonb_typeof(p -> 'goals') <> 'array' then
     raise exception '«goals» должен быть массивом' using errcode = '22023';
   end if;
+  if p ? 'soap' and jsonb_typeof(p -> 'soap') <> 'object' then
+    raise exception '«soap» должен быть объектом' using errcode = '22023';
+  end if;
 
   select * into v_event from public.events
    where id = p_event_id and type = 'lesson.voice_received'
@@ -641,6 +996,16 @@ begin
     raise exception 'Ребёнок архивирован' using errcode = '42704';
   end if;
 
+  -- На ветке дополнения существующего черновика триггер состава не
+  -- срабатывает: он повешен на update of lesson_id, student_id (0036).
+  -- Без этой проверки заметка по отменённому занятию дополнялась бы молча.
+  if not exists (
+    select 1 from public.lessons l
+     where l.id = v_request.lesson_id and l.deleted_at is null and l.status <> 'cancelled'
+  ) then
+    raise exception 'Занятие отменено или удалено' using errcode = '42704';
+  end if;
+
   select * into v_note from public.lesson_notes
    where lesson_id = v_request.lesson_id and student_id = v_request.student_id
      and center_id = v_request.center_id and deleted_at is null;
@@ -650,9 +1015,17 @@ begin
       raise exception 'Заметка уже утверждена' using errcode = '23514';
     end if;
     -- Повтор того же события ничего не переписывает: возвращаем тот же id.
-    if v_note.source = 'voice' and v_note.conduct_key = v_request.id then
-      return jsonb_build_object('note_id', v_note.id, 'progress_written', 0,
-                                'progress_skipped', '[]'::jsonb, 'repeat', true);
+    -- В3: та же форма ответа, что у обычной ветки. Иначе n8n, повторивший
+    -- событие после падения на узле отправки, получит ответ без chat_id и
+    -- не сможет сказать специалисту, что черновик готов.
+    if v_note.conduct_key = v_request.id then
+      return jsonb_build_object(
+        'note_id',          v_note.id,
+        'student_id',       v_request.student_id,
+        'chat_id',          v_request.chat_id,
+        'progress_written', 0,
+        'progress_skipped', '[]'::jsonb,
+        'repeat',           true);
     end if;
     -- Черновик из другого голосового не затираем молча (Р6).
     if v_note.source = 'voice' then
@@ -662,7 +1035,8 @@ begin
 
     -- Начатый руками черновик голос дополняет, а не затирает.
     update public.lesson_notes
-       set soap           = case when p ? 'soap' and coalesce(soap, '{}'::jsonb) = '{}'::jsonb
+       set conduct_key    = v_request.id,
+           soap           = case when p ? 'soap' and coalesce(soap, '{}'::jsonb) = '{}'::jsonb
                                  then p -> 'soap' else soap end,
            parent_summary = coalesce(parent_summary, p ->> 'parent_summary'),
            raw_transcript = coalesce(raw_transcript, p ->> 'raw_transcript'),
@@ -683,52 +1057,59 @@ begin
        v_request.teacher_id, v_request.requested_by,
        p ->> 'raw_transcript', coalesce(p -> 'soap', '{}'::jsonb), p ->> 'parent_summary',
        'voice', v_request.id,
-       p ->> 'model', (p ->> 'tokens_in')::integer,
-       (p ->> 'tokens_out')::integer, (p ->> 'cost_tiyin')::integer)
+       p ->> 'model', round((p ->> 'tokens_in')::numeric)::integer,
+       round((p ->> 'tokens_out')::numeric)::integer,
+       round((p ->> 'cost_tiyin')::numeric)::integer)
     returning id into v_note_id;
   end if;
 
-  -- Дата прогресса — день занятия в поясе центра. center_today здесь не
-  -- годится: у воркера current_center() пуст, а обработка может уехать за
-  -- полночь, и оценка легла бы не на тот день.
-  select (l.starts_at at time zone public.center_timezone(v_request.center_id))::date
-    into v_date
-    from public.lessons l where l.id = v_request.lesson_id;
-
+  -- Б1: предложения, а не goal_progress. В витрину прогресса они попадут
+  -- только из approve_lesson_note, то есть после человека.
   for v_item in select * from jsonb_array_elements(coalesce(p -> 'goals', '[]'::jsonb)) loop
-    if jsonb_typeof(v_item -> 'score') <> 'number' then
-      raise exception 'Оценка цели должна быть числом' using errcode = '22023';
-    end if;
     v_inserted := null;
-    v_score := (v_item ->> 'score')::integer;
+
+    -- Кривой ответ модели — это пропущенная цель, а не потерянная заметка.
+    -- Расшифровка и резюме уже оплачены; ронять их из-за «score: 7.5» или
+    -- выдуманного идентификатора нельзя (В8). Отдельно стоит только цель
+    -- чужого ребёнка — там речь о смешении карт детей.
+    if jsonb_typeof(v_item -> 'score') <> 'number'
+       or (v_item ->> 'goal_id') is null then
+      v_skipped := v_skipped || jsonb_build_object(
+        'goal_id', v_item ->> 'goal_id', 'reason', 'ответ модели не разобран');
+      continue;
+    end if;
+
+    v_score := round((v_item ->> 'score')::numeric)::integer;
     if v_score < 0 or v_score > 100 then
-      raise exception 'Оценка цели вне диапазона 0–100: %', v_score using errcode = '22023';
+      v_skipped := v_skipped || jsonb_build_object(
+        'goal_id', v_item ->> 'goal_id', 'reason', 'оценка вне диапазона');
+      continue;
     end if;
 
     -- Р5: цель обязана принадлежать тому же ребёнку. На групповом занятии
-    -- триггер состава пропустил бы цель соседа — он законный участник.
+    -- сосед — законный участник, и триггер состава его бы пропустил.
     select * into v_goal from public.goals
      where id = (v_item ->> 'goal_id')::uuid
        and center_id = v_request.center_id
-       and student_id = v_request.student_id
        and deleted_at is null;
+
+    if found and v_goal.student_id <> v_request.student_id then
+      raise exception 'Оценка по цели другого ребёнка' using errcode = '42704';
+    end if;
     if not found then
-      raise exception 'Оценка по цели другого ребёнка или чужого центра' using errcode = '42704';
+      v_skipped := v_skipped || jsonb_build_object(
+        'goal_id', v_item ->> 'goal_id', 'reason', 'цель не найдена');
+      continue;
     end if;
 
-    -- Р6: ручная оценка весомее. Гарантию держит частичный уникальный
-    -- индекс, а не select до вставки.
-    insert into public.goal_progress
-      (center_id, goal_id, lesson_id, date, score, note, conduct_key, created_by)
-    values
-      (v_request.center_id, v_goal.id, v_request.lesson_id, v_date, v_score,
-       v_item ->> 'note', v_request.lesson_id, v_request.requested_by)
-    on conflict (goal_id, conduct_key) where conduct_key is not null and deleted_at is null
-      do nothing
+    insert into public.lesson_note_goal_scores (center_id, note_id, goal_id, score, note)
+    values (v_request.center_id, v_note_id, v_goal.id, v_score, v_item ->> 'note')
+    on conflict (note_id, goal_id) do nothing
     returning id into v_inserted;
 
     if v_inserted is null then
-      v_skipped := v_skipped || jsonb_build_object('goal_id', v_goal.id, 'title', v_goal.title);
+      v_skipped := v_skipped || jsonb_build_object(
+        'goal_id', v_goal.id, 'title', v_goal.title, 'reason', 'уже предложена');
     else
       v_written := v_written + 1;
     end if;
