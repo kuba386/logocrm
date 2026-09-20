@@ -28,7 +28,15 @@ async function handleUpdate(update: Update): Promise<void> {
 
   // Кружок, аудиофайл или документ вместо голосового: ответить понятнее,
   // чем промолчать — специалист не поймёт, почему ничего не происходит.
-  if (message && (message.audio || message.video_note || message.document || message.video)) {
+  if (
+    message &&
+    (message.audio ||
+      message.video_note ||
+      message.document ||
+      message.video ||
+      message.photo ||
+      message.sticker)
+  ) {
     await sendMessage(
       message.chat.id,
       'Нужно голосовое сообщение — то, что записывается кнопкой с микрофоном. ' +
