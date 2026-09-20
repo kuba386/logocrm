@@ -207,9 +207,9 @@ select ok(
   'ai_job_begin отдаёт файл и занимает работу');
 
 select ok(
-  (select public.ai_job_begin(id) is not null
+  (select public.ai_job_begin(id) is null
      from public.events where type = 'lesson.voice_received'),
-  'Повтор при running разрешён — это возврат после падения, не вторая оплата');
+  'Пока прогон свеж, второй обработчик получает отказ — иначе release_stale_claims платит дважды (В2)');
 
 select lives_ok(
   $q$ select public.ai_job_fail((select id from public.events where type = 'lesson.voice_received'), 'тест') $q$,
@@ -254,25 +254,8 @@ select is(
     where goal_id = '5bbb0000-0000-0000-0000-000000000002'),
   0, 'И ни одного предложения по чужой цели не появилось');
 
--- Кривой ответ модели не рушит оплаченную заметку: цель пропускается.
-select is(
-  (select public.ai_write_lesson_note(
-            (select max(id) from public.events where type = 'lesson.voice_received'),
-            jsonb_build_object('parent_summary','черновик',
-              'goals', jsonb_build_array(
-                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',500))))
-          ->> 'progress_written'),
-  '0',
-  'Оценка вне 0–100 пропускается, а не роняет запись (В8)');
-
-select ok(
-  (select public.ai_write_lesson_note(
-            (select max(id) from public.events where type = 'lesson.voice_received'),
-            jsonb_build_object('goals', jsonb_build_array(
-              jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',7.6))))
-          ->> 'progress_written' = '1'),
-  'Дробная оценка округляется, а не отбрасывается');
-
+-- Один вызов со всеми случаями сразу: после первой успешной записи
+-- следующие уходят в ветку повтора и целей уже не разбирают.
 select lives_ok(
   format($q$ select public.ai_write_lesson_note(%s,
             jsonb_build_object(
@@ -282,9 +265,20 @@ select lives_ok(
               'model', 'claude-sonnet-5',
               'tokens_in', 1200, 'tokens_out', 300, 'cost_tiyin', 450,
               'goals', jsonb_build_array(
-                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',60)))) $q$,
+                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',59.6),
+                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',500)))) $q$,
     (select max(id) from public.events where type = 'lesson.voice_received')),
   'Черновик записан');
+
+select is(
+  (select score from public.lesson_note_goal_scores
+    where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  60, 'Дробная оценка округляется, а не отбрасывается и не роняет запись');
+
+select is(
+  (select count(*)::int from public.lesson_note_goal_scores
+    where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  1, 'Оценка вне 0–100 пропущена — но оплаченная заметка цела (В8)');
 
 select is(
   (select created_by from public.lesson_notes where source = 'voice'),
