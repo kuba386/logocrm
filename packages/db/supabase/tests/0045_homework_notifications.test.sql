@@ -92,6 +92,7 @@ select lives_ok(
         '{}'::uuid[], '8fffffff-0000-0000-0000-000000000001', current_date + 3) $q$,
   'Специалист выдаёт ДЗ на своём занятии');
 reset role;
+select public.tests_claims(null, null);
 
 select is(
   (select count(*)::int from public.events where type = 'homework.assigned'),
@@ -148,6 +149,7 @@ select lives_ok(
   $q$ select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], null, null) $q$,
   'Владелец выдаёт ДЗ вне занятия (карточка ребёнка)');
 reset role;
+select public.tests_claims(null, null);
 
 select is(
   (select user_id from public.notification_homework_recipients(
@@ -185,6 +187,7 @@ select lives_ok(
   $q$ select public.assign_homework('8eeeeeee-0000-0000-0000-000000000002', null, '{}'::uuid[], null, null) $q$,
   '«Давний» специалист выдаёт ДЗ второму ребёнку — clinical_teacher_sees не ограничен сроком (0036 Р3)');
 reset role;
+select public.tests_claims(null, null);
 
 select is(
   (select count(*)::int from public.notification_homework_recipients(
@@ -222,6 +225,7 @@ select throws_ok(
   '42501', null,
   'event_messages под живой сессией отбивается — доставка идёт только от bot_worker без JWT');
 reset role;
+select public.tests_claims(null, null);
 
 
 -- Свежесть на доставке: submitted устаревает, assigned — нет (Р4) -----------------------------------
@@ -271,6 +275,7 @@ select lives_ok(
         'Отзыв специалиста') $q$,
   'Специалист проверяет сданное задание');
 reset role;
+select public.tests_claims(null, null);
 
 select is(
   (select count(*)::int from public.events where type = 'homework.reviewed'),
@@ -305,6 +310,7 @@ select is(
     where student_id = '8eeeeeee-0000-0000-0000-000000000001' and lesson_id = '8fffffff-0000-0000-0000-000000000001'),
   'Отзыв специалиста', 'Отзыв не перезаписан вторым вызовом');
 reset role;
+select public.tests_claims(null, null);
 
 
 -- Событие мертво: задание архивировано после эмиссии (Б4) -------------------------------------------
@@ -313,6 +319,7 @@ select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000
 set local role authenticated;
 select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], null, null);
 reset role;
+select public.tests_claims(null, null);
 
 update public.homework set deleted_at = now()
  where student_id = '8eeeeeee-0000-0000-0000-000000000001'
