@@ -12,7 +12,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(13);
+select plan(15);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -85,8 +85,20 @@ select set_eq(
   'Ровно пять политик — attendance_parent_read снята и не вернулась'
 );
 
+-- Имена политик не единственная защита: расширение qual у существующей
+-- политики (например attendance_teacher_read до my_role() in ('teacher',
+-- 'parent')) оставило бы набор имён прежним. Ловит текст условия, а не
+-- только факт наличия политики.
+select is(
+  (select count(*)::int from pg_policies
+    where schemaname = 'public' and tablename = 'attendance' and qual like '%parent%'),
+  0, 'Ни одна политика attendance не упоминает parent в условии');
 
--- Фикстура доказана непустой — иначе «0 строк у родителя» ничего не доказывает --------------------
+
+-- Фикстура доказана непустой — иначе «0 строк у родителя» ничего не доказывает.
+-- Выполняется от postgres (до первого set local role), RLS тут ни при
+-- чём: это проверка самой фикстуры, а не прав владельца — его права под
+-- RLS проверяются отдельно, ниже.
 
 select is(
   (select count(*)::int from public.attendance where student_id = '7eeeeeee-0000-0000-0000-000000000001'),
@@ -118,6 +130,14 @@ select throws_ok(
   '42501', null,
   'Запись родителю по-прежнему закрыта — «нет чтения» не превратилось в «нет и проверки записи»');
 
+-- Грант update(comment) у authenticated не тронут (0009/0010) — родителя
+-- держит только RLS. RLS на update не бросает, а фильтрует строки: без
+-- отдельной проверки такой update молча тронул бы 0 строк и выглядел бы
+-- «успешным». Проверяем результатом, а не исключением — throws_ok здесь
+-- не тот механизм (тот же урок, что правка exercise_library в 0040).
+update public.attendance set comment = 'КАНАРЕЙКА-ОТ-РОДИТЕЛЯ'
+ where student_id = '7eeeeeee-0000-0000-0000-000000000001';
+
 select is(
   (select count(*)::int from public.student_attendance_brief(
      '7eeeeeee-0000-0000-0000-000000000001', (now() - interval '1 day')::date, (now() + interval '1 day')::date)),
@@ -147,6 +167,11 @@ select is(
   'Владелец видит отметку как прежде');
 reset role;
 
+select is(
+  (select comment from public.attendance where student_id = '7eeeeeee-0000-0000-0000-000000000001'),
+  'КАНАРЕЙКА-МАМА-ОПОЗДАЛА',
+  'Update родителя не изменил ни строки: комментарий тот же, что был');
+
 select public.tests_claims('72222222-2222-2222-2222-222222222222','7ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select is(
@@ -166,10 +191,11 @@ reset role;
 
 select public.tests_claims('77777777-7777-7777-7777-777777777777','7ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
-select ok(
-  (select count(*)::int from public.student_balance
-    where student_id = '7eeeeeee-0000-0000-0000-000000000001') = 1,
-  'student_balance родителю по-прежнему отвечает: долг считается definer-функцией (security_invoker вью поверх неё), не прямым чтением attendance');
+select is(
+  (select debt_tiyin from public.student_balance
+    where student_id = '7eeeeeee-0000-0000-0000-000000000001'),
+  70000,
+  'Долг родителю по-прежнему считает student_debts (definer, обходит RLS), а не прямое чтение attendance — 70000 тыйын за отмеченное занятие без абонемента');
 reset role;
 
 select * from finish();
