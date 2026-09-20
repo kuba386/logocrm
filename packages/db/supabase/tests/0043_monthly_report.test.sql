@@ -13,7 +13,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(42);
+select plan(41);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -218,7 +218,7 @@ reset role;
 select public.tests_claims('67777777-7777-7777-7777-777777777777','6ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select ok(
-  (public.student_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01') ->> 'lessons_total') = '2',
+  (public.student_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01') ->> 'lessons_total') = '3',
   'Родитель своего ребёнка отчёт читает');
 select throws_ok(
   $q$ select public.send_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01') $q$,
@@ -263,9 +263,19 @@ select throws_ok(
 
 -- Отправка и повтор -------------------------------------------------------------------------------
 
+-- Первой отправку делает специалист: повтор ему запрещён, поэтому его
+-- положительный путь проверяется только здесь. Без этого реализация,
+-- отказывающая ВСЕМ специалистам, прошла бы весь файл.
+reset role;
+select public.tests_claims('64444444-4444-4444-4444-444444444444','6ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
 select lives_ok(
   $q$ select public.send_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01','От специалиста: молодцы') $q$,
-  'Владелец отправляет отчёт');
+  'Специалист с занятиями в этом месяце отправляет отчёт');
+reset role;
+
+select public.tests_claims('61111111-1111-1111-1111-111111111111','6ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
 
 select is(
   (select sent_count from public.monthly_reports where student_id = '6eeeeeee-0000-0000-0000-000000000001'),
@@ -276,7 +286,7 @@ select is(
   1, 'Событие ровно одно');
 
 select ok(
-  (select summary_text like '%Занятий: 2, пропусков: 0%' from public.monthly_reports
+  (select summary_text like '%Занятий: 3, пропусков: 0%' from public.monthly_reports
     where student_id = '6eeeeeee-0000-0000-0000-000000000001'),
   'Снимок текста заморожен в реестре');
 
@@ -295,8 +305,8 @@ select is(
   1, 'Второго события не появилось');
 
 select lives_ok(
-  $q$ select public.send_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01', null, true) $q$,
-  'С явным подтверждением отправка повторяется');
+  $q$ select public.send_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01','Летом — по карточкам', true) $q$,
+  'Администрация повторяет с явным подтверждением и меняет комментарий');
 
 select is(
   (select sent_count from public.monthly_reports where student_id = '6eeeeeee-0000-0000-0000-000000000001'),
@@ -322,14 +332,7 @@ select is(
   2, 'Шаблона два: родитель без Telegram иначе не получил бы ничего');
 
 
--- Положительный путь специалиста и ветка доставки ---------------------------------------------------
-
-select public.tests_claims('64444444-4444-4444-4444-444444444444','6ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select lives_ok(
-  $q$ select public.send_monthly_report('6eeeeeee-0000-0000-0000-000000000001','2026-09-01', 'Летом — по карточкам', true) $q$,
-  'Специалист с занятиями в этом месяце отправляет — иначе реализация, отказывающая всем, прошла бы тест');
-reset role;
+-- Ветка доставки и снимок ---------------------------------------------------------------------------
 
 select public.tests_claims('61111111-1111-1111-1111-111111111111','6ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
