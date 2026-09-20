@@ -556,11 +556,23 @@ create unique index if not exists message_templates_default_key
   nulls not distinct
   where deleted_at is null;
 
-insert into public.message_templates (center_id, event_type, channel, text) values
-  (null, 'report.monthly_ready', 'telegram', '{summary}'),
-  (null, 'report.monthly_ready', 'whatsapp_link',
-   'Здравствуйте! Отчёт за {month} по {child} готов — расскажем на занятии или пришлём в приложении.')
-on conflict (center_id, event_type, channel) where deleted_at is null do nothing;
+-- Вставка через not exists, а не on conflict: вывод индекса с nulls not
+-- distinct у частичного индекса Postgres не принимает (42P10), а строки
+-- здесь платформенные — center_id пуст, и сравнение с ним требует is null.
+insert into public.message_templates (center_id, event_type, channel, text)
+select v.center_id, v.event_type, v.channel, v.text
+  from (values
+    (null::uuid, 'report.monthly_ready', 'telegram', '{summary}'),
+    (null::uuid, 'report.monthly_ready', 'whatsapp_link',
+     'Здравствуйте! Отчёт за {month} по {child} готов — расскажем на занятии или пришлём в приложении.')
+  ) as v(center_id, event_type, channel, text)
+ where not exists (
+   select 1 from public.message_templates m
+    where m.center_id is null
+      and m.event_type = v.event_type
+      and m.channel = v.channel
+      and m.deleted_at is null
+ );
 
 
 -- Переиздание целиком: у event_messages нельзя изменить тело через
