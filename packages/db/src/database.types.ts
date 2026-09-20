@@ -2027,6 +2027,86 @@ export type Database = {
           },
         ]
       }
+      monthly_reports: {
+        Row: {
+          center_id: string
+          first_sent_at: string | null
+          generated_at: string
+          generated_by: string | null
+          id: string
+          last_event_id: number | null
+          last_sent_at: string | null
+          period_month: string
+          queued_at: string | null
+          sent_count: number
+          stats: Json
+          student_id: string
+          summary_text: string | null
+          teacher_comment: string | null
+        }
+        Insert: {
+          center_id: string
+          first_sent_at?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          last_event_id?: number | null
+          last_sent_at?: string | null
+          period_month: string
+          queued_at?: string | null
+          sent_count?: number
+          stats?: Json
+          student_id: string
+          summary_text?: string | null
+          teacher_comment?: string | null
+        }
+        Update: {
+          center_id?: string
+          first_sent_at?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          last_event_id?: number | null
+          last_sent_at?: string | null
+          period_month?: string
+          queued_at?: string | null
+          sent_count?: number
+          stats?: Json
+          student_id?: string
+          summary_text?: string | null
+          teacher_comment?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_reports_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_reports_last_event_id_fkey"
+            columns: ["last_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_reports_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "monthly_reports_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       notification_event_types: {
         Row: {
           description: string
@@ -3996,6 +4076,15 @@ export type Database = {
           subscription_id: string
         }[]
       }
+      send_monthly_report: {
+        Args: {
+          p_comment?: string
+          p_force?: boolean
+          p_month: string
+          p_student_id: string
+        }
+        Returns: Json
+      }
       series_dates: {
         Args: { p: Json }
         Returns: {
@@ -4013,6 +4102,14 @@ export type Database = {
         Returns: undefined
       }
       slugify: { Args: { p_text: string }; Returns: string }
+      student_attendance_brief: {
+        Args: { p_from: string; p_student_id: string; p_to: string }
+        Returns: {
+          counts_absence: boolean
+          lesson_at: string
+          status_name: string
+        }[]
+      }
       student_balance_pick: {
         Args: { p_student_id: string }
         Returns: {
@@ -4038,6 +4135,17 @@ export type Database = {
           teacher_name: string
         }[]
       }
+      student_goal_dynamics_brief: {
+        Args: { p_from: string; p_student_id: string; p_to: string }
+        Returns: {
+          goal_id: string
+          points: number
+          score_first: number
+          score_last: number
+          stage_title: string
+          title: string
+        }[]
+      }
       student_goals_brief: {
         Args: { p_student_id: string }
         Returns: {
@@ -4051,6 +4159,10 @@ export type Database = {
           target_date: string
           title: string
         }[]
+      }
+      student_monthly_report: {
+        Args: { p_month: string; p_student_id: string }
+        Returns: Json
       }
       student_notes_brief: {
         Args: { p_student_id: string }
