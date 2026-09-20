@@ -42,6 +42,8 @@ export type Update = {
     video_note?: unknown
     document?: unknown
     video?: unknown
+    photo?: unknown
+    sticker?: unknown
   }
   callback_query?: { id: string; data?: string; message?: { chat: { id: number } } }
 }
