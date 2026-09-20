@@ -115,7 +115,7 @@ select public.tests_claims(null, null);
 select is(
   (select recipient_user_id from public.event_messages(
      (select id from public.events where type = 'homework.assigned'))),
-  '81111111-1111-1111-1111-111111111111'::uuid,
+  '87777777-7777-7777-7777-777777777777'::uuid,
   'homework.assigned доставлен родителю через notification_targets, как остальные student-события');
 
 select ok(
@@ -217,11 +217,15 @@ select is(
 
 -- Б1: доставка обязана работать без сессии, а не по сессии специалиста ------------------------------
 
+-- id событий берём заранее, вне живой сессии: у events нет select для
+-- authenticated, и внутри throws_ok подзапрос вернул бы NULL, а не саму
+-- дыру, которую здесь проверяем.
+select id as hw_assigned_event_id from public.events where type = 'homework.assigned' limit 1 \gset
+
 select public.tests_claims('84444444-4444-4444-4444-444444444444','8ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  format($q$ select public.event_messages(%s) $q$,
-    (select id from public.events where type = 'homework.assigned' limit 1)),
+  format($q$ select public.event_messages(%s) $q$, :'hw_assigned_event_id'),
   '42501', null,
   'event_messages под живой сессией отбивается — доставка идёт только от bot_worker без JWT');
 reset role;
