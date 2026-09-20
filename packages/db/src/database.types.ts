@@ -9,6 +9,105 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_jobs: {
+        Row: {
+          attempts: number
+          center_id: string
+          event_id: number
+          finished_at: string | null
+          last_error: string | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          center_id: string
+          event_id: number
+          finished_at?: string | null
+          last_error?: string | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          center_id?: string
+          event_id?: number
+          finished_at?: string | null
+          last_error?: string | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_jobs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_jobs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage: {
+        Row: {
+          center_id: string
+          cost_tiyin: number
+          created_at: string
+          event_id: number | null
+          id: string
+          kind: string
+          model: string | null
+          rate_note: string | null
+          tokens_in: number
+          tokens_out: number
+        }
+        Insert: {
+          center_id: string
+          cost_tiyin?: number
+          created_at?: string
+          event_id?: number | null
+          id?: string
+          kind: string
+          model?: string | null
+          rate_note?: string | null
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Update: {
+          center_id?: string
+          cost_tiyin?: number
+          created_at?: string
+          event_id?: number | null
+          id?: string
+          kind?: string
+          model?: string | null
+          rate_note?: string | null
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           center_id: string
@@ -1556,6 +1655,80 @@ export type Database = {
             columns: ["lesson_id", "center_id"]
             isOneToOne: false
             referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      lesson_voice_requests: {
+        Row: {
+          armed_at: string | null
+          center_id: string
+          chat_id: number | null
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          lesson_id: string
+          requested_by: string
+          student_id: string
+          teacher_id: string | null
+          token: string
+        }
+        Insert: {
+          armed_at?: string | null
+          center_id: string
+          chat_id?: number | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          lesson_id: string
+          requested_by: string
+          student_id: string
+          teacher_id?: string | null
+          token: string
+        }
+        Update: {
+          armed_at?: string | null
+          center_id?: string
+          chat_id?: number | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          lesson_id?: string
+          requested_by?: string
+          student_id?: string
+          teacher_id?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_voice_requests_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_voice_requests_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_voice_requests_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_voice_requests_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -3117,6 +3290,38 @@ export type Database = {
       accept_invitation: { Args: { p_token: string }; Returns: string }
       ack_events: { Args: { p_ids: number[] }; Returns: number }
       age_years: { Args: { p_birth_date: string }; Returns: number }
+      ai_job_begin: { Args: { p_event_id: number }; Returns: Json }
+      ai_job_fail: {
+        Args: { p_event_id: number; p_reason: string }
+        Returns: undefined
+      }
+      ai_job_finish: { Args: { p_event_id: number }; Returns: undefined }
+      ai_usage_record: {
+        Args: {
+          p_cost_tiyin: number
+          p_event_id: number
+          p_kind: string
+          p_model: string
+          p_rate_note?: string
+          p_tokens_in: number
+          p_tokens_out: number
+        }
+        Returns: undefined
+      }
+      ai_usage_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          calls: number
+          cost_tiyin: number
+          kind: string
+          tokens_in: number
+          tokens_out: number
+        }[]
+      }
+      ai_write_lesson_note: {
+        Args: { p: Json; p_event_id: number }
+        Returns: Json
+      }
       approve_lesson_note: { Args: { p_id: string }; Returns: undefined }
       approve_salary: {
         Args: { p_month: string; p_teacher_id: string }
@@ -3133,6 +3338,10 @@ export type Database = {
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       archive_teacher: { Args: { p_id: string }; Returns: undefined }
+      arm_voice_request: {
+        Args: { p_chat_id: number; p_token: string }
+        Returns: Json
+      }
       assign_homework: {
         Args: {
           p_conduct_key?: string
@@ -3611,6 +3820,14 @@ export type Database = {
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
       repair_center_scoped_refs: { Args: never; Returns: undefined }
+      report_voice_note: {
+        Args: { p_chat_id: number; p_duration?: number; p_file_id: string }
+        Returns: Json
+      }
+      request_voice_note: {
+        Args: { p_lesson_id: string; p_student_id: string }
+        Returns: string
+      }
       reschedule_lesson: {
         Args: { p_ends_at: string; p_lesson_id: string; p_starts_at: string }
         Returns: undefined
