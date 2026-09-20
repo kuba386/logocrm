@@ -84,7 +84,19 @@ create index if not exists lesson_voice_requests_chat_idx
 drop trigger if exists lesson_voice_requests_audit on public.lesson_voice_requests;
 
 
--- 2. Реестр расхода: идемпотентность --------------------------------------------------------------
+-- 2. Парный уникальный ключ для составного FK ------------------------------------------------------
+
+-- 0036 дал lesson_notes только первичный ключ по id: составные FK на неё
+-- ещё никто не строил. Конвенция 0022 требует пару (id, center_id) —
+-- без неё ссылка ниже не создаётся вовсе (42830), а без ссылки предложение
+-- оценки могло бы указывать на заметку чужого центра.
+alter table public.lesson_notes
+  drop constraint if exists lesson_notes_id_center_key;
+alter table public.lesson_notes
+  add constraint lesson_notes_id_center_key unique (id, center_id);
+
+
+-- 3. Реестр расхода: идемпотентность --------------------------------------------------------------
 
 -- Повтор вызова из n8n (таймаут на ответе PostgREST при прошедшей записи)
 -- иначе кладёт вторую строку на тот же вызов API. Законная вторая строка —
