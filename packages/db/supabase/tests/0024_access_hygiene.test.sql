@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(33);
+select plan(34);
 
 
 -- 1-9. Заборы по каталогу ------------------------------------------------------------
@@ -59,8 +59,22 @@ select ok(
        and not has_table_privilege('authenticated', c.oid, 'UPDATE'))
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
-      and c.relname in ('lesson_participants', 'audit_log', 'events', 'memberships')),
+      and c.relname in ('lesson_participants', 'audit_log', 'events', 'memberships',
+                        'ai_usage')),
   'Денормализованные и служебные таблицы — только чтение'
+);
+-- 0041: токен диктовки и очередь работ ИИ не видны прикладным ролям вовсе —
+-- ни select. Токен возвращается один раз из RPC (как telegram_link_codes),
+-- очередь ИИ это внутренняя механика воркера.
+select ok(
+  (select bool_and(
+       not has_table_privilege('authenticated', c.oid, 'SELECT')
+       and not has_table_privilege('authenticated', c.oid, 'INSERT')
+       and not has_table_privilege('authenticated', c.oid, 'UPDATE'))
+     from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname in ('lesson_voice_requests', 'ai_jobs')),
+  'lesson_voice_requests и ai_jobs закрыты от authenticated целиком (0041)'
 );
 select ok(
   has_table_privilege('service_role', 'public.students', 'DELETE'),

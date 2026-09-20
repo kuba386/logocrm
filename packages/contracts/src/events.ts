@@ -651,6 +651,23 @@ export const lessonCompletedSchema = z.object({
   payload: lessonRef,
 })
 
+/**
+ * Специалист надиктовал занятие в бот (0041). Тело нарочно узкое: занятие,
+ * ребёнок и заказчик читаются из lesson_voice_requests по voice_request_id,
+ * а не передаются здесь — подменить их тогда нечем, и chat_id специалиста
+ * не оседает в events.payload, который читают все owner/admin центра.
+ * file_id вычищается из payload после обработки (ai_job_finish).
+ */
+export const lessonVoiceReceivedSchema = z.object({
+  type: z.literal('lesson.voice_received'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    voice_request_id: z.string().uuid(),
+    file_id: z.string().optional(),
+    duration: z.number().int().nullable().optional(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -711,6 +728,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   homeworkSubmittedSchema,
   lessonNoteApprovedSchema,
   lessonCompletedSchema,
+  lessonVoiceReceivedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
