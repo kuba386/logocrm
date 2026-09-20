@@ -351,9 +351,14 @@ select is(
   (select count(*)::int from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
   1, 'Прогресс по цели остался один — повтор не добавил второй точки');
 
+-- Утверждение — действие человека: клеймы воркера тут не годятся.
+select public.tests_claims('54444444-4444-4444-4444-444444444444','5ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
 select lives_ok(
   $q$ select public.approve_lesson_note((select id from public.lesson_notes where source = 'voice')) $q$,
   'Повторное утверждение — холостой ход, а не ошибка');
+reset role;
+select public.tests_claims(null, null);
 
 select is(
   (select count(*)::int from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
