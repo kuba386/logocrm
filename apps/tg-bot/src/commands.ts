@@ -33,7 +33,34 @@ function time(iso: string): string {
   })
 }
 
+/**
+ * Голосовое длиннее этого не берём. Bot API не отдаёт файлы больше 20 МБ, у
+ * Whisper предел 25 МБ — длинная диктовка упала бы на скачивании, то есть
+ * уже после гашения токена и записи события. Отбить в боте дешевле: токен
+ * остаётся живым, специалист просто говорит короче.
+ */
+const MAX_VOICE_SECONDS = 15 * 60
+
+/** Префикс deep-link «записать резюме»: t.me/<bot>?start=voice_<токен>. */
+const VOICE_PREFIX = 'voice_'
+
 export async function handleStart(chatId: number, code: string | undefined): Promise<void> {
+  // Ветвление до link_telegram: иначе токен диктовки уходит в привязку
+  // аккаунта, и специалист по собственной кнопке получает «код
+  // недействителен».
+  if (code?.startsWith(VOICE_PREFIX)) {
+    const armed = await rpc<{ student_name: string | null }>('arm_voice_request', {
+      p_token: code.slice(VOICE_PREFIX.length),
+      p_chat_id: chatId,
+    })
+    await sendMessage(
+      chatId,
+      `Записываю резюме про ${armed.student_name ?? 'ребёнка'}. ` +
+        'Отправьте голосовое сообщение одним куском.',
+    )
+    return
+  }
+
   if (!code) {
     await sendMessage(
       chatId,
@@ -105,4 +132,34 @@ export async function handleConfirm(chatId: number, payload: string): Promise<st
   } catch (error) {
     return error instanceof RpcError ? error.message : 'Не удалось подтвердить'
   }
+}
+
+
+export async function handleVoice(
+  chatId: number,
+  fileId: string,
+  duration: number | undefined,
+): Promise<void> {
+  if (duration !== undefined && duration > MAX_VOICE_SECONDS) {
+    await sendMessage(
+      chatId,
+      `Голосовое длиннее ${MAX_VOICE_SECONDS / 60} минут я не обработаю — ` +
+        'разбейте на части и отправьте первую. Запись всё ещё ждёт.',
+    )
+    return
+  }
+
+  // Гашение токена и создание задачи — одной транзакцией в базе (0041 Р10):
+  // повторный апдейт от Telegram просто не найдёт активной записи.
+  const accepted = await rpc<{ student_name: string | null }>('report_voice_note', {
+    p_chat_id: chatId,
+    p_file_id: fileId,
+    p_duration: duration ?? null,
+  })
+
+  await sendMessage(
+    chatId,
+    `Принял запись про ${accepted.student_name ?? 'ребёнка'}. ` +
+      'Черновик придёт сюда же, обычно меньше чем за минуту.',
+  )
 }

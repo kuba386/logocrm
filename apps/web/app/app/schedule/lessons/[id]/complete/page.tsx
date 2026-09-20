@@ -203,6 +203,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
         students={students_}
         attendanceStatuses={(attendanceStatuses ?? []).map((s) => ({ code: s.code, name: s.name }))}
         exercises={exerciseOptions}
+        botName={process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? null}
       />
     </div>
   )

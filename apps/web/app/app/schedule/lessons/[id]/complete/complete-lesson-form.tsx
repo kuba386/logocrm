@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
-import { completeLesson, type CompleteLessonState } from './actions'
+import { completeLesson, requestVoiceNote, type CompleteLessonState } from './actions'
 
 export type StudentEntry = {
   id: string
@@ -69,13 +69,38 @@ export function CompleteLessonForm({
   students,
   attendanceStatuses,
   exercises,
+  botName,
 }: {
   lessonId: string
   students: StudentEntry[]
   attendanceStatuses: { code: string; name: string }[]
   exercises: ExerciseOption[]
+  /** Без имени бота deep-link не собрать — кнопка просто не рисуется. */
+  botName: string | null
 }) {
   const router = useRouter()
+  const [voiceBusy, setVoiceBusy] = useState<string | null>(null)
+  const [voiceNotice, setVoiceNotice] = useState<{ studentId: string; text: string } | null>(null)
+
+  async function startVoice(studentId: string, fullName: string) {
+    setVoiceBusy(studentId)
+    setVoiceNotice(null)
+    const result = await requestVoiceNote(lessonId, studentId)
+    setVoiceBusy(null)
+
+    if ('message' in result) {
+      setVoiceNotice({ studentId, text: result.message })
+      return
+    }
+
+    // Переход в бот, а не показ кода: одно касание с телефона, тем же
+    // приёмом, что привязка аккаунта.
+    window.open(`https://t.me/${botName}?start=voice_${result.token}`, '_blank', 'noopener')
+    setVoiceNotice({
+      studentId,
+      text: `Открыл бот. Отправьте туда голосовое про ${fullName} — черновик придёт в переписку.`,
+    })
+  }
   const [draft, setDraft] = useState<Draft>(() => buildInitialDraft(students))
   const [loadedFromStorage, setLoadedFromStorage] = useState(false)
   const [result, setResult] = useState<CompleteLessonState>(initial)
@@ -293,13 +318,28 @@ export function CompleteLessonForm({
 
               {/* 4. Заметка -------------------------------------------------------- */}
               <div className="space-y-1">
-                <Label htmlFor={`note-${student.id}`}>Заметка занятия</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor={`note-${student.id}`}>Заметка занятия</Label>
+                  {botName ? (
+                    <button
+                      type="button"
+                      className="text-sm underline underline-offset-2 disabled:opacity-50"
+                      disabled={voiceBusy === student.id}
+                      onClick={() => void startVoice(student.id, student.fullName)}
+                    >
+                      {voiceBusy === student.id ? 'Готовлю…' : 'Записать голосом'}
+                    </button>
+                  ) : null}
+                </div>
                 <Textarea
                   id={`note-${student.id}`}
                   placeholder="Что делали, как прошло — родителю"
                   value={d.noteText}
                   onChange={(e) => update(student.id, { noteText: e.target.value })}
                 />
+                {voiceNotice && voiceNotice.studentId === student.id ? (
+                  <p className="text-sm text-muted-foreground">{voiceNotice.text}</p>
+                ) : null}
               </div>
 
               {/* 5. ДЗ -------------------------------------------------------------- */}
