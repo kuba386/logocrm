@@ -668,6 +668,21 @@ export const lessonVoiceReceivedSchema = z.object({
   }),
 })
 
+/**
+ * Обработка голосового не удалась (0041). Без этого события провал не видит
+ * никто: очередь работ закрыта грантами, а до штатного event.failed дело не
+ * доходит — работа становится терминальной сразу. Доставку в чат
+ * специалиста делает n8n тем же путём, что и успех.
+ */
+export const lessonVoiceFailedSchema = z.object({
+  type: z.literal('lesson.voice_failed'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    voice_request_id: z.string().uuid().nullable().optional(),
+    reason: z.string().nullable().optional(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -729,6 +744,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   lessonNoteApprovedSchema,
   lessonCompletedSchema,
   lessonVoiceReceivedSchema,
+  lessonVoiceFailedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

@@ -26,8 +26,8 @@ select set_eq(
   $$ values ('attendance_statuses'), ('invitations'), ('message_templates'),
             ('goal_stages'), ('diagnostics'), ('goals'), ('goal_progress'),
             ('exercise_library'), ('homework'), ('homework_exercises'),
-            ('lesson_notes') $$,
-  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations, message_templates (0034 — настройка центра) и восемь клинических таблиц (0036 — ни стойке, ни бухгалтеру не положены, FEATURE_MATRIX сноска ⁵); новая таблица роняет'
+            ('lesson_notes'), ('lesson_note_goal_scores') $$,
+  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations, message_templates (0034 — настройка центра) и девять клинических таблиц (0036 — ни стойке, ни бухгалтеру не положены, FEATURE_MATRIX сноска ⁵); новая таблица роняет'
 );
 select is(
   (select count(*)::int from pg_policies where schemaname = 'public' and policyname like 'tenant_%' and cmd = 'DELETE'),

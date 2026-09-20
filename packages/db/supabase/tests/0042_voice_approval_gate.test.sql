@@ -1,4 +1,7 @@
--- pgTAP: голосовое резюме занятия (0041).
+-- pgTAP: голосовое резюме занятия после исправления блокеров (0042).
+--
+-- Файл заменяет 0041-й набор: модель изменилась — ИИ больше не пишет
+-- goal_progress, а предлагает оценки, которые переносит человек.
 --
 -- Главное здесь — деньги и права. Контур записи работает без сессии
 -- специалиста, поэтому каждая функция проверяется на то, что живая сессия
@@ -15,7 +18,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(22);
+select plan(45);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -30,6 +33,7 @@ values
   ('00000000-0000-0000-0000-000000000000','51111111-1111-1111-1111-111111111111','authenticated','authenticated','owner-voice@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','54444444-4444-4444-4444-444444444444','authenticated','authenticated','teacher-voice@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','55555555-5555-5555-5555-555555555555','authenticated','authenticated','teacher-other-voice@test.kg','','','','','','','',''),
+  ('00000000-0000-0000-0000-000000000000','57777777-7777-7777-7777-777777777777','authenticated','authenticated','parent-voice@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','59999999-9999-9999-9999-999999999999','authenticated','authenticated','owner-b-voice@test.kg','','','','','','','','');
 
 -- Центр Б с поясом, отличным от бишкекского: дата прогресса обязана
@@ -52,6 +56,7 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
   ('51111111-1111-1111-1111-111111111111','5ccccccc-0000-0000-0000-00000000000a','owner',   null, null),
   ('54444444-4444-4444-4444-444444444444','5ccccccc-0000-0000-0000-00000000000a','teacher','5aaaaaaa-0000-0000-0000-000000000001', null),
   ('55555555-5555-5555-5555-555555555555','5ccccccc-0000-0000-0000-00000000000a','teacher','5aaaaaaa-0000-0000-0000-000000000002', null),
+  ('57777777-7777-7777-7777-777777777777','5ccccccc-0000-0000-0000-00000000000a','parent',  null, '5ddddddd-0000-0000-0000-000000000001'),
   ('59999999-9999-9999-9999-999999999999','5ccccccc-0000-0000-0000-00000000000b','owner',   null, null);
 
 -- Двое детей на одном занятии: групповое — там и живёт риск записать
@@ -192,12 +197,173 @@ select throws_ok(
   'Второе голосовое подряд получает человеческий ответ, а не второе событие');
 
 
--- Захват работы и запись черновика — в tests/0042.
---
--- 0042 меняет модель: ИИ больше не пишет goal_progress, а предлагает
--- оценки, которые переносит человек при утверждении. Ассерты, фиксировавшие
--- прежнее поведение, переехали туда целиком, чтобы не держать два описания
--- одного и того же в разных файлах.
+-- Захват работы: повтор не платит ------------------------------------------------------------------------
+
+update public.events set claimed_at = now() where type = 'lesson.voice_received';
+
+select ok(
+  (select public.ai_job_begin(id) ->> 'file_id' = 'file-abc'
+     from public.events where type = 'lesson.voice_received'),
+  'ai_job_begin отдаёт файл и занимает работу');
+
+select ok(
+  (select public.ai_job_begin(id) is not null
+     from public.events where type = 'lesson.voice_received'),
+  'Повтор при running разрешён — это возврат после падения, не вторая оплата');
+
+select lives_ok(
+  $q$ select public.ai_job_fail((select id from public.events where type = 'lesson.voice_received'), 'тест') $q$,
+  'Детерминированный отказ ставит терминальный статус');
+
+select ok(
+  (select public.ai_job_begin(id) is null
+     from public.events where type = 'lesson.voice_received'),
+  'После ai_job_fail работа не начинается заново — повтор не платит (Р4)');
+
+
+-- Запись черновика: автор, цели, деньги --------------------------------------------------------------------
+
+-- Новая диктовка, чтобы писать по живому запросу.
+select public.tests_claims('54444444-4444-4444-4444-444444444444','5ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+select public.request_voice_note('5fffffff-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000001');
+reset role;
+
+select public.tests_claims(null, null);
+select public.arm_voice_request(
+  (select token from public.lesson_voice_requests where consumed_at is null), 777001);
+select public.report_voice_note(777001, 'file-two', 30);
+update public.events set claimed_at = now() where claimed_at is null and type = 'lesson.voice_received';
+
+select throws_ok(
+  format($q$ select public.ai_write_lesson_note(%s, '{"soap":{},"nonsense":1}'::jsonb) $q$,
+    (select max(id) from public.events where type = 'lesson.voice_received')),
+  '22023', null,
+  'Неизвестный ключ в ответе модели — явная ошибка с его именем');
+
+select throws_ok(
+  format($q$ select public.ai_write_lesson_note(%s,
+            jsonb_build_object('goals', jsonb_build_array(
+              jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000002','score',50)))) $q$,
+    (select max(id) from public.events where type = 'lesson.voice_received')),
+  '42704', null,
+  'Цель ДРУГОГО ребёнка того же группового занятия — отказ (Р5)');
+
+select is(
+  (select count(*)::int from public.lesson_note_goal_scores
+    where goal_id = '5bbb0000-0000-0000-0000-000000000002'),
+  0, 'И ни одного предложения по чужой цели не появилось');
+
+-- Кривой ответ модели не рушит оплаченную заметку: цель пропускается.
+select is(
+  (select public.ai_write_lesson_note(
+            (select max(id) from public.events where type = 'lesson.voice_received'),
+            jsonb_build_object('parent_summary','черновик',
+              'goals', jsonb_build_array(
+                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',500))))
+          ->> 'progress_written'),
+  '0',
+  'Оценка вне 0–100 пропускается, а не роняет запись (В8)');
+
+select ok(
+  (select public.ai_write_lesson_note(
+            (select max(id) from public.events where type = 'lesson.voice_received'),
+            jsonb_build_object('goals', jsonb_build_array(
+              jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',7.6))))
+          ->> 'progress_written' = '1'),
+  'Дробная оценка округляется, а не отбрасывается');
+
+select lives_ok(
+  format($q$ select public.ai_write_lesson_note(%s,
+            jsonb_build_object(
+              'soap', '{"plan":"слоги"}'::jsonb,
+              'parent_summary', 'Сегодня хорошо получались слоги.',
+              'raw_transcript', 'расшифровка',
+              'model', 'claude-sonnet-5',
+              'tokens_in', 1200, 'tokens_out', 300, 'cost_tiyin', 450,
+              'goals', jsonb_build_array(
+                jsonb_build_object('goal_id','5bbb0000-0000-0000-0000-000000000001','score',60)))) $q$,
+    (select max(id) from public.events where type = 'lesson.voice_received')),
+  'Черновик записан');
+
+select is(
+  (select created_by from public.lesson_notes where source = 'voice'),
+  '54444444-4444-4444-4444-444444444444'::uuid,
+  'Автор черновика — заказчик диктовки, а не NULL (Р2)');
+
+select is(
+  (select status from public.lesson_notes where source = 'voice'),
+  'draft', 'Черновик, а не утверждённая заметка');
+
+
+-- Главное в 7b: оценка модели не доходит до родителя без человека ------------------------------------
+
+select is(
+  (select count(*)::int from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  0, 'До утверждения ИИ не написал в goal_progress ни строки (Б1)');
+
+select is(
+  (select count(*)::int from public.lesson_note_goal_scores
+    where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  1, 'Предложение лежит отдельно и ждёт человека');
+
+-- Родитель видит витрину прогресса — и там пока пусто по этой цели.
+select public.tests_claims('57777777-7777-7777-7777-777777777777','5ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+select is(
+  (select last_score from public.student_goals_brief('5eeeeeee-0000-0000-0000-000000000001')
+    where id = '5bbb0000-0000-0000-0000-000000000001'),
+  null,
+  'Родителю оценка модели не видна: last_score пуст, пока заметку не утвердили');
+reset role;
+
+
+-- САМЫЙ ВАЖНЫЙ: специалист утверждает собственный надиктованный черновик ------------------------------
+
+select public.tests_claims('54444444-4444-4444-4444-444444444444','5ccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+
+select lives_ok(
+  $q$ select public.approve_lesson_note((select id from public.lesson_notes where source = 'voice')) $q$,
+  'Специалист утверждает собственный надиктованный черновик — на этом весь 7b и закрывался бы');
+
+select is(
+  (select status from public.lesson_notes where source = 'voice'),
+  'approved', 'И заметка действительно утверждена');
+reset role;
+
+select is(
+  (select score from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  60, 'Только теперь оценка переехала в прогресс — после человека');
+
+select is(
+  (select date from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  (select (l.starts_at at time zone 'Asia/Bishkek')::date from public.lessons l
+    where l.id = '5fffffff-0000-0000-0000-000000000001'),
+  'Дата прогресса — день занятия в поясе центра, не сегодняшняя дата воркера');
+
+
+-- Идемпотентность ------------------------------------------------------------------------------------------
+
+select public.tests_claims(null, null);
+
+select throws_ok(
+  format($q$ select public.ai_write_lesson_note(%s, '{"parent_summary":"ещё раз"}'::jsonb) $q$,
+    (select max(id) from public.events where type = 'lesson.voice_received')),
+  '23514', null,
+  'В утверждённую заметку ИИ уже не пишет');
+
+select is(
+  (select count(*)::int from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  1, 'Прогресс по цели остался один — повтор не добавил второй точки');
+
+select lives_ok(
+  $q$ select public.approve_lesson_note((select id from public.lesson_notes where source = 'voice')) $q$,
+  'Повторное утверждение — холостой ход, а не ошибка');
+
+select is(
+  (select count(*)::int from public.goal_progress where goal_id = '5bbb0000-0000-0000-0000-000000000001'),
+  1, 'И второй точки от повторного утверждения тоже не появилось');
 
 
 -- Реестр расхода -------------------------------------------------------------------------------------------

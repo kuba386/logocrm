@@ -76,6 +76,7 @@ from unnest(array[
   'public.ai_job_fail(bigint,text)',
   'public.ai_usage_record(bigint,text,text,integer,integer,integer,text)',
   'public.ai_write_lesson_note(bigint,jsonb)',
+  'public.lesson_note_goal_scores_check_student()',
   'public.notification_log_transition()',
   'public.notification_log_subject_required()'
 ]) as func,
