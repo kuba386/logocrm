@@ -72,7 +72,7 @@ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, s
   -- Отменённое занятие с отметкой: отмена задним числом отметку не
   -- убирает (attendance не имеет deleted_at), но в отчёт оно попасть не
   -- должно.
-  ('6fffffff-0000-0000-0000-000000000004','6ccccccc-0000-0000-0000-00000000000a','6aaaaaaa-0000-0000-0000-000000000001','6eeeeeee-0000-0000-0000-000000000001','6bbbbbbb-0000-0000-0000-000000000001','cancelled','2026-09-24 10:00+01','2026-09-24 10:45+01');
+  ('6fffffff-0000-0000-0000-000000000004','6ccccccc-0000-0000-0000-00000000000a','6aaaaaaa-0000-0000-0000-000000000001','6eeeeeee-0000-0000-0000-000000000001','6bbbbbbb-0000-0000-0000-000000000001','done','2026-09-24 10:00+01','2026-09-24 10:45+01');
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -117,6 +117,11 @@ values
    '{"plan":"КАНАРЕЙКА-СОАП"}'::jsonb,'Хорошо поработали над слогами.','approved'),
   ('6ccccccc-0000-0000-0000-00000000000a','6fffffff-0000-0000-0000-000000000002','6eeeeeee-0000-0000-0000-000000000001',
    '6aaaaaaa-0000-0000-0000-000000000001',null,'{}'::jsonb,'КАНАРЕЙКА-ЧЕРНОВИК','draft');
+
+-- Отмена задним числом: отметка уже стоит, и attendance её не теряет —
+-- у него нет deleted_at (0009, сознательно). Ровно поэтому отчёт обязан
+-- фильтровать по статусу занятия сам.
+update public.lessons set status = 'cancelled' where id = '6fffffff-0000-0000-0000-000000000004';
 
 update public.students set deleted_at = now() where id = '6eeeeeee-0000-0000-0000-000000000002';
 
