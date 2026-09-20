@@ -19,6 +19,13 @@ const EVENTS: { type: string; placeholders: string[] }[] = [
   { type: 'installment.due', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'installment.overdue', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}'] },
+  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'] },
+  { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
+  // whatsapp_link для homework.submitted не доставляется — у специалиста
+  // нет своей WhatsApp-кнопки в интерфейсе. Дефолт этого канала намеренно
+  // без {child} (0045 Р8) — не менять на содержательный текст.
+  { type: 'homework.submitted', placeholders: ['{child}'] },
+  { type: 'homework.reviewed', placeholders: ['{child}'] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const

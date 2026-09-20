@@ -123,7 +123,13 @@ describe('контракт не расходится с миграциями', (
           // прозой, и они не являются фактом эмиссии.
           .map((line) => line.split('--')[0] ?? '')
           .flatMap((line) => [
-            ...line.matchAll(/emit_event(?:_unchecked)?\(\s*'([a-z_]+\.[a-z_]+)'/g),
+            // emit_clinical_event (0038) — тот же outbox, что emit_event, но
+            // без проверки членства вызывающего (для триггеров статус-
+            // перехода). Без него в регэкспе события, эмитируемые
+            // триггерами goals/homework/lesson_notes, не попадали бы в
+            // сравнение вовсе — тест был бы зелёным по недосмотру на
+            // событии, у которого нет схемы (0045).
+            ...line.matchAll(/emit_(?:clinical_event|event(?:_unchecked)?)\(\s*'([a-z_]+\.[a-z_]+)'/g),
           ])
           .map((match) => match[1] as string),
       ),

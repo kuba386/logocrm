@@ -276,6 +276,10 @@
     "student.absent_streak": "Пропуски подряд",
     "installment.due": "Платёж по рассрочке сегодня",
     "installment.overdue": "Просроченный платёж",
-    "digest.daily": "Сводка за день"
+    "digest.daily": "Сводка за день",
+    "report.monthly_ready": "Месячный отчёт родителю",
+    "homework.assigned": "Выдано домашнее задание",
+    "homework.submitted": "Сдано домашнее задание",
+    "homework.reviewed": "Проверено домашнее задание"
   }
 }

@@ -633,6 +633,15 @@ export const homeworkSubmittedSchema = z.object({
   }),
 })
 
+/** Специалист проверил задание и оставил отзыв (0045). */
+export const homeworkReviewedSchema = z.object({
+  type: z.literal('homework.reviewed'),
+  payload: centerRef.extend({
+    homework_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
 export const lessonNoteApprovedSchema = z.object({
   type: z.literal('lesson.note_approved'),
   payload: centerRef.extend({
@@ -755,6 +764,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   goalAchievedSchema,
   homeworkAssignedSchema,
   homeworkSubmittedSchema,
+  homeworkReviewedSchema,
   lessonNoteApprovedSchema,
   lessonCompletedSchema,
   lessonVoiceReceivedSchema,
