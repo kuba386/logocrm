@@ -1473,6 +1473,58 @@ export type Database = {
           },
         ]
       }
+      lesson_note_goal_scores: {
+        Row: {
+          center_id: string
+          created_at: string
+          goal_id: string
+          id: string
+          note: string | null
+          note_id: string
+          score: number
+        }
+        Insert: {
+          center_id: string
+          created_at?: string
+          goal_id: string
+          id?: string
+          note?: string | null
+          note_id: string
+          score: number
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          goal_id?: string
+          id?: string
+          note?: string | null
+          note_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_note_goal_scores_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_note_goal_scores_goal_fk"
+            columns: ["goal_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_note_goal_scores_note_fk"
+            columns: ["note_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lesson_notes"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       lesson_notes: {
         Row: {
           approved_at: string | null
@@ -1662,6 +1714,7 @@ export type Database = {
       lesson_voice_requests: {
         Row: {
           armed_at: string | null
+          cancelled_at: string | null
           center_id: string
           chat_id: number | null
           consumed_at: string | null
@@ -1676,6 +1729,7 @@ export type Database = {
         }
         Insert: {
           armed_at?: string | null
+          cancelled_at?: string | null
           center_id: string
           chat_id?: number | null
           consumed_at?: string | null
@@ -1690,6 +1744,7 @@ export type Database = {
         }
         Update: {
           armed_at?: string | null
+          cancelled_at?: string | null
           center_id?: string
           chat_id?: number | null
           consumed_at?: string | null
