@@ -105,21 +105,25 @@ select lives_ok(
   $q$ select public.request_voice_note('5fffffff-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000001') $q$,
   'Ведущий специалист запрашивает диктовку по своему ребёнку');
 
+-- Содержимое таблицы читаем от postgres: прикладной роли она не видна вовсе,
+-- и это ровно то, что проверяет отдельный ассерт в конце файла.
+reset role;
 select is(
   (select count(*)::int from public.lesson_voice_requests
     where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
   1, 'Живой токен ровно один');
 
+set local role authenticated;
 select lives_ok(
   $q$ select public.request_voice_note('5fffffff-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000001') $q$,
   'Повторный запрос проходит — прежний токен при этом гасится (проверка ниже)');
 
+reset role;
 select is(
   (select count(*)::int from public.lesson_voice_requests
     where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
   1, 'Живой токен по-прежнему один: выдача нового погасила прежний (Р9)');
 
-reset role;
 select public.tests_claims('55555555-5555-5555-5555-555555555555','5ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 
