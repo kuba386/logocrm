@@ -683,6 +683,20 @@ export const lessonVoiceFailedSchema = z.object({
   }),
 })
 
+/**
+ * Месячный отчёт родителю поставлен в очередь (0043). Текст заморожен в
+ * событии намеренно: доставка через минуту после правки заметки иначе
+ * дала бы третий вариант чисел, и кто прав — не сказал бы никто.
+ */
+export const reportMonthlyReadySchema = z.object({
+  type: z.literal('report.monthly_ready'),
+  payload: z.object({
+    student_id: z.string().uuid(),
+    period_month: z.string(),
+    summary: z.string(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -745,6 +759,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   lessonCompletedSchema,
   lessonVoiceReceivedSchema,
   lessonVoiceFailedSchema,
+  reportMonthlyReadySchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

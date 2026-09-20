@@ -96,7 +96,8 @@ select matches(
 
 select is(
   (select count(*)::int from public.message_templates where center_id is null and deleted_at is null),
-  14, 'Дефолты платформы (center_id is null) не задеты алтером колонки'
+  (select count(*)::int from public.notification_event_types) * 2,
+  'Дефолты платформы (center_id is null) не задеты алтером колонки'
 );
 
 

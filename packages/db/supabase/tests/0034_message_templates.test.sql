@@ -17,9 +17,13 @@ select plan(32);
 
 -- 1-4. Дефолты платформы и права на них ------------------------------------------------------------
 
+-- Число производное, а не зашитое: каждый новый тип события (0043 и
+-- далее) иначе ронял бы этот ассерт, а трасса указывала бы на файл,
+-- которого нет в диффе.
 select is(
   (select count(*)::int from public.message_templates where center_id is null and deleted_at is null),
-  14, 'Дефолты платформы заведены на семь типов × два канала');
+  (select count(*)::int from public.notification_event_types) * 2,
+  'У каждого типа события есть дефолт платформы на оба канала');
 
 select ok(
   not has_table_privilege('authenticated', 'public.notification_log', 'INSERT')
