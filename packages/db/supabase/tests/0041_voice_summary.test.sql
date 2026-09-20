@@ -110,7 +110,7 @@ select lives_ok(
 reset role;
 select is(
   (select count(*)::int from public.lesson_voice_requests
-    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
+    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null),
   1, 'Живой токен ровно один');
 
 set local role authenticated;
@@ -121,7 +121,7 @@ select lives_ok(
 reset role;
 select is(
   (select count(*)::int from public.lesson_voice_requests
-    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
+    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null),
   1, 'Живой токен по-прежнему один: выдача нового погасила прежний (Р9)');
 
 select public.tests_claims('55555555-5555-5555-5555-555555555555','5ccccccc-0000-0000-0000-00000000000a');
@@ -141,21 +141,21 @@ select public.tests_claims(null, null);
 select throws_ok(
   format($q$ select public.arm_voice_request(%L, 777999) $q$,
     (select token from public.lesson_voice_requests
-      where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null)),
+      where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null)),
   '42501', null,
   'Непривязанный чат не армирует запись — это та самая NULL-ловушка');
 
 select throws_ok(
   format($q$ select public.arm_voice_request(%L, 777002) $q$,
     (select token from public.lesson_voice_requests
-      where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null)),
+      where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null)),
   '42501', null,
   'Чат другого пользователя не армирует чужой токен');
 
 select is(
   (select public.arm_voice_request(token, 777001) ->> 'student_name'
      from public.lesson_voice_requests
-    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
+    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null),
   'Айсулуу',
   'Свой чат армирует и получает имя ребёнка — ответ бота ловит диктовку не про того');
 
@@ -178,7 +178,7 @@ select is(
 
 select is(
   (select count(*)::int from public.lesson_voice_requests
-    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null),
+    where requested_by = '54444444-4444-4444-4444-444444444444' and consumed_at is null and cancelled_at is null),
   0, 'Токен погашен той же транзакцией (Р10)');
 
 select ok(
