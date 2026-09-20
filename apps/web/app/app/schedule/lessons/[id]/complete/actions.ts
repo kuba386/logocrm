@@ -28,3 +28,28 @@ export async function completeLesson(
   revalidatePath(`/app/schedule/lessons/${lessonId}/complete`)
   return { message: '', notice: 'Занятие проведено' }
 }
+
+
+/**
+ * Одноразовый токен для диктовки резюме голосом (0041/0042). Возвращается
+ * один раз и уходит в deep-link бота: кнопка, а не код, который надо
+ * скопировать, — тот же приём, что у привязки Telegram (0033).
+ *
+ * Выдача нового токена гасит прежний, поэтому нажать «Записать голосом» у
+ * двух детей подряд нельзя: активна всегда последняя запись. На групповом
+ * занятии это осознанно — цикл «кнопка → голосовое → кнопка» не даёт
+ * модели решать, про кого из детей была диктовка.
+ */
+export async function requestVoiceNote(
+  lessonId: string,
+  studentId: string,
+): Promise<{ token: string } | AppError> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('request_voice_note', {
+    p_lesson_id: lessonId,
+    p_student_id: studentId,
+  })
+
+  if (error) return toAppError(error, 'Не удалось подготовить запись')
+  return { token: data as unknown as string }
+}

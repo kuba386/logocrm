@@ -28,6 +28,20 @@ export async function answerCallback(id: string, text?: string): Promise<void> {
 }
 
 export type Update = {
-  message?: { chat: { id: number }; text?: string }
+  message?: {
+    chat: { id: number }
+    text?: string
+    /** Голосовое — диктовка резюме занятия (0041/0042). */
+    voice?: { file_id: string; duration?: number }
+    /**
+     * Остальные вложения перечислены не ради обработки, а ради ответа:
+     * специалист, приславший кружок или файл вместо голосового, должен
+     * получить понятный текст, а не молчание.
+     */
+    audio?: unknown
+    video_note?: unknown
+    document?: unknown
+    video?: unknown
+  }
   callback_query?: { id: string; data?: string; message?: { chat: { id: number } } }
 }
