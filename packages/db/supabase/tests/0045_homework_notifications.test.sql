@@ -317,20 +317,20 @@ select public.tests_claims(null, null);
 
 select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
-select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], null, null);
+select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], null, null) as hw_b4_id \gset
 reset role;
 select public.tests_claims(null, null);
 
-update public.homework set deleted_at = now()
- where student_id = '8eeeeeee-0000-0000-0000-000000000001'
-   and created_at = (select max(created_at) from public.homework where student_id = '8eeeeeee-0000-0000-0000-000000000001');
+-- По id, не по max(created_at): вся фикстура в одной транзакции, now()
+-- заморожен на её начало, и у трёх заданий student1 created_at совпадает
+-- день в день — "max" выбрал бы все три, а не только это.
+update public.homework set deleted_at = now() where id = :'hw_b4_id';
 
 select public.tests_claims(null, null);
 select is(
   (select count(*)::int from public.event_messages(
      (select id from public.events where type = 'homework.assigned'
-        and payload ->> 'homework_id' = (select id from public.homework
-          where student_id = '8eeeeeee-0000-0000-0000-000000000001' and deleted_at is not null)::text))),
+        and payload ->> 'homework_id' = :'hw_b4_id'))),
   0, 'Архивированное задание не доставляется — та же дыра, что 0035 чинил для lesson.reminder (Б4)');
 
 
