@@ -171,6 +171,12 @@
 
 ### Безопасность
 
+- `0044_attendance_comment_privacy.sql` — родитель больше не читает
+  свободный текст к отметке посещения: с `attendance` снята
+  `attendance_parent_read` (решение владельца 20.09.2026, тот же класс,
+  что заметки о семье у бухгалтера в 0031). Что родителю нужно, отдаёт
+  `student_attendance_brief()` (0043) — дата, статус, признак пропуска,
+  без `comment`/`price_tiyin`/`subscription_id` физически.
 - `0031_finance_notes_privacy.sql` — бухгалтер больше не читает свободный
   текст о семье и занятии: с `students`, `payers`, `lessons`, `attendance`
   снята `tenant_finance_select` (отменяет Р5 из 0028 по решению владельца
