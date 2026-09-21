@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
-import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS } from '@/lib/goal-trend'
+import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS, type GoalTrend } from '@/lib/goal-trend'
 import { cn } from '@/lib/utils'
 import { completeLesson, requestVoiceNote, type CompleteLessonState } from './actions'
 
@@ -23,7 +23,7 @@ export type StudentEntry = {
     sound: string | null
     stageTitle: string | null
     lastScore: number | null
-    trend: 'regress' | 'stagnant' | 'growth' | 'stable' | null
+    trend: GoalTrend | null
   }[]
   previousNote: { parentSummary: string | null; soapPlan: string | null } | null
   attendanceStatusCode: string | null
