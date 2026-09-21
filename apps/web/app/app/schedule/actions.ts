@@ -303,6 +303,11 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
     )
   }
 
+  // Под parent этот select отдаёт 0 строк по RLS (0044, attendance_parent_read
+  // снята) — сегодня недостижимо: панель отметки не рендерится родителю
+  // (canMarkAttendance в lesson-panel.tsx требует myTeacherId). Если родителю
+  // когда-нибудь понадобится своя версия этого экрана — брать
+  // student_attendance_brief(), а не расширять доступ к attendance.
   const [{ data: students }, { data: attendanceRows }, balanceLabels] = await Promise.all([
     supabase.from('students').select('id, full_name').in('id', studentIds),
     supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
