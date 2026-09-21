@@ -80,6 +80,39 @@
 --       вручную в свой личный WhatsApp. Это тот самый выход клиники из
 --       защищённого канала, который 0043 уже ограничивал для отчёта.
 --       Не менять этот текст на содержательный без нового решения.
+--       Интерфейс настроек (apps/web/.../notifications) не предлагает
+--       {child} для этого канала отдельной пустой подсказкой — решение
+--       не защищено констрейнтом, но хотя бы не подсказывается само.
+--
+-- Второй раунд (ревью написанного SQL, до мержа, правки в том же файле —
+-- миграция ещё не в main):
+--   Р9.  Круг 1 фильтровал занятие только по id/center_id, без
+--        deleted_at/status — специалист отменённого или архивированного
+--        занятия оставался адресатом, хотя clinical_teacher_sees ему уже
+--        отказывает. Условие взято из clinical_teacher_taught — не вторая
+--        копия с другим набором условий.
+--   Р10. Круги 1 и 3 искали адресата через memberships.teacher_id + role =
+--        'teacher'. change_member_role (0004) обнуляет teacher_id при
+--        смене роли, но НЕ трогает teachers.profile_id и не архивирует
+--        карточку — специалист, ставший владельцем/админом, но
+--        продолжающий вести детей, переставал быть адресатом молча, а
+--        круг 3 отдавал его детей другим специалистам. Оба круга взяты
+--        через teachers.profile_id (уникален на живую карточку — 0004,
+--        индекс на (center_id, profile_id) — и переживает смену роли);
+--        членство в центре по-прежнему проверяется явно, а не только
+--        транзитивно через revoke_membership.
+--   Р11. Запасной круг был ограничен только снизу (starts_at > now() - 60
+--        дней) — специалист с будущим (ещё не проведённым) занятием тоже
+--        считался адресатом. Интервал сделан двусторонним.
+--   Р12. Круг 2 (автор-специалист) не проверял teachers.deleted_at —
+--        архивированный специалист, пока сам ещё в центре, оставался
+--        адресатом как автор, хотя круги 1 и 3 его уже исключают. Одно
+--        правило «специалист жив» на все три круга.
+--   Р13. submit_homework оставалась select-then-update, тот же класс
+--        гонки, что Р5 закрывает у review_homework, — переиздана тем же
+--        приёмом (условие в WHERE самого UPDATE). Оба атомарных UPDATE
+--        дополнительно проверяют deleted_at is null: без этого архивация
+--        между чтением и записью проверки/сдачи проходила бы тихо.
 -- =============================================================================
 
 
@@ -89,6 +122,12 @@
 -- принимает кандидата явно, а не читает его из JWT. Нужна ровно потому,
 -- что доставка идёт от bot_worker, где auth.uid()/my_teacher_id() пусты —
 -- вызов исходной sessions-функции в этом контексте дал бы false всегда.
+-- t.center_id = s.center_id в джойне — не для быстродействия: без него
+-- функция была бы кросс-тенантным оракулом «кто кого учил» в момент,
+-- когда её кто-нибудь по ошибке откроет для authenticated (сейчас — нет,
+-- см. revoke ниже и tests/0007_function_grants.test.sql). tenant RLS не
+-- даст создать занятие поперёк центров, но сама функция не должна на это
+-- полагаться — она проверяет условие сама.
 create or replace function public.clinical_teacher_taught(p_teacher_id uuid, p_student_id uuid)
   returns boolean
   language sql
@@ -99,9 +138,12 @@ as $$
   select p_teacher_id is not null
      and exists (
        select 1
-         from public.lesson_participants lp
+         from public.teachers t
+         join public.students s on s.center_id = t.center_id
+         join public.lesson_participants lp on lp.student_id = s.id
          join public.lessons l on l.id = lp.lesson_id
-        where lp.student_id = p_student_id
+        where t.id = p_teacher_id
+          and s.id = p_student_id
           and lp.deleted_at is null
           and l.deleted_at is null
           and l.status <> 'cancelled'
@@ -110,7 +152,7 @@ as $$
 $$;
 
 comment on function public.clinical_teacher_taught(uuid, uuid) is
-  'Видел ли ЭТОТ специалист этого ребёнка — параметризованная версия правила clinical_teacher_sees (0036), для контекстов без сессии. Один источник правила, чтобы условие про отменённые занятия не разъехалось по копиям (0043 уже держит одну такую копию руками в send_monthly_report).';
+  'Видел ли ЭТОТ специалист этого ребёнка — параметризованная версия правила clinical_teacher_sees (0036), для контекстов без сессии. Один источник правила, чтобы условие про отменённые занятия не разъехалось по копиям (0043 уже держит одну такую копию руками в send_monthly_report). Требует общий центр учителя и ребёнка сама — не полагается только на RLS вызывающего (0045 Р-ревью).';
 
 revoke all on function public.clinical_teacher_taught(uuid, uuid) from public, anon, authenticated, service_role;
 
@@ -167,35 +209,28 @@ begin
     return;
   end if;
 
-  -- Круг 1: специалист занятия, на котором задание выдано. INNER JOIN на
-  -- memberships — если он уже не состоит в центре, строки не будет, и мы
-  -- сами упадём в круг 2, а не отправим уволенному (Р3).
+  -- Круг 1: специалист ЖИВОГО занятия, на котором задание выдано —
+  -- deleted_at/status повторяют условие clinical_teacher_taught, а не
+  -- берут вторую копию (Р9): специалист отменённого/архивированного
+  -- занятия не должен оставаться адресатом, раз clinical_teacher_sees ему
+  -- уже отказывает. Адресат — teachers.profile_id, а не
+  -- memberships.teacher_id: карточка специалиста переживает смену его
+  -- роли на owner/admin (change_member_role чистит только
+  -- memberships.teacher_id — Р10), а членство в центре по-прежнему
+  -- проверяется явно, а не только тем, что revoke_membership когда-то
+  -- обнулит profile_id.
   if v_row.lesson_id is not null then
-    select m.user_id into v_recipient
+    select t.profile_id into v_recipient
       from public.lessons l
       join public.teachers t on t.id = l.effective_teacher_id and t.deleted_at is null
-      join public.memberships m on m.center_id = p_center_id and m.teacher_id = t.id and m.role = 'teacher'
      where l.id = v_row.lesson_id
        and l.center_id = p_center_id
-     limit 1;
-    if v_recipient is not null then
-      return query select v_recipient;
-      return;
-    end if;
-  end if;
-
-  -- Круг 2: автор — если ещё в центре и (owner/admin) или (специалист,
-  -- который сейчас реально ведёт ребёнка). created_by сравнивается
-  -- обычным «=», не is not distinct from: NULL здесь не должен ничего
-  -- совпасть.
-  if v_row.created_by is not null then
-    select m.user_id into v_recipient
-      from public.memberships m
-     where m.center_id = p_center_id
-       and m.user_id = v_row.created_by
-       and (
-         m.role in ('owner', 'admin')
-         or (m.role = 'teacher' and public.clinical_teacher_taught(m.teacher_id, v_row.student_id))
+       and l.deleted_at is null
+       and l.status <> 'cancelled'
+       and t.profile_id is not null
+       and exists (
+         select 1 from public.memberships m
+          where m.center_id = p_center_id and m.user_id = t.profile_id
        )
      limit 1;
     if v_recipient is not null then
@@ -204,21 +239,54 @@ begin
     end if;
   end if;
 
-  -- Круг 3: запасной. Интервал по timestamptz, не по датам — пояс центра
-  -- в сравнении не участвует вовсе.
-  return query
-    select distinct m.user_id
+  -- Круг 2: автор — если ещё в центре и (owner/admin) или (специалист,
+  -- который сейчас реально ведёт ребёнка, и его карточка не архивирована —
+  -- Р12: без этого условия архивированный автор оставался бы адресатом,
+  -- хотя круги 1 и 3 его уже исключают). created_by сравнивается обычным
+  -- «=», не is not distinct from: NULL здесь не должен ничего совпасть.
+  if v_row.created_by is not null then
+    select m.user_id into v_recipient
       from public.memberships m
-      join public.teachers t on t.id = m.teacher_id and t.deleted_at is null
+      left join public.teachers t on t.id = m.teacher_id
+     where m.center_id = p_center_id
+       and m.user_id = v_row.created_by
+       and (
+         m.role in ('owner', 'admin')
+         or (
+           m.role = 'teacher'
+           and t.deleted_at is null
+           and public.clinical_teacher_taught(m.teacher_id, v_row.student_id)
+         )
+       )
+     limit 1;
+    if v_recipient is not null then
+      return query select v_recipient;
+      return;
+    end if;
+  end if;
+
+  -- Круг 3: запасной — специалисты с занятием этого ребёнка за последние
+  -- 60 дней, ДО текущего момента (Р11: раньше интервал был открыт сверху,
+  -- и специалист с ещё не проведённым будущим занятием тоже считался
+  -- адресатом). Тот же переход на teachers.profile_id, что в круге 1, и та
+  -- же явная проверка живого членства.
+  return query
+    select distinct t.profile_id
+      from public.teachers t
       join public.lessons l
         on (l.teacher_id = t.id or l.substitute_teacher_id = t.id)
        and l.deleted_at is null
        and l.status <> 'cancelled'
-       and l.starts_at > now() - interval '60 days'
+       and l.starts_at between now() - interval '60 days' and now()
       join public.lesson_participants lp
         on lp.lesson_id = l.id and lp.student_id = v_row.student_id and lp.deleted_at is null
-     where m.center_id = p_center_id
-       and m.role = 'teacher';
+     where t.center_id = p_center_id
+       and t.deleted_at is null
+       and t.profile_id is not null
+       and exists (
+         select 1 from public.memberships m
+          where m.center_id = p_center_id and m.user_id = t.profile_id
+       );
 end;
 $$;
 
@@ -382,8 +450,58 @@ revoke all on function public.assign_homework(uuid, text, uuid[], uuid, date, uu
 grant execute on function public.assign_homework(uuid, text, uuid[], uuid, date, uuid) to authenticated;
 
 
+-- Переиздание: Р13, тот же класс гонки, что Р5 закрывает ниже у
+-- review_homework, — было «прочитать → проверить статус → обновить без
+-- условия», двойной сабмит (двойной тап на плохой связи) молча
+-- перезаписывал parent_note первого вызова.
+create or replace function public.submit_homework(p_id uuid, p_parent_note text default null)
+  returns void
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_center uuid := public.current_center();
+  v_role   text := coalesce(public.my_role(), '');
+  v_row    public.homework;
+begin
+  if auth.uid() is null then
+    raise exception 'Требуется авторизация' using errcode = '42501';
+  end if;
+  if v_center is null then
+    raise exception 'Не определён центр' using errcode = '42501';
+  end if;
+
+  select * into v_row from public.homework
+   where id = p_id and center_id = v_center and deleted_at is null;
+  if not found then
+    raise exception 'Задание не найдено' using errcode = '42704';
+  end if;
+
+  if not (v_role in ('owner', 'admin') or (v_role = 'parent' and public.parent_of_student(v_row.student_id))) then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
+  update public.homework
+     set status = 'submitted', parent_note = coalesce(p_parent_note, parent_note)
+   where id = p_id and status = 'assigned' and deleted_at is null;
+
+  if not found then
+    raise exception 'Задание уже отправлено или проверено' using errcode = '23514';
+  end if;
+end;
+$$;
+
+revoke all on function public.submit_homework(uuid, text) from public, anon, authenticated, service_role;
+grant execute on function public.submit_homework(uuid, text) to authenticated;
+
+
 -- Переиздание: Р5, гонка «проверка — запись» устранена одним UPDATE с
--- условием по статусу вместо select-then-update.
+-- условием по статусу вместо select-then-update. deleted_at is null в
+-- самом UPDATE, не только в select выше, — иначе архивация между чтением
+-- и записью прошла бы тихо: homework.reviewed эмитируется на
+-- архивированной строке, а event_messages (Б4) её потом не доставит —
+-- специалист решит, что отзыв ушёл, хотя он никуда не дошёл.
 create or replace function public.review_homework(p_id uuid, p_teacher_feedback text default null)
   returns void
   language plpgsql
@@ -414,7 +532,7 @@ begin
 
   update public.homework
      set status = 'reviewed', teacher_feedback = coalesce(p_teacher_feedback, teacher_feedback)
-   where id = p_id and status = 'submitted';
+   where id = p_id and status = 'submitted' and deleted_at is null;
 
   if not found then
     raise exception 'Задание ещё не сдано или уже проверено' using errcode = '23514';
@@ -434,10 +552,14 @@ insert into public.notification_event_types (event_type, description) values
   ('homework.reviewed',  'Специалист проверил домашнее задание')
 on conflict (event_type) do nothing;
 
--- insert ... select ... where not exists, а не on conflict: индекс
--- message_templates_default_key частичный, с nulls not distinct, и
--- Postgres не выводит такую спецификацию в on conflict (42P10) — тот же
--- урок, что в 0043.
+-- insert ... select ... where not exists, а не on conflict: 0043
+-- пытался завести message_templates_default_key как один частичный
+-- индекс с nulls not distinct на (center_id, event_type, channel), но имя
+-- было уже занято индексом 0034 на (event_type, channel) where center_id
+-- is null — create index if not exists тихо пропустил команду, реально
+-- действует определение 0034. On conflict по такой паре частичных
+-- индексов Postgres всё равно не вывел бы (42P10) — тот же урок, что в
+-- 0043, но формулировка про «nulls not distinct» здесь была бы неточной.
 insert into public.message_templates (center_id, event_type, channel, text)
 select v.center_id, v.event_type, v.channel, v.text
   from (values
@@ -586,7 +708,7 @@ begin
       select r.user_id, r.channel, r.chat_id,
              public.render_template(r.template_text, jsonb_build_object(
                'child', (select s.full_name from public.students s where s.id = v_student),
-               'due',   coalesce(to_char(v_homework.due_on, 'DD.MM.YYYY'), '—')
+               'due',   coalesce(to_char(v_homework.due_on, 'DD.MM.YYYY'), 'без срока')
              )),
              v_student,
              null::jsonb
