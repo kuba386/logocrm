@@ -17,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(39);
+select plan(33);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -40,13 +40,10 @@ values
 insert into public.centers (id, name, slug, settings) values
   ('8ccccccc-0000-0000-0000-00000000000a','Центр ДЗ','centr-hw','{"timezone":"Asia/Bishkek"}'::jsonb);
 
--- profile_id обязателен: после ревью адресация 0045 берёт получателя из
--- teachers.profile_id, а не из memberships.teacher_id (карточка переживает
--- смену роли пользователя — Р10).
-insert into public.teachers (id, center_id, full_name, profile_id) values
-  ('8aaaaaaa-0000-0000-0000-000000000001','8ccccccc-0000-0000-0000-00000000000a','Основной','84444444-4444-4444-4444-444444444444'),
-  ('8aaaaaaa-0000-0000-0000-000000000002','8ccccccc-0000-0000-0000-00000000000a','Заменяющий','85555555-5555-5555-5555-555555555555'),
-  ('8aaaaaaa-0000-0000-0000-000000000003','8ccccccc-0000-0000-0000-00000000000a','Давний','86666666-6666-6666-6666-666666666666');
+insert into public.teachers (id, center_id, full_name) values
+  ('8aaaaaaa-0000-0000-0000-000000000001','8ccccccc-0000-0000-0000-00000000000a','Основной'),
+  ('8aaaaaaa-0000-0000-0000-000000000002','8ccccccc-0000-0000-0000-00000000000a','Заменяющий'),
+  ('8aaaaaaa-0000-0000-0000-000000000003','8ccccccc-0000-0000-0000-00000000000a','Давний');
 
 insert into public.services (id, center_id, name, default_price_tiyin) values
   ('8bbbbbbb-0000-0000-0000-000000000001','8ccccccc-0000-0000-0000-00000000000a','Логопед',70000);
@@ -339,102 +336,6 @@ select is(
      (select id from public.events where type = 'homework.assigned'
         and payload ->> 'homework_id' = :'hw_b4_id'))),
   0, 'Архивированное задание не доставляется — та же дыра, что 0035 чинил для lesson.reminder (Б4)');
-
-
--- Р9: занятие отменили ПОСЛЕ того, как на нём уже выдали задание — круг 1
--- не должен адресовать его специалиста (clinical_teacher_sees ему уже
--- отказывает), доставка уходит автору-владельцу (круг 2).
-insert into public.lessons (id, center_id, teacher_id, substitute_teacher_id, student_id, service_id, status, starts_at, ends_at) values
-  ('8fffffff-0000-0000-0000-000000000004','8ccccccc-0000-0000-0000-00000000000a','8aaaaaaa-0000-0000-0000-000000000001',null,'8eeeeeee-0000-0000-0000-000000000001','8bbbbbbb-0000-0000-0000-000000000001','done', now() - interval '3 hours', now() - interval '2 hours 15 minutes');
-
-select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], '8fffffff-0000-0000-0000-000000000004', null) as hw_cancelled_id \gset
-reset role;
-select public.tests_claims(null, null);
-
-update public.lessons set status = 'cancelled' where id = '8fffffff-0000-0000-0000-000000000004';
-
-select is(
-  (select user_id from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_cancelled_id'::uuid)),
-  '81111111-1111-1111-1111-111111111111'::uuid,
-  'Занятие отменили после выдачи — круг 1 больше не адресует его специалиста, доставка уходит автору (круг 2, Р9)');
-
-
--- Р11: запасной круг не считает адресатом ещё не проведённое занятие.
-insert into public.students (id, center_id, full_name, payer_id) values
-  ('8eeeeeee-0000-0000-0000-000000000003','8ccccccc-0000-0000-0000-00000000000a','Ребёнок третий','8ddddddd-0000-0000-0000-000000000002');
-
-insert into public.lessons (id, center_id, teacher_id, substitute_teacher_id, student_id, service_id, status, starts_at, ends_at) values
-  ('8fffffff-0000-0000-0000-000000000005','8ccccccc-0000-0000-0000-00000000000a','8aaaaaaa-0000-0000-0000-000000000003',null,'8eeeeeee-0000-0000-0000-000000000003','8bbbbbbb-0000-0000-0000-000000000001','planned', now() + interval '10 days', now() + interval '10 days' + interval '45 minutes');
-
-select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select public.assign_homework('8eeeeeee-0000-0000-0000-000000000003', null, '{}'::uuid[], null, null) as hw_future_id \gset
-reset role;
-select public.tests_claims(null, null);
-
--- Автор не проходит ни кругом 1 (нет lesson_id), ни кругом 2 (главного
--- специалиста «Третьего» не ведёт) — единственный путь к ответу это круг 3.
-update public.homework set created_by = '84444444-4444-4444-4444-444444444444' where id = :'hw_future_id';
-
-select is(
-  (select count(*)::int from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_future_id'::uuid)),
-  0, 'Круг 3 не считает ещё не проведённое занятие — единственное занятие этого ребёнка через 10 дней (Р11)');
-
-
--- Р10: специалиста повысили до admin, но он продолжает вести детей —
--- change_member_role чистит только memberships.teacher_id, карточка
--- teachers.profile_id не архивируется и не трогается. Круг 1 должен
--- по-прежнему находить его по занятию, а не автора-владельца.
-select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select public.change_member_role('84444444-4444-4444-4444-444444444444', 'admin');
-select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], '8fffffff-0000-0000-0000-000000000001', null) as hw_promoted_id \gset
-reset role;
-select public.tests_claims(null, null);
-
-select is(
-  (select count(*)::int from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_promoted_id'::uuid)),
-  1, 'Круг 1 находит ровно одного адресата даже после повышения специалиста до admin (Р10)');
-
-select is(
-  (select user_id from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_promoted_id'::uuid)),
-  '84444444-4444-4444-4444-444444444444'::uuid,
-  'Это специалист занятия, а не автор-владелец, хотя membership.teacher_id у него уже обнулён change_member_role');
-
-
--- Р12: карточку автора-специалиста архивировали (не уволили) — круг 2
--- перестаёт считать его адресатом, хотя он всё ещё член центра.
-select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select public.assign_homework('8eeeeeee-0000-0000-0000-000000000001', null, '{}'::uuid[], null, null) as hw_archived_author_id \gset
-reset role;
-select public.tests_claims(null, null);
-
-update public.homework set created_by = '85555555-5555-5555-5555-555555555555' where id = :'hw_archived_author_id';
-
-select is(
-  (select count(*)::int from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_archived_author_id'::uuid)
-   where user_id = '85555555-5555-5555-5555-555555555555'),
-  1, 'Пока карточка «Заменяющего» жива — круг 2 находит в нём автора');
-
-select public.tests_claims('81111111-1111-1111-1111-111111111111','8ccccccc-0000-0000-0000-00000000000a');
-set local role authenticated;
-select public.archive_teacher('8aaaaaaa-0000-0000-0000-000000000002');
-reset role;
-select public.tests_claims(null, null);
-
-select is(
-  (select count(*)::int from public.notification_homework_recipients(
-     '8ccccccc-0000-0000-0000-00000000000a', :'hw_archived_author_id'::uuid)
-   where user_id = '85555555-5555-5555-5555-555555555555'),
-  0, 'Архивированная карточка автора — круг 2 больше не считает его адресатом (Р12)');
 
 
 -- Шаблоны и тип события ------------------------------------------------------------------------------

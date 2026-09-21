@@ -77,9 +77,7 @@ export function TemplateForm({
       </label>
 
       <p className="text-xs text-muted-foreground">
-        {placeholders.length > 0
-          ? t('notifications', 'placeholders', { list: placeholders.join(', ') })
-          : t('notifications', 'noPlaceholders')}
+        {t('notifications', 'placeholders', { list: placeholders.join(', ') })}
       </p>
 
       <div className="flex flex-wrap gap-2">

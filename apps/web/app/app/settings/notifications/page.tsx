@@ -11,7 +11,7 @@ export const metadata = { title: 'Уведомления — LogoCRM' }
  * (event_messages, 0034). Тип, которого здесь нет, сообщений не порождает, и
  * добавить его правкой текста нельзя — нужна миграция.
  */
-const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: string[] }[] = [
+const EVENTS: { type: string; placeholders: string[] }[] = [
   { type: 'lesson.reminder', placeholders: ['{child}', '{date}', '{time}', '{teacher}'] },
   { type: 'subscription.low_balance', placeholders: ['{child}', '{left}'] },
   { type: 'subscription.exhausted', placeholders: ['{child}'] },
@@ -22,10 +22,9 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'] },
   { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
   // whatsapp_link для homework.submitted не доставляется — у специалиста
-  // нет своей WhatsApp-кнопки в интерфейсе, текст оседает только в журнале
-  // (0045 Р8). Поэтому у этого канала своя, пустая, подсказка: интерфейс не
-  // должен предлагать {child} там, где решение прямо запрещает его вставлять.
-  { type: 'homework.submitted', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  // нет своей WhatsApp-кнопки в интерфейсе. Дефолт этого канала намеренно
+  // без {child} (0045 Р8) — не менять на содержательный текст.
+  { type: 'homework.submitted', placeholders: ['{child}'] },
   { type: 'homework.reviewed', placeholders: ['{child}'] },
 ]
 
@@ -75,10 +74,6 @@ export default async function NotificationsSettingsPage() {
           <CardContent className="grid gap-6 sm:grid-cols-2">
             {CHANNELS.map((channel) => {
               const current = byKey.get(`${event.type}:${channel}`)
-              const placeholders =
-                channel === 'whatsapp_link' && event.whatsappPlaceholders
-                  ? event.whatsappPlaceholders
-                  : event.placeholders
               return (
                 <TemplateForm
                   key={channel}
@@ -87,7 +82,7 @@ export default async function NotificationsSettingsPage() {
                   text={current?.text ?? ''}
                   isActive={current?.isActive ?? true}
                   isOwn={current?.isOwn ?? false}
-                  placeholders={placeholders}
+                  placeholders={event.placeholders}
                 />
               )
             })}
