@@ -134,7 +134,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Мобильный/планшетный хедер: сайдбар выше скрыт, здесь гамбургер. */}
         <header className="relative border-b border-border bg-card sm:hidden">
           <div className="container flex h-16 items-center justify-between gap-4">

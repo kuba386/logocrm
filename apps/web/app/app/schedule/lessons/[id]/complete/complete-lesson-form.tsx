@@ -80,7 +80,9 @@ export function CompleteLessonForm({
 }) {
   const router = useRouter()
   const [voiceBusy, setVoiceBusy] = useState<string | null>(null)
-  const [voiceNotice, setVoiceNotice] = useState<{ studentId: string; text: string } | null>(null)
+  const [voiceNotice, setVoiceNotice] = useState<{ studentId: string; text: string; href?: string } | null>(
+    null,
+  )
 
   async function startVoice(studentId: string, fullName: string) {
     setVoiceBusy(studentId)
@@ -93,12 +95,14 @@ export function CompleteLessonForm({
       return
     }
 
-    // Переход в бот, а не показ кода: одно касание с телефона, тем же
-    // приёмом, что привязка аккаунта.
-    window.open(`https://t.me/${botName}?start=voice_${result.token}`, '_blank', 'noopener')
+    // Не window.open: после await клика для мобильных Safari/Chrome уже
+    // не «доверенный», всплывающее окно тихо блокируется — специалист
+    // видит уведомление, но бот не открывается. Ссылку тем же приёмом,
+    // что привязка аккаунта (telegram-panel.tsx) — открывает сам.
     setVoiceNotice({
       studentId,
-      text: `Открыл бот. Отправьте туда голосовое про ${fullName} — черновик придёт в переписку.`,
+      text: `Отправьте туда голосовое про ${fullName} — черновик придёт в переписку.`,
+      href: `https://t.me/${botName}?start=voice_${result.token}`,
     })
   }
   const [draft, setDraft] = useState<Draft>(() => buildInitialDraft(students))
@@ -338,7 +342,20 @@ export function CompleteLessonForm({
                   onChange={(e) => update(student.id, { noteText: e.target.value })}
                 />
                 {voiceNotice && voiceNotice.studentId === student.id ? (
-                  <p className="text-sm text-muted-foreground">{voiceNotice.text}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {voiceNotice.href ? (
+                      <a
+                        href={voiceNotice.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-primary underline underline-offset-2"
+                      >
+                        Открыть бота
+                      </a>
+                    ) : null}
+                    {voiceNotice.href ? ' — ' : null}
+                    {voiceNotice.text}
+                  </p>
                 ) : null}
               </div>
 
