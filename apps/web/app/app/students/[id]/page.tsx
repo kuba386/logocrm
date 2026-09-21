@@ -7,6 +7,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { centerTimeZone, isoDayInZone } from '@/lib/timezone'
 import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
+import type { GoalTrend } from '@/lib/goal-trend'
 import { StudentForm, type StudentFormValues } from './student-form'
 import {
   SubscriptionsPanel,
@@ -345,6 +346,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         targetDate: g.target_date,
         progress:
           g.last_score != null ? [{ id: g.id, date: g.target_date ?? '', score: g.last_score, note: null }] : [],
+        // Родителю RPC (0046) всегда отдаёт trend = null — сознательно,
+        // не фильтруется здесь.
+        trend: g.trend as GoalTrend | null,
       })),
       stages: [],
       homework: (homeworkRows ?? []).map((h) => ({
@@ -359,34 +363,46 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       exercises: [],
     }
   } else if (clinicalAllowed) {
-    const [{ data: diagRows }, { data: goalRows }, { data: stageRows }, { data: homeworkRows }, { data: exerciseRows }] =
-      await Promise.all([
-        supabase
-          .from('diagnostics')
-          .select('id, date, conclusion, sounds, speech_areas, teacher_id')
-          .eq('student_id', id)
-          .is('deleted_at', null)
-          .order('date', { ascending: false }),
-        supabase
-          .from('goals')
-          .select('id, title, area, sound, status, target_date, stage_id')
-          .eq('student_id', id)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false }),
-        supabase.from('goal_stages').select('id, title').is('deleted_at', null).order('sort'),
-        supabase
-          .from('homework')
-          .select('id, status, free_text, due_on, parent_note, teacher_feedback, assigned_at')
-          .eq('student_id', id)
-          .is('deleted_at', null)
-          .order('assigned_at', { ascending: false }),
-        supabase
-          .from('exercise_library')
-          .select('id, title, sound')
-          .eq('is_active', true)
-          .is('deleted_at', null)
-          .order('title'),
-      ])
+    const [
+      { data: diagRows },
+      { data: goalRows },
+      { data: stageRows },
+      { data: homeworkRows },
+      { data: exerciseRows },
+      { data: goalBriefRows },
+    ] = await Promise.all([
+      supabase
+        .from('diagnostics')
+        .select('id, date, conclusion, sounds, speech_areas, teacher_id')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('date', { ascending: false }),
+      supabase
+        .from('goals')
+        .select('id, title, area, sound, status, target_date, stage_id')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false }),
+      supabase.from('goal_stages').select('id, title').is('deleted_at', null).order('sort'),
+      supabase
+        .from('homework')
+        .select('id, status, free_text, due_on, parent_note, teacher_feedback, assigned_at')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('assigned_at', { ascending: false }),
+      supabase
+        .from('exercise_library')
+        .select('id, title, sound')
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('title'),
+      // Тренд — источник истины только SQL (0046): читаем его из того же
+      // RPC, что и родительская ветка, а не пересчитываем в TS из
+      // progressByGoal ниже — иначе окно/пороги могут разъехаться.
+      supabase.rpc('student_goals_brief', { p_student_id: id }),
+    ])
+
+    const trendByGoal = new Map((goalBriefRows ?? []).map((g) => [g.id, g.trend]))
 
     const teacherIds = [...new Set((diagRows ?? []).map((d) => d.teacher_id).filter((v): v is string => Boolean(v)))]
     const goalIds = (goalRows ?? []).map((g) => g.id)
@@ -445,6 +461,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         status: g.status,
         targetDate: g.target_date,
         progress: progressByGoal.get(g.id) ?? [],
+        trend: (trendByGoal.get(g.id) ?? null) as GoalTrend | null,
       })),
       stages: (stageRows ?? []).map((s) => ({ id: s.id, title: s.title })),
       homework: (homeworkRows ?? []).map((h) => ({

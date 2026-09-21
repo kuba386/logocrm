@@ -4181,6 +4181,7 @@ export type Database = {
           status: string
           target_date: string
           title: string
+          trend: string
         }[]
       }
       student_monthly_report: {

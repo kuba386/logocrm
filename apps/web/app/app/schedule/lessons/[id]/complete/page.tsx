@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { dayInZone, timeInZone, centerTimeZone } from '@/lib/timezone'
 import { studentAge } from '@/lib/students'
+import type { GoalTrend } from '@/lib/goal-trend'
 import { CompleteLessonForm, type StudentEntry, type ExerciseOption } from './complete-lesson-form'
 
 export const metadata = { title: 'Провести занятие — LogoCRM' }
@@ -167,6 +168,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
             sound: g.sound,
             stageTitle: g.stage_title,
             lastScore: g.last_score,
+            trend: g.trend as GoalTrend | null,
           })),
         previousNote: prev
           ? {

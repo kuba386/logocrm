@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS, type GoalTrend } from '@/lib/goal-trend'
+import { cn } from '@/lib/utils'
 import { archiveGoal, createGoal, setGoalStatus, type ClinicalState } from './clinical-actions'
 
 export type GoalStageOption = { id: string; title: string }
@@ -22,6 +24,7 @@ export type GoalEntry = {
   status: string
   targetDate: string | null
   progress: GoalProgressEntry[]
+  trend: GoalTrend | null
 }
 
 const initial: ClinicalState = { message: '' }
@@ -60,9 +63,16 @@ function GoalCard({
             {goal.targetDate ? ` · срок ${new Date(goal.targetDate).toLocaleDateString('ru-RU')}` : ''}
           </p>
         </div>
-        {last ? (
-          <span className="rounded bg-muted px-2 py-0.5 text-sm">{last.score}/100</span>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {goal.trend ? (
+            <span
+              className={cn('rounded-full px-2 py-0.5 text-xs font-medium', GOAL_TREND_CLASSES[goal.trend])}
+            >
+              {GOAL_TREND_LABELS[goal.trend]}
+            </span>
+          ) : null}
+          {last ? <span className="rounded bg-muted px-2 py-0.5 text-sm">{last.score}/100</span> : null}
+        </div>
       </div>
 
       {goal.progress.length > 0 ? (

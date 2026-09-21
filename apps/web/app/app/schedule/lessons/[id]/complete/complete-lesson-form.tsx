@@ -9,13 +9,22 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS, type GoalTrend } from '@/lib/goal-trend'
+import { cn } from '@/lib/utils'
 import { completeLesson, requestVoiceNote, type CompleteLessonState } from './actions'
 
 export type StudentEntry = {
   id: string
   fullName: string
   age: string
-  goals: { id: string; title: string; sound: string | null; stageTitle: string | null; lastScore: number | null }[]
+  goals: {
+    id: string
+    title: string
+    sound: string | null
+    stageTitle: string | null
+    lastScore: number | null
+    trend: GoalTrend | null
+  }[]
   previousNote: { parentSummary: string | null; soapPlan: string | null } | null
   attendanceStatusCode: string | null
   attendanceComment: string
@@ -277,7 +286,19 @@ export function CompleteLessonForm({
                   {student.goals.map((goal) => (
                     <div key={goal.id} className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3">
                       <div className="min-w-[10rem] flex-1 text-sm">
-                        <div>{goal.title}</div>
+                        <div className="flex items-center gap-2">
+                          <span>{goal.title}</span>
+                          {goal.trend ? (
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 text-xs font-medium',
+                                GOAL_TREND_CLASSES[goal.trend],
+                              )}
+                            >
+                              {GOAL_TREND_LABELS[goal.trend]}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {[goal.stageTitle, goal.sound ? `звук «${goal.sound}»` : null].filter(Boolean).join(' · ')}
                           {goal.lastScore != null ? ` · было ${goal.lastScore}` : ''}
