@@ -11,7 +11,7 @@ export const metadata = { title: 'Уведомления — LogoCRM' }
  * (event_messages, 0034). Тип, которого здесь нет, сообщений не порождает, и
  * добавить его правкой текста нельзя — нужна миграция.
  */
-const EVENTS: { type: string; placeholders: string[] }[] = [
+const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: string[] }[] = [
   { type: 'lesson.reminder', placeholders: ['{child}', '{date}', '{time}', '{teacher}'] },
   { type: 'subscription.low_balance', placeholders: ['{child}', '{left}'] },
   { type: 'subscription.exhausted', placeholders: ['{child}'] },
@@ -19,6 +19,14 @@ const EVENTS: { type: string; placeholders: string[] }[] = [
   { type: 'installment.due', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'installment.overdue', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}'] },
+  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'] },
+  { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
+  // whatsapp_link для homework.submitted не доставляется — у специалиста
+  // нет своей WhatsApp-кнопки в интерфейсе, текст оседает только в журнале
+  // (0045 Р8). Поэтому у этого канала своя, пустая, подсказка: интерфейс не
+  // должен предлагать {child} там, где решение прямо запрещает его вставлять.
+  { type: 'homework.submitted', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  { type: 'homework.reviewed', placeholders: ['{child}'] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
@@ -67,6 +75,10 @@ export default async function NotificationsSettingsPage() {
           <CardContent className="grid gap-6 sm:grid-cols-2">
             {CHANNELS.map((channel) => {
               const current = byKey.get(`${event.type}:${channel}`)
+              const placeholders =
+                channel === 'whatsapp_link' && event.whatsappPlaceholders
+                  ? event.whatsappPlaceholders
+                  : event.placeholders
               return (
                 <TemplateForm
                   key={channel}
@@ -75,7 +87,7 @@ export default async function NotificationsSettingsPage() {
                   text={current?.text ?? ''}
                   isActive={current?.isActive ?? true}
                   isOwn={current?.isOwn ?? false}
-                  placeholders={event.placeholders}
+                  placeholders={placeholders}
                 />
               )
             })}
