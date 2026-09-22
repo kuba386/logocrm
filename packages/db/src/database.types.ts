@@ -3868,6 +3868,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      notification_user_targets: {
+        Args: { p_center_id: string; p_event_type: string; p_user_id: string }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
+      }
       parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
       pay_installment: {

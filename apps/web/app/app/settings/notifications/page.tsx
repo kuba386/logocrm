@@ -19,7 +19,8 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'installment.due', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'installment.overdue', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}'] },
-  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'] },
+  // {summary} только в telegram — с 0047 то же правило, что у резюме занятия.
+  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'], whatsappPlaceholders: ['{month}', '{child}'] },
   { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
   // whatsapp_link для homework.submitted не доставляется — у специалиста
   // нет своей WhatsApp-кнопки в интерфейсе, текст оседает только в журнале
@@ -27,6 +28,12 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // должен предлагать {child} там, где решение прямо запрещает его вставлять.
   { type: 'homework.submitted', placeholders: ['{child}'], whatsappPlaceholders: [] },
   { type: 'homework.reviewed', placeholders: ['{child}'] },
+  // {summary} — только telegram: в whatsapp_link событие не доставляется, а
+  // текст оседает в журнале, который читает вся администрация (0047 Р1).
+  // База в этот канал переменную не подставляет — интерфейс её не предлагает.
+  { type: 'lesson.note_approved', placeholders: ['{child}', '{date}', '{summary}'], whatsappPlaceholders: ['{child}', '{date}'] },
+  // Специалисту, у которого нет своей WhatsApp-кнопки — как homework.submitted.
+  { type: 'lesson.voice_failed', placeholders: ['{child}'], whatsappPlaceholders: [] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const

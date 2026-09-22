@@ -69,6 +69,7 @@ from unnest(array[
   'public.clinical_teacher_taught(uuid,uuid)',
   'public.notification_homework_recipients(uuid,uuid)',
   'public.notification_homework_targets(uuid,uuid,text)',
+  'public.notification_user_targets(uuid,uuid,text)',
   'public.lesson_notes_approval_transition()',
   'public.clinical_check_lesson_participant()',
   'public.goals_student_immutable()',

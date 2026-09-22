@@ -21,6 +21,7 @@ import {
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
+import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
@@ -313,10 +314,19 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     stages: GoalStageOption[]
     homework: HomeworkEntry[]
     exercises: ExerciseOption[]
+    notes: NoteEntry[]
   } | null = null
 
+  // Дата заметки рендерится в поясе центра — та же дата, что уходит
+  // родителю в Telegram (0047); пояс браузера здесь не годится.
+  const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
+  const { data: clinicalCenter } = clinicalAllowed
+    ? await supabase.from('centers').select('settings').eq('id', clinicalCenterId ?? '').maybeSingle()
+    : { data: null }
+  const clinicalTimeZone = centerTimeZone(clinicalCenter?.settings)
+
   if (clinicalAllowed && isParent) {
-    const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }] = await Promise.all([
+    const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }, { data: noteRows }] = await Promise.all([
       supabase.rpc('student_diagnostics_brief', { p_student_id: id }),
       supabase.rpc('student_goals_brief', { p_student_id: id }),
       supabase
@@ -325,6 +335,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         .eq('student_id', id)
         .is('deleted_at', null)
         .order('assigned_at', { ascending: false }),
+      // Родителю — только утверждённые резюме, без SOAP и расшифровки (0036 Р4).
+      supabase.rpc('student_notes_brief', { p_student_id: id }),
     ])
 
     clinicalSection = {
@@ -361,6 +373,17 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         exerciseTitles: [],
       })),
       exercises: [],
+      notes: (noteRows ?? []).map((n) => ({
+        id: n.id,
+        lessonId: n.lesson_id,
+        lessonAt: n.lesson_at,
+        status: 'approved',
+        source: 'text',
+        parentSummary: n.parent_summary,
+        soap: null,
+        rawTranscript: null,
+        goalScores: [],
+      })),
     }
   } else if (clinicalAllowed) {
     const [
@@ -370,6 +393,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       { data: homeworkRows },
       { data: exerciseRows },
       { data: goalBriefRows },
+      { data: noteRows },
     ] = await Promise.all([
       supabase
         .from('diagnostics')
@@ -400,9 +424,36 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       // RPC, что и родительская ветка, а не пересчитываем в TS из
       // progressByGoal ниже — иначе окно/пороги могут разъехаться.
       supabase.rpc('student_goals_brief', { p_student_id: id }),
+      // Персоналу — вся заметка, включая черновики: RLS сама сузит у
+      // teacher по clinical_teacher_sees (0036).
+      supabase
+        .from('lesson_notes')
+        .select('id, lesson_id, status, source, parent_summary, soap, raw_transcript, created_at')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false }),
     ])
 
     const trendByGoal = new Map((goalBriefRows ?? []).map((g) => [g.id, g.trend]))
+    const noteIds = (noteRows ?? []).map((n) => n.id)
+    const noteLessonIds = [...new Set((noteRows ?? []).map((n) => n.lesson_id))]
+
+    const [{ data: noteLessonRows }, { data: noteScoreRows }] = await Promise.all([
+      noteLessonIds.length
+        ? supabase.from('lessons').select('id, starts_at').in('id', noteLessonIds)
+        : Promise.resolve({ data: [] as { id: string; starts_at: string }[] }),
+      noteIds.length
+        ? supabase.from('lesson_note_goal_scores').select('note_id, goal_id, score, note').in('note_id', noteIds)
+        : Promise.resolve({ data: [] as { note_id: string; goal_id: string; score: number; note: string | null }[] }),
+    ])
+    const lessonAtById = new Map((noteLessonRows ?? []).map((l) => [l.id, l.starts_at]))
+    const goalTitleById = new Map((goalRows ?? []).map((g) => [g.id, g.title]))
+    const scoresByNote = new Map<string, NoteEntry['goalScores']>()
+    for (const row of noteScoreRows ?? []) {
+      const list = scoresByNote.get(row.note_id) ?? []
+      list.push({ goalTitle: goalTitleById.get(row.goal_id) ?? 'Цель', score: row.score, note: row.note })
+      scoresByNote.set(row.note_id, list)
+    }
 
     const teacherIds = [...new Set((diagRows ?? []).map((d) => d.teacher_id).filter((v): v is string => Boolean(v)))]
     const goalIds = (goalRows ?? []).map((g) => g.id)
@@ -476,6 +527,17 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           .filter((t): t is string => Boolean(t)),
       })),
       exercises: (exerciseRows ?? []).map((e) => ({ id: e.id, title: e.title, sound: e.sound })),
+      notes: (noteRows ?? []).map((n) => ({
+        id: n.id,
+        lessonId: n.lesson_id,
+        lessonAt: lessonAtById.get(n.lesson_id) ?? n.created_at,
+        status: n.status,
+        source: n.source,
+        parentSummary: n.parent_summary,
+        soap: (n.soap ?? null) as NoteSoap | null,
+        rawTranscript: n.raw_transcript,
+        goalScores: scoresByNote.get(n.id) ?? [],
+      })),
     }
   }
 
@@ -628,6 +690,25 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 homework={clinicalSection.homework}
                 exercises={clinicalSection.exercises}
                 canWrite={canWriteClinical}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Заметки занятий</CardTitle>
+              <CardDescription>
+                {isParent
+                  ? 'Резюме занятий от специалиста.'
+                  : 'Черновики из голосовых и текстовые заметки. Родитель видит резюме только после утверждения.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NotesPanel
+                studentId={id}
+                notes={clinicalSection.notes}
+                canWrite={canWriteClinical}
+                timeZone={clinicalTimeZone}
               />
             </CardContent>
           </Card>
