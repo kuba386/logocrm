@@ -17,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(53);
+select plan(56);
 
 
 -- 1. Заборы ----------------------------------------------------------------------------------------------
@@ -120,6 +120,11 @@ select throws_ok(
       values ('a0510000-0000-0000-0000-0000000000c1', 'solo', 1, 99000, 'paypal') $q$,
   '23514', null,
   'Неизвестный способ оплаты — констрейнт');
+select throws_ok(
+  $q$ insert into public.platform_payments (center_id, claimed_plan, claimed_months, claimed_amount_tiyin, source, rejected_at)
+      values ('a0510000-0000-0000-0000-0000000000c1', 'solo', 1, 99000, 'mbank', now()) $q$,
+  '23514', null,
+  'Отклонение без причины невозможно — целиком или ничего, как подтверждение');
 
 
 -- 3. Заявка от центра в read-only (Р3, Р11, Р14) -----------------------------------------------------------
@@ -330,6 +335,10 @@ select public.tests_claims(null, null);
 select is(
   (select count(*)::int from public.notification_platform_targets('platform.payment_submitted')),
   0, 'Администратор платформы без Telegram — ноль получателей (ожидаемо, условие выката)');
+select throws_ok(
+  $q$ select * from public.notification_platform_targets('lesson.note_approved') $q$,
+  '42501', null,
+  'Центровой тип платформе не адресуется — отказ внутри функции, не в вызывающем (Р10)');
 
 insert into public.telegram_accounts (user_id, chat_id) values ('a0510000-0000-0000-0000-000000000004', 5104);
 
@@ -397,6 +406,13 @@ select ok(public.ai_job_begin((select event_id from t0051_voice)) is null, 'По
 select is(
   (select count(*)::int from public.events e where e.type = 'subscription.voice_blocked' and e.center_id = 'a0510000-0000-0000-0000-0000000000c1'),
   1, 'Второго события нет — дедупликация по данным events (Р8)');
+select throws_ok(
+  $q$ select public.emit_event_unchecked('subscription.voice_blocked',
+        jsonb_build_object('center_id', 'a0510000-0000-0000-0000-0000000000c1',
+                           'voice_request_id', (select request_id from t0051_voice), 'reason_code', 'subscription_expired'),
+        'a0510000-0000-0000-0000-0000000000c1') $q$,
+  '23505', null,
+  'Второе событие на ту же диктовку — констрейнт events_voice_blocked_once, не if (Р8)');
 
 select is(
   (select m.recipient_user_id::text || ':' || m.channel || ':' || m.subject_id::text

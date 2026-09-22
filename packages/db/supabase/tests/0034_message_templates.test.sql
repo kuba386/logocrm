@@ -20,10 +20,16 @@ select plan(32);
 -- Число производное, а не зашитое: каждый новый тип события (0043 и
 -- далее) иначе ронял бы этот ассерт, а трасса указывала бы на файл,
 -- которого нет в диффе.
-select is(
-  (select count(*)::int from public.message_templates where center_id is null and deleted_at is null),
-  (select count(*)::int from public.notification_event_types) * 2,
-  'У каждого типа события есть дефолт платформы на оба канала');
+-- С 0051 каналы объявлены в справочнике (channels): платформенный тип — только
+-- telegram, event.failed — ни одного. Забор сверяет дефолты с объявлением.
+select is_empty(
+  $$ select t.event_type from public.notification_event_types t
+      where (select coalesce(array_agg(m.channel order by m.channel), '{}'::text[])
+               from public.message_templates m
+              where m.center_id is null and m.deleted_at is null and m.event_type = t.event_type)
+            is distinct from
+            (select coalesce(array_agg(c order by c), '{}'::text[]) from unnest(t.channels) c) $$,
+  'У каждого типа события дефолты платформы ровно на объявленные каналы');
 
 select ok(
   not has_table_privilege('authenticated', 'public.notification_log', 'INSERT')

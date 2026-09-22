@@ -34,6 +34,12 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'lesson.note_approved', placeholders: ['{child}', '{date}', '{summary}'], whatsappPlaceholders: ['{child}', '{date}'] },
   // Специалисту, у которого нет своей WhatsApp-кнопки — как homework.submitted.
   { type: 'lesson.voice_failed', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  // 0051: продление — owner/admin центра, {until} в поясе центра.
+  { type: 'subscription.extended', placeholders: ['{plan_name}', '{months}', '{until}'] },
+  // 0051: специалисту, как lesson.voice_failed — whatsapp без {child}.
+  // platform.payment_submitted здесь нет намеренно: его читает платформа,
+  // строку центра отбивает триггер message_templates_platform_audience.
+  { type: 'subscription.voice_blocked', placeholders: ['{child}'], whatsappPlaceholders: [] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const

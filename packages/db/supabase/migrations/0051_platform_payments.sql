@@ -87,16 +87,22 @@
 
 alter table public.notification_event_types
   add column if not exists audience text not null default 'center',
-  add column if not exists subject_required boolean not null default true;
+  add column if not exists subject_required boolean not null default true,
+  add column if not exists channels text[] not null default array['telegram', 'whatsapp_link'];
 
 alter table public.notification_event_types drop constraint if exists notification_event_types_audience_check;
 alter table public.notification_event_types
   add constraint notification_event_types_audience_check check (audience in ('center', 'platform'));
+alter table public.notification_event_types drop constraint if exists notification_event_types_channels_check;
+alter table public.notification_event_types
+  add constraint notification_event_types_channels_check check (channels <@ array['telegram', 'whatsapp_link']);
 
 comment on column public.notification_event_types.audience is
   'center — читает центр (шаблон центр правит); platform — читает администратор платформы (шаблон только дефолтный, 0051 Р10).';
 comment on column public.notification_event_types.subject_required is
   'Сообщение о ребёнке: строка notification_log обязана нести subject_id (0035; с 0051 признак здесь, а не литералом в триггере).';
+comment on column public.notification_event_types.channels is
+  'Каналы, для которых у типа есть дефолтный шаблон платформы; забор 0034/0037 сверяет message_templates с этим списком. Пусто — тип сообщений не порождает (event.failed).';
 
 update public.notification_event_types
    set subject_required = false
@@ -105,13 +111,13 @@ update public.notification_event_types
 -- event.failed в справочнике не было (0037 заводил только типы с шаблонами),
 -- а исключение 0035 на него распространялось — без строки признак по
 -- умолчанию (true) потребовал бы subject у сообщения об ошибке.
-insert into public.notification_event_types (event_type, description, audience, subject_required) values
-  ('event.failed',               'Событие не обработано после трёх попыток', 'center',   false),
-  ('platform.payment_submitted', 'Центр подал заявку на оплату',            'platform', false),
-  ('subscription.extended',      'Подписка центра продлена',                'center',   false),
-  ('subscription.voice_blocked', 'Голосовое не расшифровано: подписка истекла', 'center', true)
+insert into public.notification_event_types (event_type, description, audience, subject_required, channels) values
+  ('event.failed',               'Событие не обработано после трёх попыток', 'center',   false, '{}'),
+  ('platform.payment_submitted', 'Центр подал заявку на оплату',            'platform', false, '{telegram}'),
+  ('subscription.extended',      'Подписка центра продлена',                'center',   false, '{telegram,whatsapp_link}'),
+  ('subscription.voice_blocked', 'Голосовое не расшифровано: подписка истекла', 'center', true, '{telegram,whatsapp_link}')
 on conflict (event_type) do update
-  set audience = excluded.audience, subject_required = excluded.subject_required;
+  set audience = excluded.audience, subject_required = excluded.subject_required, channels = excluded.channels;
 
 -- Из 0035; список исключений заменён признаком справочника (Р1).
 create or replace function public.notification_log_subject_required()
@@ -226,7 +232,7 @@ create table if not exists public.platform_payments (
   constraint platform_payments_confirmation_whole    check (num_nonnulls(confirmed_at, plan, months, amount_tiyin) in (0, 4)),
   constraint platform_payments_confirmed_by_needs_at check (confirmed_by is null or confirmed_at is not null),
   constraint platform_payments_rejected_by_needs_at  check (rejected_by is null or rejected_at is not null),
-  constraint platform_payments_reject_reason_needs_at check (reject_reason is null or rejected_at is not null),
+  constraint platform_payments_rejection_whole       check (num_nonnulls(rejected_at, reject_reason) in (0, 2)),
   constraint platform_payments_one_outcome           check (num_nonnulls(confirmed_at, rejected_at, withdrawn_at) <= 1),
   constraint platform_payments_months_range          check (months is null or months between 1 and 24),
   constraint platform_payments_amount_positive       check (amount_tiyin is null or amount_tiyin > 0),
@@ -265,6 +271,10 @@ create policy platform_payments_select on public.platform_payments
     or public.is_platform_admin()
   );
 
+-- Supabase выдаёт новой таблице все права anon/authenticated/service_role;
+-- service_role снимается намеренно (bypassrls + insert дал бы подтверждение
+-- мимо extend_subscription), как у platform_admins (0049).
+revoke all on table public.platform_payments from public, anon, authenticated, service_role;
 grant select on public.platform_payments to authenticated;
 
 call public.apply_audit('platform_payments');
@@ -344,6 +354,14 @@ begin
   -- Р7: отдаёт личные чаты платформы — только контуру воркера без сессии.
   if auth.uid() is not null then
     raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+  -- Р10 в обратную сторону: сообщение центра (резюме с именем ребёнка) не
+  -- может уехать платформе через копипасту ветки в event_messages.
+  if not exists (
+    select 1 from public.notification_event_types t
+     where t.event_type = p_event_type and t.audience = 'platform'
+  ) then
+    raise exception 'Событие % адресовано центру, не платформе', p_event_type using errcode = '42501';
   end if;
 
   -- Только telegram: телефона у платформы нет, whatsapp_link не строится.
@@ -480,7 +498,9 @@ create or replace function public.platform_open_payments()
     submitted_by_email   text,
     created_at           timestamptz,
     center_plan          text,
-    center_until         timestamptz
+    center_until         timestamptz,
+    center_timezone      text,
+    center_until_text    text
   )
   language plpgsql
   stable
@@ -492,10 +512,15 @@ begin
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
 
+  -- Даты — в поясе центра, готовой строкой: /admin показывает несколько
+  -- центров сразу и не должен выбирать пояс сам (правило «время в поясе центра»).
   return query
     select p.id, p.center_id, c.name, p.claimed_plan, p.claimed_months, p.claimed_amount_tiyin,
            p.source, p.note, u.email::text, p.created_at, c.plan,
-           case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end
+           case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end,
+           public.center_timezone(c.id),
+           to_char((case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end)
+                     at time zone public.center_timezone(c.id), 'DD.MM.YYYY')
       from public.platform_payments p
       join public.centers c on c.id = p.center_id
       left join auth.users u on u.id = p.submitted_by
@@ -606,6 +631,9 @@ begin
   v_until := v_base + make_interval(months => p_months);
 
   -- ADR-011: план и срок одним update — между ними центр читал бы.
+  -- Понижение тарифа ниже текущего наполнения разрешено: центр остаётся
+  -- выше лимита, правит и архивирует, но не растёт (BUSINESS_RULES, 0049).
+  -- Коррекции ошибочного подтверждения в 8a нет — решение в ADR-011.
   update public.centers
      set plan = p_plan, subscription_until = v_until
    where id = v_center;
@@ -634,6 +662,11 @@ grant execute on function public.extend_subscription(uuid, text, integer, intege
 
 
 -- 6. Контур бота при просрочке (Р8, Р9) — ai_job_begin из 0048, добавлен один блок ------------------
+
+-- Р8: одно событие на диктовку — констрейнт, не проверка перед записью.
+create unique index if not exists events_voice_blocked_once
+  on public.events (center_id, (payload ->> 'voice_request_id'))
+  where type = 'subscription.voice_blocked';
 
 create or replace function public.ai_job_begin(p_event_id bigint)
   returns jsonb
@@ -679,30 +712,6 @@ begin
   if v_request.center_id <> v_event.center_id then
     return null;
   end if;
-
-  -- 0051 Р8/Р9: подписка истекла между диктовкой и обработкой — деньги
-  -- платформы не тратятся, специалист узнаёт один раз. До insert в ai_jobs:
-  -- следа в очереди работ нет, дедупликация — по данным events.
-  if not public.center_writable(v_event.center_id) then
-    if not exists (
-      select 1 from public.events e
-       where e.type = 'subscription.voice_blocked'
-         and e.center_id = v_event.center_id
-         and e.payload ->> 'voice_request_id' = v_request.id::text
-    ) then
-      perform public.emit_event_unchecked(
-        'subscription.voice_blocked',
-        jsonb_build_object(
-          'center_id',        v_event.center_id,
-          'voice_request_id', v_request.id,
-          'reason_code',      'subscription_expired'
-        ),
-        v_event.center_id
-      );
-    end if;
-    return null;
-  end if;
-
   if not exists (
     select 1 from public.students s
      where s.id = v_request.student_id and s.deleted_at is null
@@ -722,6 +731,29 @@ begin
        and (n.status = 'approved'
             or (n.source = 'voice' and n.conduct_key is distinct from v_request.id))
   ) then
+    return null;
+  end if;
+
+  -- 0051 Р8/Р9: подписка истекла между диктовкой и обработкой — деньги
+  -- платформы не тратятся, специалист узнаёт один раз. После проверок выше
+  -- (работа, которую всё равно отбросили бы, сообщения не заслуживает) и до
+  -- insert в ai_jobs (следа в очереди работ нет). «Один раз» держит
+  -- частичный unique events_voice_blocked_once, а не if — два параллельных
+  -- прогона n8n иначе эмитили бы оба.
+  if not public.center_writable(v_event.center_id) then
+    begin
+      perform public.emit_event_unchecked(
+        'subscription.voice_blocked',
+        jsonb_build_object(
+          'center_id',        v_event.center_id,
+          'voice_request_id', v_request.id,
+          'reason_code',      'subscription_expired'
+        ),
+        v_event.center_id
+      );
+    exception when unique_violation then
+      null;
+    end;
     return null;
   end if;
 
@@ -879,12 +911,32 @@ begin
   end if;
 
   -- 0051 Р9: подписка истекла между диктовкой и обработкой — заказчику
-  -- диктовки, если он всё ещё сотрудник (0047 Р2). {child} только в telegram.
+  -- диктовки, если он всё ещё сотрудник (0047 Р2) и повтор диктовки ещё
+  -- имеет смысл (0047 Р4, дословно как у lesson.voice_failed — текст просит
+  -- записать заново, и просить это при утверждённой заметке нельзя).
+  -- {child} только в telegram.
   if v_event.type = 'subscription.voice_blocked' then
     select * into v_request from public.lesson_voice_requests r
      where r.id = (v_event.payload ->> 'voice_request_id')::uuid
        and r.center_id = v_event.center_id;
     if not found then
+      return;
+    end if;
+
+    if exists (
+      select 1 from public.lesson_notes n
+       where n.lesson_id = v_request.lesson_id
+         and n.student_id = v_request.student_id
+         and n.deleted_at is null
+         and (n.status = 'approved'
+              or (n.source = 'voice' and n.conduct_key is distinct from v_request.id))
+    ) then
+      return;
+    end if;
+
+    select l.starts_at, l.status, l.deleted_at into v_lesson
+      from public.lessons l where l.id = v_request.lesson_id;
+    if not found or v_lesson.deleted_at is not null or v_lesson.status = 'cancelled' then
       return;
     end if;
 
