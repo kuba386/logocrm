@@ -38,6 +38,7 @@ export function TemplateForm({
   isActive,
   isOwn,
   placeholders,
+  mandatory = false,
 }: {
   eventType: string
   channel: string
@@ -45,6 +46,8 @@ export function TemplateForm({
   isActive: boolean
   isOwn: boolean
   placeholders: string[]
+  /** 0052: напоминание о сроке не выключается — тумблер погашен, база отбивает 42501. */
+  mandatory?: boolean
 }) {
   const [saveState, saveAction] = useActionState(saveTemplate, initial)
   const [previewState, previewAction] = useActionState(previewTemplate, initial)
@@ -72,9 +75,19 @@ export function TemplateForm({
       />
 
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="isActive" defaultChecked={isActive} className="h-4 w-4" />
+        <input
+          type="checkbox"
+          name="isActive"
+          defaultChecked={mandatory || isActive}
+          disabled={mandatory}
+          className="h-4 w-4"
+        />
         {t('notifications', 'active')}
+        {mandatory ? (
+          <span className="text-xs text-muted-foreground">{t('notifications', 'mandatoryHint')}</span>
+        ) : null}
       </label>
+      {mandatory ? <input type="hidden" name="isActive" value="on" /> : null}
 
       <p className="text-xs text-muted-foreground">
         {placeholders.length > 0

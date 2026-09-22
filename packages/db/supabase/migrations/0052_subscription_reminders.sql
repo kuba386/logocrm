@@ -23,9 +23,15 @@
 --       дала бы второе сообщение за тот же срок. Продление сдвигает until →
 --       новая пара → напоминание перед новым сроком придёт снова.
 --
---   Р4. Пока у центра есть открытая заявка на оплату — continue БЕЗ отметки:
---       «продлите» центру, который вчера прислал чек, ведёт ко второй заявке
---       и 23505. Отзыв или отклонение заявки возвращает напоминание само.
+--   Р4. Пока у центра есть открытая заявка на оплату — «заканчивается» не
+--       уходит (continue БЕЗ отметки): «продлите» центру, который вчера
+--       прислал чек, ведёт ко второй заявке и 23505. «Истёк» уходит всегда:
+--       заявка живёт вечно, и центр, сделавший всё правильно, не должен
+--       уйти в read-only молча. Отзыв или отклонение заявки возвращает
+--       «заканчивается» само.
+--       Ступени: ending_3 (вход в окно, 2–3 дня), ending_1 (завтра),
+--       ending_0 (сегодня) — по одному на (центр, срок, ступень); иначе
+--       сообщение приходило бы за три дня и больше никогда.
 --
 --   Р5. Центр без даты (fail closed 0050 Р5) — напоминаний нет (ключу нечем
 --       ключеваться), но состояние видно платформе: platform_centers() отдаёт
@@ -35,29 +41,41 @@
 --       0 и 1 текст врал бы в последний день. {until} — в поясе центра на
 --       момент доставки.
 --
---   Р7. Тело одного центра — в блоке исключений: мусор в settings->>'timezone'
---       одного центра не должен ронять прогон и отметки всем остальным.
+--   Р7. Тело одного центра — в блоке исключений: сбой одного центра не
+--       роняет прогон и отметки всем остальным; число пропусков уходит
+--       наружу второй колонкой skipped_count — тихий отказ здесь стоит
+--       дороже обычного, нода n8n роняет прогон при skipped_count > 0.
+--       Сам мусор в settings->>'timezone' закрыт у корня: center_timezone()
+--       (0006) переиздана с фолбэком на Asia/Bishkek для имени вне
+--       pg_timezone_names — иначе владелец одного центра прямым PATCH
+--       settings клал бы platform_centers() и platform_open_payments()
+--       всем (centers правится и в read-only, Р12 из 0050).
 --
 --   Р8. Отметочная таблица — как lesson_reminders_sent/center_digest_runs:
 --       revoke all, grant select, политика только select owner/admin, в списке
 --       исключений guard (Р3 из 0050 — отметка воркера).
 --
---   Р9. Один trial-центр на владельца — триггеры, не проверка в create_center:
---       memberships after insert OR update of role (повышение до owner через
---       change_member_role — тот же путь), centers after update of plan,
---       deleted_at (восстановление центра). Счёт включает мягко удалённые
---       trial-центры моложе 90 дней — иначе серийный trial через архивацию.
---       Без сессии (миграции, фикстуры) триггер молчит — правило анти-абьюза
---       живёт в пользовательской сессии (граница 0050 Р1); платформа
---       проходит. Путь «второй центр заводит платформа» существует:
---       platform_create_center(name, owner_email) — из платформенной сессии
---       триггер пропускает.
+--   Р9. Один trial-центр на владельца — триггер на memberships after insert
+--       OR update of role (повышение до owner через change_member_role — тот
+--       же путь), не проверка в create_center. Счёт включает trial-центры,
+--       закрытые меньше 90 дней назад — иначе серийный trial через
+--       архивацию. Без сессии (миграции, фикстуры) триггер молчит — правило
+--       анти-абьюза живёт в пользовательской сессии (граница 0050 Р1);
+--       платформа проходит. Путь «второй центр заводит платформа»
+--       существует: platform_create_center(name, owner_email) — из
+--       платформенной сессии триггер пропускает. Возврат центра в trial и
+--       снятие архива достижимы только платформе (centers_protect_plan,
+--       RLS centers) — это её осознанное решение, триггера на centers нет.
+--       Текст отказа зависит от того, чей центр считается: свой («у вас
+--       уже есть») или участника, которого повышают до owner.
 --
 --   Р10. Деньги платформы считает SQL: platform_summary() — MRR (прайс ×
 --        живые платные центры — подписочная база, не выручка; отступление от
 --        «MRR по platform_payments» — в отчёт), выручка по месяцам
---        подтверждения по всем строкам без limit, счётчики центров и заявок.
---        Месяц — в поясе платформы (Asia/Bishkek): платформа одна.
+--        подтверждения за 12 месяцев без limit по строкам, счётчики центров
+--        и заявок. Месяц и граница окна — в поясе платформы (Asia/Bishkek):
+--        платформа одна. centers_expired — просроченные с датой; без даты —
+--        отдельный счётчик.
 --
 --   Р11. platform_open_payments (0051) и platform_centers фильтруют
 --        centers.deleted_at одинаково: закрытый центр не в заявках и не в
@@ -92,6 +110,11 @@ create or replace function public.message_templates_mandatory_active()
   set search_path = ''
 as $$
 begin
+  -- Soft-delete своей строки (reset_message_template) — возврат к дефолту,
+  -- а не выключение: его не отбиваем.
+  if new.deleted_at is not null then
+    return new;
+  end if;
   if new.center_id is not null and not new.is_active and exists (
        select 1 from public.notification_event_types t
         where t.event_type = new.event_type and t.mandatory)
@@ -131,18 +154,47 @@ select v.center_id, v.event_type, v.channel, v.text
  );
 
 
--- 2. Отметка и планировщик (Р3–Р8) -----------------------------------------------------------------------------
+-- 2. Пояс центра с фолбэком (Р7) — center_timezone из 0006 ------------------------------------------------------
+
+create or replace function public.center_timezone(p_center_id uuid default null)
+  returns text
+  language sql
+  stable
+  security definer
+  set search_path = ''
+as $$
+  select case
+           when exists (select 1 from pg_catalog.pg_timezone_names z where z.name = t.tz) then t.tz
+           else 'Asia/Bishkek'
+         end
+    from (
+      select coalesce(
+               (select c.settings ->> 'timezone'
+                  from public.centers c
+                 where c.id = coalesce(p_center_id, public.current_center())),
+               'Asia/Bishkek') as tz
+    ) t;
+$$;
+
+comment on function public.center_timezone(uuid) is
+  'Пояс центра из settings->>''timezone'', дефолт Asia/Bishkek. С 0052 — и для имени вне pg_timezone_names: поле правит владелец, один мусорный пояс не должен ронять читателей всех центров.';
+
+revoke all on function public.center_timezone(uuid) from public, anon;
+grant execute on function public.center_timezone(uuid) to authenticated;
+
+
+-- 3. Отметка и планировщик (Р3–Р8) -----------------------------------------------------------------------------
 
 create table if not exists public.subscription_reminders_sent (
   center_id uuid not null references public.centers (id) on delete cascade,
   until     timestamptz not null,
-  kind      text not null check (kind in ('ending', 'expired')),
+  kind      text not null check (kind in ('ending_3', 'ending_1', 'ending_0', 'expired')),
   sent_at   timestamptz not null default now(),
   primary key (center_id, until, kind)
 );
 
 comment on table public.subscription_reminders_sent is
-  'Отметка планировщика subscription_reminders (0052 Р3): одно напоминание на (центр, срок, вид). Продление сдвигает срок — новая отметка. Пишет только планировщик.';
+  'Отметка планировщика subscription_reminders (0052 Р3/Р4): одно напоминание на (центр, срок, ступень): ending_3 — вход в окно за 2–3 дня, ending_1 — завтра, ending_0 — сегодня, expired — после. Продление сдвигает срок — новые отметки. Пишет только планировщик.';
 
 revoke all on table public.subscription_reminders_sent from public, anon, authenticated, service_role;
 grant select on public.subscription_reminders_sent to authenticated;
@@ -183,18 +235,19 @@ $$;
 revoke all on function public.readonly_guard_exempt_tables() from public, anon, authenticated, service_role;
 
 create or replace function public.subscription_reminders()
-  returns table (center_count integer)
+  returns table (center_count integer, skipped_count integer)
   language plpgsql
   security definer
   set search_path = ''
 as $$
 declare
-  v_count integer := 0;
-  r       record;
-  v_tz    text;
-  v_until timestamptz;
-  v_days  integer;
-  v_kind  text;
+  v_count   integer := 0;
+  v_skipped integer := 0;
+  r         record;
+  v_tz      text;
+  v_until   timestamptz;
+  v_days    integer;
+  v_kind    text;
 begin
   if auth.uid() is not null then
     raise exception 'Недостаточно прав' using errcode = '42501';
@@ -205,7 +258,7 @@ begin
       from public.centers c
      where c.deleted_at is null
   loop
-    -- Р7: один центр с мусором в поясе не роняет прогон остальным.
+    -- Р7: сбой одного центра не роняет прогон остальным; число пропусков — наружу.
     begin
       v_tz := public.center_timezone(r.center_id);
 
@@ -216,19 +269,21 @@ begin
       -- Р5: без даты напоминать не о чем — видно платформе в platform_centers().
       continue when v_until is null;
 
-      -- Р4: открытая заявка — молчим без отметки, вернёмся после её исхода.
-      continue when exists (
-        select 1 from public.platform_payments p
-         where p.center_id = r.center_id
-           and p.confirmed_at is null and p.rejected_at is null and p.withdrawn_at is null);
-
       v_days := (v_until at time zone v_tz)::date - public.center_today(r.center_id);
       v_kind := case
-        when v_days between 0 and 3 then 'ending'
+        when v_days in (2, 3) then 'ending_3'
+        when v_days = 1 then 'ending_1'
+        when v_days = 0 then 'ending_0'
         when v_days < 0 then 'expired'
         else null
       end;
       continue when v_kind is null;
+
+      -- Р4: при открытой заявке «заканчивается» молчит без отметки; «истёк» идёт всегда.
+      continue when v_kind <> 'expired' and exists (
+        select 1 from public.platform_payments p
+         where p.center_id = r.center_id
+           and p.confirmed_at is null and p.rejected_at is null and p.withdrawn_at is null);
 
       insert into public.subscription_reminders_sent (center_id, until, kind)
       values (r.center_id, v_until, v_kind)
@@ -236,7 +291,7 @@ begin
       continue when not found;
 
       perform public.emit_event_unchecked(
-        'subscription.' || v_kind,
+        case when v_kind = 'expired' then 'subscription.expired' else 'subscription.ending' end,
         jsonb_build_object(
           'center_id', r.center_id,
           'plan',      r.plan,
@@ -248,23 +303,24 @@ begin
       );
       v_count := v_count + 1;
     exception when others then
-      -- Р7: пропускаем центр; причина — в логе Postgres, прогон идёт дальше.
+      -- Р7: пропускаем центр; причина — в логе Postgres, число — в ответе.
+      v_skipped := v_skipped + 1;
       raise warning 'subscription_reminders: центр % пропущен: %', r.center_id, sqlerrm;
     end;
   end loop;
 
-  return query select v_count;
+  return query select v_count, v_skipped;
 end;
 $$;
 
 comment on function public.subscription_reminders() is
-  'Планировщик (n8n schedule, раз в час): subscription.ending за 0–3 дня до срока и subscription.expired после — по одному на (центр, срок, вид), только с местного 8:00, не при открытой заявке (0052 Р3–Р7). Продление сдвигает срок — напоминание придёт снова перед новым.';
+  'Планировщик (n8n schedule, раз в час): subscription.ending за 2–3, 1 и 0 дней до срока (три ступени) и subscription.expired после — по одному на (центр, срок, ступень), только с местного 8:00; «заканчивается» молчит при открытой заявке, «истёк» — нет (0052 Р3–Р7). skipped_count > 0 — центры со сбоем, нода n8n роняет прогон.';
 
 revoke all on function public.subscription_reminders() from public, anon, authenticated, service_role;
 grant execute on function public.subscription_reminders() to bot_worker;
 
 
--- 3. Доставка (Р6) — event_messages из 0051, две ветки сверху ----------------------------------------------------
+-- 4. Доставка (Р6) — event_messages из 0051, две ветки сверху ----------------------------------------------------
 
 create or replace function public.event_messages(p_event_id bigint)
   returns table (
@@ -312,13 +368,16 @@ begin
               - (now() at time zone v_tz)::date;
     v_vars := jsonb_build_object(
       'what',  case when (v_event.payload ->> 'is_trial')::boolean then 'Пробный период' else 'Подписка' end,
-      'until', to_char((v_event.payload ->> 'until')::timestamptz at time zone v_tz, 'DD.MM.YYYY'),
-      'when',  case
+      'until', to_char((v_event.payload ->> 'until')::timestamptz at time zone v_tz, 'DD.MM.YYYY')
+    );
+    -- {when} есть только у «заканчивается»: у истёкшего срока «сегодня» врало бы.
+    if v_event.type = 'subscription.ending' then
+      v_vars := v_vars || jsonb_build_object('when', case
                  when v_days <= 0 then 'сегодня'
                  when v_days = 1 then 'завтра'
                  else 'через ' || v_days::text || ' дн.'
-               end
-    );
+               end);
+    end if;
     return query
       select r.user_id, r.channel, r.chat_id,
              public.render_template(r.template_text, v_vars),
@@ -711,15 +770,12 @@ comment on function public.event_messages(bigint) is
 revoke all on function public.event_messages(bigint) from public, anon, authenticated, service_role;
 grant execute on function public.event_messages(bigint) to bot_worker;
 
-update public.events
-   set processed_at = now()
- where processed_at is null
-   and type in ('subscription.ending', 'subscription.expired');
+-- Шва нет: типы заводятся этой миграцией, накопленных событий быть не может.
 
 
--- 4. Один trial-центр на владельца (Р9) ----------------------------------------------------------------------------
+-- 5. Один trial-центр на владельца (Р9) ----------------------------------------------------------------------------
 
-create or replace function public.assert_one_trial_center(p_user_id uuid)
+create or replace function public.assert_one_trial_center(p_user_id uuid, p_self boolean)
   returns void
   language plpgsql
   security definer
@@ -728,22 +784,26 @@ as $$
 begin
   perform pg_advisory_xact_lock(hashtextextended('trial_owner:' || p_user_id::text, 0));
 
-  -- Мягко удалённые trial-центры моложе 90 дней считаются: иначе
+  -- Trial-центры, закрытые меньше 90 дней назад, считаются: иначе
   -- «закрыл — открыл новый» даёт бесконечный trial.
   if (select count(*)
         from public.centers c
         join public.memberships m on m.center_id = c.id and m.role = 'owner'
        where m.user_id = p_user_id
          and c.plan = 'trial'
-         and (c.deleted_at is null or c.created_at > now() - interval '90 days')) > 1
+         and (c.deleted_at is null or c.deleted_at > now() - interval '90 days')) > 1
   then
-    raise exception 'У вас уже есть центр на пробном периоде. Второй центр открывает администратор платформы — напишите на kadamlogopedbishkek@gmail.com'
+    if p_self then
+      raise exception 'У вас уже есть центр на пробном периоде. Второй центр открывает администратор платформы — напишите на kadamlogopedbishkek@gmail.com'
+        using errcode = '23514';
+    end if;
+    raise exception 'У этого участника уже есть свой центр на пробном периоде — сделать его владельцем второго trial-центра может только администратор платформы'
       using errcode = '23514';
   end if;
 end;
 $$;
 
-revoke all on function public.assert_one_trial_center(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.assert_one_trial_center(uuid, boolean) from public, anon, authenticated, service_role;
 
 create or replace function public.memberships_one_trial_per_owner()
   returns trigger
@@ -757,7 +817,7 @@ begin
     return null;
   end if;
   if new.role = 'owner' and (tg_op = 'INSERT' or old.role is distinct from new.role) then
-    perform public.assert_one_trial_center(new.user_id);
+    perform public.assert_one_trial_center(new.user_id, new.user_id = auth.uid());
   end if;
   return null;
 end;
@@ -769,36 +829,6 @@ drop trigger if exists memberships_one_trial_per_owner on public.memberships;
 create trigger memberships_one_trial_per_owner
   after insert or update of role on public.memberships
   for each row execute function public.memberships_one_trial_per_owner();
-
-create or replace function public.centers_one_trial_per_owner()
-  returns trigger
-  language plpgsql
-  security definer
-  set search_path = ''
-as $$
-declare
-  r record;
-begin
-  if auth.uid() is null or public.is_platform_admin() then
-    return null;
-  end if;
-  if new.plan = 'trial' and new.deleted_at is null
-     and (old.plan is distinct from new.plan or old.deleted_at is distinct from new.deleted_at)
-  then
-    for r in select m.user_id from public.memberships m where m.center_id = new.id and m.role = 'owner' loop
-      perform public.assert_one_trial_center(r.user_id);
-    end loop;
-  end if;
-  return null;
-end;
-$$;
-
-revoke all on function public.centers_one_trial_per_owner() from public, anon, authenticated, service_role;
-
-drop trigger if exists centers_one_trial_per_owner on public.centers;
-create trigger centers_one_trial_per_owner
-  after update of plan, deleted_at on public.centers
-  for each row execute function public.centers_one_trial_per_owner();
 
 -- Путь для второго центра: заводит платформа, владельцем становится
 -- указанный пользователь (по подтверждённому email), платформа членства не
@@ -871,7 +901,7 @@ revoke all on function public.platform_create_center(text, text, text) from publ
 grant execute on function public.platform_create_center(text, text, text) to authenticated;
 
 
--- 5. Пульт платформы: центры и сводка (Р5, Р10, Р11) --------------------------------------------------------------
+-- 6. Пульт платформы: центры и сводка (Р5, Р10, Р11) --------------------------------------------------------------
 
 create or replace function public.platform_centers()
   returns table (
@@ -964,7 +994,9 @@ begin
     'centers_total',   (select count(*) from public.centers c where c.deleted_at is null),
     'centers_trial',   (select count(*) from public.centers c where c.deleted_at is null and c.plan = 'trial'),
     'centers_paid',    (select count(*) from public.centers c where c.deleted_at is null and c.plan <> 'trial'),
-    'centers_expired', (select count(*) from public.centers c where c.deleted_at is null and not public.center_writable(c.id)),
+    'centers_expired', (select count(*) from public.centers c where c.deleted_at is null
+                          and (case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end) is not null
+                          and not public.center_writable(c.id)),
     'centers_no_date', (select count(*) from public.centers c where c.deleted_at is null
                           and (case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end) is null),
     'open_claims',     (select count(*) from public.platform_payments pp
@@ -985,7 +1017,8 @@ begin
                                    sum(pp.amount_tiyin)::bigint as total
                               from public.platform_payments pp
                              where pp.confirmed_at is not null
-                               and pp.confirmed_at >= date_trunc('month', now() at time zone v_tz) - interval '11 months'
+                               -- Граница окна — в том же поясе, что и группировка (иначе +6 часов по серверу).
+                               and pp.confirmed_at >= (date_trunc('month', now() at time zone v_tz) - interval '11 months') at time zone v_tz
                              group by 1
                           ) x)
   );

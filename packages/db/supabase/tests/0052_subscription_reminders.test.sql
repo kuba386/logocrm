@@ -7,7 +7,8 @@
 -- без даты — тишина и no_date в platform_centers, мусорный пояс не роняет
 -- прогон. Доставка: owner/admin с {what}/{until}/{when}; выключить нельзя.
 -- Trial-лимит: create_center, повышение до owner, архивация не освобождает,
--- платформа заводит второй, без сессии — тишина. platform_centers/summary.
+-- платформа заводит второй, совладение без trial проходит, без сессии —
+-- тишина. platform_centers/summary, мусорный пояс не роняет пульт.
 --
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
@@ -16,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(40);
+select plan(45);
 
 
 -- 1. Заборы ----------------------------------------------------------------------------------------------
@@ -179,16 +180,31 @@ select is((select center_count from public.subscription_reminders()), 0, 'Отк
 select is(
   (select count(*)::int from public.subscription_reminders_sent s where s.center_id = 'a0520000-0000-0000-0000-0000000000c1'),
   1, 'И отметки за новый срок нет — вернёмся после исхода заявки');
+-- «Истёк» при открытой заявке уходит: заявка живёт вечно, молчать нельзя (Р4).
+select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
+update public.centers set subscription_until = public.tests_local_midnight(-2) where id = 'a0520000-0000-0000-0000-0000000000c1';
+select public.tests_claims(null, null);
+select is(
+  (select center_count from public.subscription_reminders()) +
+  (select count(*)::int from public.events e where e.type = 'subscription.expired' and e.center_id = 'a0520000-0000-0000-0000-0000000000c1'),
+  2, 'А просрочен при открытой заявке: expired уходит (прогон 1 + событие 1)');
 select public.tests_claims('a0520000-0000-0000-0000-000000000001','a0520000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select public.withdraw_platform_payment((select id from public.platform_payments p where p.center_id = 'a0520000-0000-0000-0000-0000000000c1'));
 reset role;
+select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
+update public.centers set subscription_until = public.tests_local_midnight(1) where id = 'a0520000-0000-0000-0000-0000000000c1';
 select public.tests_claims(null, null);
-select is((select center_count from public.subscription_reminders()), 1, 'После отзыва заявки — напоминание за новый срок');
+select is((select center_count from public.subscription_reminders()), 1, 'После отзыва заявки — напоминание за новый срок (ступень «завтра»)');
 select is(
   (select count(*)::int from public.events e where e.type = 'subscription.ending'
      and e.center_id = 'a0520000-0000-0000-0000-0000000000c1' and (e.payload ->> 'days_left')::int = 1),
   1, 'А: второе событие — за 1 день, по новому сроку');
+-- Ступень «сегодня» — третье событие на тот же срок? Нет: срок другой; проверяем ступень на том же сроке.
+select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
+update public.centers set subscription_until = public.tests_local_midnight(0) where id = 'a0520000-0000-0000-0000-0000000000c1';
+select public.tests_claims(null, null);
+select is((select center_count from public.subscription_reminders()), 1, 'В день срока — ступень ending_0, ещё одно напоминание');
 
 -- Смена пояса не даёт второго напоминания за тот же срок (Р3: ключ — сам срок).
 update public.centers set settings = jsonb_build_object('timezone', (select tz_day2 from t_tz)) where id = 'a0520000-0000-0000-0000-0000000000c1';
@@ -207,9 +223,12 @@ update public.centers set subscription_until = null where id = 'a0520000-0000-00
 select public.tests_claims(null, null);
 select is((select center_count from public.subscription_reminders()), 0, 'Центр без даты: напоминаний нет');
 
--- Мусор в поясе одного центра не роняет прогон (Р7).
+-- Мусор в поясе одного центра: фолбэк на Asia/Bishkek у корня (Р7), прогон без пропусков.
 update public.centers set settings = '{"timezone":"Mars/Olympus"}'::jsonb where id = 'a0520000-0000-0000-0000-0000000000c2';
-select lives_ok($q$ select public.subscription_reminders() $q$, 'Мусорный пояс у Б — прогон живёт');
+select is(public.center_timezone('a0520000-0000-0000-0000-0000000000c2'), 'Asia/Bishkek',
+  'center_timezone: имя вне pg_timezone_names → Asia/Bishkek');
+select is((select center_count + skipped_count from public.subscription_reminders()), 0,
+  'Мусорный пояс у Б — прогон живёт, пропусков нет, живой trial события не даёт');
 update public.centers set settings = jsonb_build_object('timezone', (select tz_night from t_tz)) where id = 'a0520000-0000-0000-0000-0000000000c2';
 
 
@@ -252,6 +271,14 @@ select throws_ok(
   'Закрыл trial-центр — новый trial всё равно только через платформу');
 reset role;
 
+-- Повышение до owner участника без своего trial — обычное совладение, проходит.
+select public.tests_claims('a0520000-0000-0000-0000-000000000001','a0520000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select lives_ok(
+  $q$ select public.change_member_role('a0520000-0000-0000-0000-000000000002', 'owner') $q$,
+  'Совладелец без своего trial-центра — правило не мешает');
+reset role;
+
 -- Без сессии — фикстурам и миграциям правило не мешает.
 select public.tests_claims(null, null);
 select lives_ok(
@@ -268,15 +295,18 @@ select throws_ok($q$ select * from public.platform_centers() $q$, '42501', null,
 select throws_ok($q$ select public.platform_summary() $q$, '42501', null, 'platform_summary от центра — отказ');
 reset role;
 
+-- Мусорный пояс у В не роняет пульт (Р7): фолбэк в center_timezone.
+update public.centers set settings = '{"timezone":"Mars/Olympus"}'::jsonb where id = 'a0520000-0000-0000-0000-0000000000c3';
 select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
 set local role authenticated;
+select lives_ok($q$ select * from public.platform_centers() $q$, 'platform_centers живёт при мусорном поясе одного центра');
 select is(
   (select pc.no_date from public.platform_centers() pc limit 1),
   true, 'Центр без даты — первым в списке (Р5)');
 select ok(
-  (select pc.writable and pc.days_left = 1 and pc.owner_email = 'owner-0052@test.kg' and not pc.is_trial
+  (select pc.writable and pc.days_left = 0 and pc.owner_email = 'owner-0052@test.kg' and not pc.is_trial
      from public.platform_centers() pc where pc.center_id = 'a0520000-0000-0000-0000-0000000000c1'),
-  'А: writable, days_left = 1 в поясе центра, email владельца');
+  'А: writable в день срока, days_left = 0 в поясе центра, email первого владельца');
 select is(
   (select count(*)::int from public.platform_centers() pc where pc.center_id = 'a0520000-0000-0000-0000-0000000000c5'),
   0, 'Закрытый центр в списке отсутствует (Р11)');
