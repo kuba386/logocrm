@@ -3620,6 +3620,7 @@ export type Database = {
       center_plan_name: { Args: { p_center_id: string }; Returns: string }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
       center_today: { Args: { p_center_id?: string }; Returns: string }
+      center_writable: { Args: { p_center_id: string }; Returns: boolean }
       change_member_role: {
         Args: { p_role: string; p_user_id: string }
         Returns: undefined
@@ -3981,6 +3982,13 @@ export type Database = {
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
         Returns: string
+      }
+      readonly_guard_exempt_tables: {
+        Args: never
+        Returns: {
+          reason: string
+          table_name: string
+        }[]
       }
       rebuild_lesson_participants: {
         Args: { p_lesson_id: string }
