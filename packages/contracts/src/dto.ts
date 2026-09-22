@@ -6,7 +6,8 @@ import { z } from 'zod'
 export const roleSchema = z.enum(['owner', 'admin', 'teacher', 'parent', 'registrar', 'finance'])
 export type Role = z.infer<typeof roleSchema>
 
-export const planSchema = z.enum(['trial', 'solo', 'studio', 'ai'])
+// Коды тарифов — зеркало справочника public.plans (0049); 'ai' заменён на 'center'.
+export const planSchema = z.enum(['trial', 'solo', 'studio', 'center'])
 export type Plan = z.infer<typeof planSchema>
 
 export const signInSchema = z.object({

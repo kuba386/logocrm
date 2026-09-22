@@ -376,7 +376,15 @@ export type Database = {
           trial_ends_at?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "centers_plan_fk"
+            columns: ["plan"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       diagnostics: {
         Row: {
@@ -2393,6 +2401,57 @@ export type Database = {
           },
         ]
       }
+      plans: {
+        Row: {
+          code: string
+          created_at: string
+          is_public: boolean
+          limits: Json
+          name: string
+          price_tiyin: number
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          is_public?: boolean
+          limits: Json
+          name: string
+          price_tiyin: number
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          is_public?: boolean
+          limits?: Json
+          name?: string
+          price_tiyin?: number
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_admins: {
+        Row: {
+          created_at: string
+          email: string
+          note: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          note?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
       rooms: {
         Row: {
           capacity: number
@@ -3477,6 +3536,15 @@ export type Database = {
         Args: { p_chat_id: number; p_token: string }
         Returns: Json
       }
+      assert_center_limit: {
+        Args: {
+          p_center_id: string
+          p_current: number
+          p_key: string
+          p_noun: string
+        }
+        Returns: undefined
+      }
       assign_homework: {
         Args: {
           p_conduct_key?: string
@@ -3548,6 +3616,8 @@ export type Database = {
         Args: { p_from: string; p_reason?: string; p_series_id: string }
         Returns: number
       }
+      center_limits: { Args: never; Returns: Json }
+      center_plan_name: { Args: { p_center_id: string }; Returns: string }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
       center_today: { Args: { p_center_id?: string }; Returns: string }
       change_member_role: {
@@ -3764,6 +3834,7 @@ export type Database = {
         }[]
       }
       is_member: { Args: { p_center_id: string }; Returns: boolean }
+      is_platform_admin: { Args: never; Returns: boolean }
       lesson_reminders: {
         Args: never
         Returns: {
@@ -3902,6 +3973,10 @@ export type Database = {
           phone_alt: string
           relation: string
         }[]
+      }
+      plan_limit: {
+        Args: { p_center_id: string; p_key: string }
+        Returns: number
       }
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
