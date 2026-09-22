@@ -3678,7 +3678,7 @@ export type Database = {
         Returns: undefined
       }
       assert_one_trial_center: {
-        Args: { p_user_id: string }
+        Args: { p_self: boolean; p_user_id: string }
         Returns: undefined
       }
       assign_homework: {
@@ -4560,6 +4560,7 @@ export type Database = {
         Args: never
         Returns: {
           center_count: number
+          skipped_count: number
         }[]
       }
       subscription_state: {
