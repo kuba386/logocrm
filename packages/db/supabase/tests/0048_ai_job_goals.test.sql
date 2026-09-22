@@ -13,7 +13,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(25);
+select plan(30);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -47,19 +47,25 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
   ('a0480000-0000-0000-0000-000000000002','a0480000-0000-0000-0000-0000000000c1','teacher','a0480000-0000-0000-0000-000000000010', null);
 
 -- Айсулуу — ребёнок диктовки; Бекжан — сосед по группе; Тимур — без целей.
+-- Данияр — 51 активная цель, для проверки усечения (Р6).
 insert into public.students (id, center_id, full_name, payer_id) values
   ('a0480000-0000-0000-0000-000000000040','a0480000-0000-0000-0000-0000000000c1','Айсулуу','a0480000-0000-0000-0000-000000000030'),
   ('a0480000-0000-0000-0000-000000000041','a0480000-0000-0000-0000-0000000000c1','Бекжан','a0480000-0000-0000-0000-000000000030'),
   ('a0480000-0000-0000-0000-000000000042','a0480000-0000-0000-0000-0000000000c1','Тимур','a0480000-0000-0000-0000-000000000030'),
+  ('a0480000-0000-0000-0000-000000000044','a0480000-0000-0000-0000-0000000000c1','Данияр','a0480000-0000-0000-0000-000000000030'),
   ('a0480000-0000-0000-0000-000000000043','a0480000-0000-0000-0000-0000000000c2','Ребёнок Б','a0480000-0000-0000-0000-000000000031');
 
 insert into public.groups (id, center_id, name) values
   ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-0000000000c1','Группа 0048');
 
-insert into public.group_students (group_id, student_id, center_id) values
-  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000040','a0480000-0000-0000-0000-0000000000c1'),
-  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000041','a0480000-0000-0000-0000-0000000000c1'),
-  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000042','a0480000-0000-0000-0000-0000000000c1');
+-- joined_at явно и в прошлом: дефолт current_date в CI (UTC) между 00:00 и
+-- 02:00 оказался бы позже занятия «два часа назад», и состав вышел бы
+-- пустым (тот же капкан, что 0015/0017).
+insert into public.group_students (group_id, student_id, center_id, joined_at) values
+  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000040','a0480000-0000-0000-0000-0000000000c1', current_date - 7),
+  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000041','a0480000-0000-0000-0000-0000000000c1', current_date - 7),
+  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000042','a0480000-0000-0000-0000-0000000000c1', current_date - 7),
+  ('a0480000-0000-0000-0000-000000000050','a0480000-0000-0000-0000-000000000044','a0480000-0000-0000-0000-0000000000c1', current_date - 7);
 
 insert into public.lessons (id, center_id, teacher_id, group_id, service_id, status, starts_at, ends_at) values
   ('a0480000-0000-0000-0000-000000000060','a0480000-0000-0000-0000-0000000000c1','a0480000-0000-0000-0000-000000000010',
@@ -111,6 +117,17 @@ insert into public.goals (id, center_id, student_id, stage_id, title, area, soun
    'КАНАРЕЙКА-ЦЕНТР-Б','звукопроизношение','р','active');
 
 update public.goals set deleted_at = now() where id = 'a0480000-0000-0000-0000-000000000076';
+
+-- 51 цель Данияра одним insert (общий created_at, один этап): порядок
+-- держит только id, и последняя по id — канарейка, которая обязана выпасть.
+-- area/sound пустые — ключи в элементе должны остаться с null.
+insert into public.goals (id, center_id, student_id, stage_id, title, status)
+select ('a0480000-0000-0000-0001-' || lpad(to_hex(n), 12, '0'))::uuid,
+       'a0480000-0000-0000-0000-0000000000c1', 'a0480000-0000-0000-0000-000000000044',
+       (select id from public.goal_stages where center_id = 'a0480000-0000-0000-0000-0000000000c1' and code = 'words'),
+       case when n = 51 then 'КАНАРЕЙКА-51' else 'Цель ' || n end,
+       'active'
+  from generate_series(1, 51) as n;
 
 
 -- Диктовка по Айсулуу ------------------------------------------------------------------------------
@@ -178,7 +195,36 @@ select is((select position('Айсулуу' in j::text) from t048_job), 0,
 
 select ok(
   (select public.ai_job_begin((select max(id) from public.events where type = 'lesson.voice_received')) is null),
-  'Второй вызов в восьмиминутном окне — null, занятие работы не изменилось (0042 В2)');
+  'Повтор в восьмиминутном окне — null: клиника отдаётся только тому, кто занял работу (0042 В2)');
+
+
+-- Усечение (Р6): 51 активная цель ---------------------------------------------------------------------
+
+select public.tests_claims('a0480000-0000-0000-0000-000000000002','a0480000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select lives_ok(
+  $q$ select public.request_voice_note('a0480000-0000-0000-0000-000000000060','a0480000-0000-0000-0000-000000000044') $q$,
+  'Диктовка по Данияру запрошена');
+reset role;
+select public.tests_claims(null, null);
+select public.arm_voice_request(
+  (select token from public.lesson_voice_requests where consumed_at is null and cancelled_at is null), 780048);
+select public.report_voice_note(780048, 'file-048-3', 10);
+update public.events set claimed_at = now() where claimed_at is null and type = 'lesson.voice_received';
+
+create temporary table t048_many as
+  select public.ai_job_begin((select max(id) from public.events where type = 'lesson.voice_received')) as j;
+
+select is((select jsonb_array_length(j -> 'student_goals') from t048_many), 50,
+  'Список усечён до 50 (Р6)');
+select is((select (j ->> 'student_goals_total')::int from t048_many), 51,
+  'А полное число — 51: воркер скажет, что показаны не все');
+select is((select position('КАНАРЕЙКА-51' in j::text) from t048_many), 0,
+  'Выпала именно последняя по (этап, дата, id)');
+select ok(
+  (select (e ? 'area') and (e ? 'sound') and jsonb_typeof(e -> 'area') = 'null'
+     from t048_many, jsonb_array_elements(j -> 'student_goals') e limit 1),
+  'Пустые area/sound остаются ключами с null, а не исчезают');
 
 
 -- Ребёнок без целей ---------------------------------------------------------------------------------

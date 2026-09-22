@@ -123,28 +123,37 @@ at-least-once (ADR-003). Это единственное место констр
    Буквально, между разбором ответа модели и вызовом RPC:
 
    ```js
-   const allowed = new Set((job.student_goals || []).map((g) => g.goal_id));
+   // Нормализация ДО try: catch не должен трогать то, чего может не быть.
+   const studentGoals = Array.isArray(job.student_goals) ? job.student_goals : [];
+   const goalsTotal = Number(job.student_goals_total) || studentGoals.length;
+   const allowed = new Set(studentGoals.map((g) => g.goal_id));
+   const parsed = model && typeof model === 'object' ? model : {};
    let dropped = 0;
    try {
-     const goals = Array.isArray(model.goals) ? model.goals : [];
-     model.goals = goals.filter((g) => {
+     const goals = Array.isArray(parsed.goals) ? parsed.goals : [];
+     parsed.goals = goals.filter((g) => {
        const ok = g && typeof g.goal_id === 'string' && allowed.has(g.goal_id);
        if (!ok) dropped += 1;
        return ok;
      });
    } catch (e) {
      // Заметка дороже оценок: любая ошибка разбора — шлём без ключа goals.
-     delete model.goals;
+     delete parsed.goals;
      dropped = -1;
    }
+   // дальше в ai_write_lesson_note уходит parsed, не model
    ```
 
-   `dropped > 0` — дописать в сообщение специалисту «оценки по N целям не
-   записаны: модель назвала неизвестную цель»; `dropped < 0` — «оценки не
-   записаны»; `job.student_goals.length === 0` — «у ребёнка нет активных
-   целей, оценки не записаны»; `job.student_goals_total >
-   job.student_goals.length` — «показаны не все цели». Молчать нельзя: то,
-   что отброшено до RPC, в `progress_skipped` не попадает.
+   Сообщение специалисту, по одной причине на случай (первая подходящая):
+   `studentGoals.length === 0` — «у ребёнка нет активных целей, оценки не
+   записаны» (и ветка про неизвестную цель тогда не печатается);
+   `dropped < 0` — «оценки не записаны»; `dropped > 0` — «оценки по N
+   целям не записаны: модель назвала неизвестную цель»; отдельно, если
+   `goalsTotal > studentGoals.length` — «показаны не все цели». Молчать
+   нельзя: то, что отброшено до RPC, в `progress_skipped` не попадает.
+   Список — только `active` (0048 Р3): цель на паузе воркер отбросит, а
+   `ai_write_lesson_note` приняла бы — этот фильтр и есть место, где
+   они сходятся.
 
    **Сохранение данных выполнений у `poll` — выключить** (Settings →
    Save execution data: none / только ошибки). Иначе формулировки целей и
