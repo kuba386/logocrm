@@ -29,12 +29,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
 
+  // Администратор платформы — роль вне memberships (0049): у него может не
+  // быть ни одного центра, тогда его место — /admin, а не «создайте центр».
+  const { data: isPlatformAdmin } = await supabase.rpc('is_platform_admin')
+
   if (!centerId) {
     const { data: memberships } = await supabase.from('memberships').select('center_id').limit(1)
     redirect(
       memberships && memberships.length > 0
         ? '/select-center'
-        : await noCenterRedirectPath(supabase),
+        : isPlatformAdmin
+          ? '/admin'
+          : await noCenterRedirectPath(supabase),
     )
   }
 
@@ -81,6 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // специалист, которым настройки центра не показываются.
     { href: '/app/telegram', label: 'Telegram', show: true },
     { href: '/app/settings/staff', label: 'Настройки', show: isAdmin || finance },
+    { href: '/admin', label: 'Платформа', show: Boolean(isPlatformAdmin) },
   ].filter((link) => link.show)
 
   // Нижние вкладки (Stitch: specialist-day-mobile.png, parent-cabinet-mobile.png)
