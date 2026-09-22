@@ -849,3 +849,38 @@ call public.apply_readonly_guard('tbl');
 `center_id` guard не судит, забор 0050 лишь напоминает о решении.
 `center_writable(uuid)` без гранта `authenticated`: экрану хватает
 `center_limits().writable`, а прямой RPC был бы оракулом по чужим центрам.
+
+### Заявки на оплату и продление (0051)
+
+`platform_payments` — заявка центра и решение платформы в одной строке,
+но разными колонками: центр пишет `claimed_plan`, `claimed_months`,
+`claimed_amount_tiyin` (= `plans.price_tiyin × months`, посчитано в SQL),
+`source`, `note` через `submit_platform_payment(plan, months, source,
+note)` (owner/admin, работает и в read-only — таблица в списке
+исключений guard); платформа — `confirmed_*`/`plan`/`months`/`amount_tiyin`
+через `extend_subscription(payment_id, plan, months, amount_tiyin,
+receipt_received)` или `rejected_*` через `reject_platform_payment`;
+центр отзывает свою открытую заявку `withdraw_platform_payment`. Одна
+открытая заявка на центр — частичный unique
+`platform_payments_one_open_per_center` по трём исходам. Инварианты
+подтверждения — констрейнты на колонках (`num_nonnulls(...) in (0, 4)`,
+`months 1..24`, `amount > 0`, `plan <> 'trial'`), функция повторяет их
+ради русского текста. Политика — только `select` (owner/admin своего
+центра, `is_platform_admin()` последним); `apply_tenant_rls` намеренно
+не применена — её `with check` дал бы центру дописать подтверждение.
+Чек не хранится: фото уходит платформе в Telegram с номером заявки.
+
+Список открытых заявок — `platform_open_payments()` для `/admin`;
+Telegram-уведомление платформе (`platform.payment_submitted` →
+`notification_platform_targets`, только telegram, только дефолтный
+шаблон) — дополнение. Условие выката: аккаунт владельца платформы
+зарегистрирован, email подтверждён, Telegram привязан.
+
+`notification_event_types` получил `audience` (`center`/`platform`) и
+`subject_required`: триггер `notification_log_subject_required` читает
+признак из справочника (тип вне справочника защищён по умолчанию), а
+триггер `message_templates_platform_audience` не даёт центру завести
+строку для платформенного типа. Событие `subscription.extended` идёт
+owner/admin центра с `{until}` в поясе центра;
+`subscription.voice_blocked` — заказчику диктовки, один раз на диктовку
+(дедупликация по `events` в `ai_job_begin`).

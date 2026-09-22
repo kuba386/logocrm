@@ -93,6 +93,8 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   salary_runs_teacher_month_live_key:
     'Зарплата за этот месяц уже утверждена — чтобы утвердить заново, владелец отменяет снимок',
   payments_refund_once_key: 'Возврат по этому абонементу уже оформлен',
+  platform_payments_one_open_per_center:
+    'У центра уже есть открытая заявка на оплату — дождитесь подтверждения или отзовите её',
 }
 
 /**

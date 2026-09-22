@@ -7,6 +7,17 @@
 
 ### Добавлено
 
+- **Этап 8a, шаг 3: заявки на оплату и продление** —
+  `0051_platform_payments.sql`. `platform_payments`: центр подаёт заявку
+  «я оплатил» (сумма из прайса в SQL, одна открытая на центр, отзыв),
+  платформа подтверждает `extend_subscription` (план и срок одним
+  update, остаток trial не сгорает, повтор — отказ) или отклоняет с
+  причиной; список открытых заявок `platform_open_payments()`; события
+  `platform.payment_submitted` (администраторам платформы, только
+  telegram) и `subscription.extended` (owner/admin центра). Признаки
+  `audience`/`subject_required` в справочнике событий вместо литералов в
+  триггере. Контур бота при просрочке: `ai_job_begin` отдаёт `null` до
+  платных вызовов и один раз шлёт специалисту `subscription.voice_blocked`.
 - **Этап 8a, шаги 1–2: тарифы и только чтение** — `0049_plans_and_limits.sql`,
   `0050_center_readonly.sql`. Справочник `plans` с ценами владельца (Solo
   990, Studio 3 900, Center 7 900 сом), тариф меняет только платформа,

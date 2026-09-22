@@ -102,7 +102,11 @@ update public.notification_event_types
    set subject_required = false
  where event_type in ('digest.daily', 'event.failed');
 
+-- event.failed в справочнике не было (0037 заводил только типы с шаблонами),
+-- а исключение 0035 на него распространялось — без строки признак по
+-- умолчанию (true) потребовал бы subject у сообщения об ошибке.
 insert into public.notification_event_types (event_type, description, audience, subject_required) values
+  ('event.failed',               'Событие не обработано после трёх попыток', 'center',   false),
   ('platform.payment_submitted', 'Центр подал заявку на оплату',            'platform', false),
   ('subscription.extended',      'Подписка центра продлена',                'center',   false),
   ('subscription.voice_blocked', 'Голосовое не расшифровано: подписка истекла', 'center', true)

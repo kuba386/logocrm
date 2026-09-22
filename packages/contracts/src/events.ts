@@ -706,6 +706,47 @@ export const reportMonthlyReadySchema = z.object({
   }),
 })
 
+/**
+ * Центр подал заявку на оплату (0051). Адресат — администраторы платформы;
+ * сумма посчитана в SQL из прайса, не в браузере.
+ */
+export const platformPaymentSubmittedSchema = z.object({
+  type: z.literal('platform.payment_submitted'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    payment_id: z.string().uuid(),
+    plan: z.string(),
+    months: z.number().int(),
+    amount_tiyin: z.number().int(),
+    source: z.string(),
+  }),
+})
+
+/** Платформа подтвердила заявку и продлила центр (0051) — owner/admin центра. */
+export const subscriptionExtendedSchema = z.object({
+  type: z.literal('subscription.extended'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    payment_id: z.string().uuid(),
+    plan: z.string(),
+    months: z.number().int(),
+    until: z.string(),
+  }),
+})
+
+/**
+ * Подписка истекла между диктовкой и обработкой (0051): ai_job_begin отдал
+ * null до платных вызовов, специалист узнаёт один раз на диктовку.
+ */
+export const subscriptionVoiceBlockedSchema = z.object({
+  type: z.literal('subscription.voice_blocked'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    voice_request_id: z.string().uuid(),
+    reason_code: z.literal('subscription_expired'),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -770,6 +811,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   lessonVoiceReceivedSchema,
   lessonVoiceFailedSchema,
   reportMonthlyReadySchema,
+  platformPaymentSubmittedSchema,
+  subscriptionExtendedSchema,
+  subscriptionVoiceBlockedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
