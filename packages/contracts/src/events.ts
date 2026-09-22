@@ -747,6 +747,33 @@ export const subscriptionVoiceBlockedSchema = z.object({
   }),
 })
 
+/**
+ * Срок подписки или пробного периода заканчивается через 0–3 дня (0052).
+ * Планировщик subscription_reminders, один раз на (центр, срок).
+ */
+export const subscriptionEndingSchema = z.object({
+  type: z.literal('subscription.ending'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    plan: z.string(),
+    is_trial: z.boolean(),
+    until: z.string(),
+    days_left: z.number().int(),
+  }),
+})
+
+/** Срок истёк — центр в режиме только чтения (0052). */
+export const subscriptionExpiredSchema = z.object({
+  type: z.literal('subscription.expired'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    plan: z.string(),
+    is_trial: z.boolean(),
+    until: z.string(),
+    days_left: z.number().int(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -814,6 +841,8 @@ export const appEventSchema = z.discriminatedUnion('type', [
   platformPaymentSubmittedSchema,
   subscriptionExtendedSchema,
   subscriptionVoiceBlockedSchema,
+  subscriptionEndingSchema,
+  subscriptionExpiredSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

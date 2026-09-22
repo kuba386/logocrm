@@ -403,6 +403,8 @@
     "lesson.note_approved": "Резюме занятия родителю",
     "lesson.voice_failed": "Голосовое не обработалось",
     "subscription.extended": "Подписка продлена",
-    "subscription.voice_blocked": "Голосовое не расшифровано: подписка истекла"
+    "subscription.voice_blocked": "Голосовое не расшифровано: подписка истекла",
+    "subscription.ending": "Срок подписки заканчивается",
+    "subscription.expired": "Срок подписки истёк"
   }
 }

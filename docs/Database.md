@@ -884,3 +884,30 @@ Telegram-уведомление платформе (`platform.payment_submitted`
 owner/admin центра с `{until}` в поясе центра;
 `subscription.voice_blocked` — заказчику диктовки, один раз на диктовку
 (дедупликация по `events` в `ai_job_begin`).
+
+### Напоминания о сроке и пульт платформы (0052)
+
+`subscription_reminders()` — четвёртый шаг сценария `schedule` n8n
+(`bot_worker`): центрам с местным часом ≥ 8 за 0–3 дня до срока —
+`subscription.ending`, после — `subscription.expired`; отметка
+`subscription_reminders_sent (center_id, until, kind)` — по самому сроку
+из `centers`, не по дате в поясе (пояс правит владелец). Пока у центра
+открыта заявка — `continue` без отметки. Тело одного центра в блоке
+исключений: мусор в поясе одного центра не роняет прогон. `{when}` собирает
+SQL («сегодня»/«завтра»/«через N дн.»). `notification_event_types.mandatory`
++ триггер `message_templates_mandatory_active`: центр правит текст, но не
+выключает рассылку.
+
+Один trial-центр на владельца — `assert_one_trial_center` из триггеров на
+`memberships` (insert или смена роли на owner) и `centers` (update plan,
+deleted_at); мягко удалённые trial моложе 90 дней считаются; без сессии и
+для платформы триггеры молчат. Правило для фикстур: два центра — два
+разных владельца либо второму `plan <> 'trial'`. Второй центр владельцу —
+`platform_create_center(name, owner_email)` из платформенной сессии.
+
+`platform_centers()` (живые центры, срок и дни в поясе центра, `no_date`
+первыми), `platform_summary()` (счётчики, `mrr_tiyin` = прайс живых платных
+центров, выручка по месяцам подтверждения за 12 месяцев в поясе
+платформы) — деньги для `/admin` считает SQL, экран рисует.
+`platform_open_payments` фильтрует закрытые центры так же, как
+`platform_centers`.

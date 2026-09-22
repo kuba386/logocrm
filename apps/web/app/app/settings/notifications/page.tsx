@@ -40,6 +40,9 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // platform.payment_submitted здесь нет намеренно: его читает платформа,
   // строку центра отбивает триггер message_templates_platform_audience.
   { type: 'subscription.voice_blocked', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  // 0052: обязательные — выключить нельзя (триггер message_templates_mandatory_active), текст править можно.
+  { type: 'subscription.ending', placeholders: ['{what}', '{until}', '{when}'] },
+  { type: 'subscription.expired', placeholders: ['{what}', '{until}'] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
