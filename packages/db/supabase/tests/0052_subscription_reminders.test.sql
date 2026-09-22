@@ -280,6 +280,8 @@ select ok(
 select is(
   (select count(*)::int from public.platform_centers() pc where pc.center_id = 'a0520000-0000-0000-0000-0000000000c5'),
   0, 'Закрытый центр в списке отсутствует (Р11)');
+reset role;
+-- Сравнение с прямым агрегатом — от postgres: center_writable без гранта authenticated (0050), claims платформы остаются.
 select is(
   (public.platform_summary() ->> 'mrr_tiyin')::bigint,
   (select coalesce(sum(p.price_tiyin), 0)::bigint from public.centers c join public.plans p on p.code = c.plan
@@ -291,7 +293,6 @@ select is(
   (select count(*)::int from public.centers c where c.deleted_at is null
      and (case when c.plan = 'trial' then c.trial_ends_at else c.subscription_until end) is null),
   'Счётчик центров без даты совпадает с прямым запросом');
-reset role;
 select public.tests_claims(null, null);
 
 select * from finish();
