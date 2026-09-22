@@ -13,7 +13,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(31);
+select plan(41);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -28,6 +28,9 @@ values
   ('00000000-0000-0000-0000-000000000000','a0490000-0000-0000-0000-000000000001','authenticated','authenticated','owner-0049@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0490000-0000-0000-0000-000000000002','authenticated','authenticated','platform-0049@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0490000-0000-0000-0000-000000000003','authenticated','authenticated','parent-0049@test.kg','','','','','','','','');
+
+-- is_platform_admin() требует подтверждённый email у auth.users (Р4).
+update auth.users set email_confirmed_at = now() where id = 'a0490000-0000-0000-0000-000000000002';
 
 -- Центр на solo: 1 специалист, 40 учеников.
 insert into public.centers (id, name, slug, plan, settings) values
@@ -123,8 +126,23 @@ select throws_ok(
   'Второй специалист на solo — отказ по лимиту');
 select throws_like(
   $q$ insert into public.teachers (id, center_id, full_name) values ('a0490000-0000-0000-0000-000000000011','a0490000-0000-0000-0000-0000000000c1','Второй') $q$,
-  '%Тариф Solo: 1 специалистов%',
-  'Текст отказа — русский, с именем тарифа и лимитом (Р8)');
+  '%Лимит тарифа Solo — специалистов: 1%',
+  'Текст отказа — русский, с именем тарифа и лимитом, без склонения числа (Р8)');
+
+-- Путь, которым лимит увидит владелец: форма приглашения заводит карточку.
+select public.tests_claims('a0490000-0000-0000-0000-000000000001','a0490000-0000-0000-0000-0000000000c1','owner-0049@test.kg');
+set local role authenticated;
+select throws_ok(
+  $q$ select * from public.create_invitation('teacher', 'Приглашённый') $q$,
+  '23514', null,
+  'Приглашение второго специалиста на solo — тот же отказ по лимиту');
+reset role;
+select public.tests_claims(null, null);
+
+select ok((select prosrc like '%pg_advisory_xact_lock%' from pg_proc where proname = 'teachers_check_limit'),
+  'Триггер специалистов берёт advisory lock до счёта (Р7)');
+select ok((select prosrc like '%pg_advisory_xact_lock%' from pg_proc where proname = 'students_check_limit'),
+  'Триггер учеников берёт advisory lock до счёта (Р7)');
 
 -- Архив освобождает лицензию, восстановление снова её занимает.
 update public.teachers set deleted_at = now() where id = 'a0490000-0000-0000-0000-000000000010';
@@ -167,23 +185,54 @@ select public.tests_claims(null, null);
 select lives_ok(
   $q$ insert into public.teachers (id, center_id, full_name) values ('a0490000-0000-0000-0000-000000000013','a0490000-0000-0000-0000-0000000000c1','Четвёртый') $q$,
   'На Center лимита нет (-1)');
+select public.tests_claims('a0490000-0000-0000-0000-000000000001','a0490000-0000-0000-0000-0000000000c1','owner-0049@test.kg');
+set local role authenticated;
+select lives_ok(
+  $q$ select * from public.create_invitation('teacher', 'Приглашённый на Center') $q$,
+  'И приглашение на Center проходит');
+reset role;
+select public.tests_claims(null, null);
 
 
--- 4. Лимит учеников — по живым строкам, не по статусу (Р5) --------------------------------------------
+-- 4. Лимит учеников: место занимает не-архивный ученик (Р5), пакетная вставка не обходит (Р6) ---------
 
 select public.tests_claims('a0490000-0000-0000-0000-000000000002', null, 'platform-0049@test.kg');
 update public.centers set plan = 'solo' where id = 'a0490000-0000-0000-0000-0000000000c1';
 select public.tests_claims(null, null);
 
-insert into public.students (center_id, full_name, payer_id, status)
-select 'a0490000-0000-0000-0000-0000000000c1', 'Ученик ' || n, 'a0490000-0000-0000-0000-000000000030',
-       case when n <= 30 then 'archived' else 'active' end
-  from generate_series(1, 40) as n;
+select lives_ok(
+  $q$ insert into public.students (center_id, full_name, payer_id)
+      select 'a0490000-0000-0000-0000-0000000000c1', 'Ученик ' || n, 'a0490000-0000-0000-0000-000000000030'
+        from generate_series(1, 39) as n $q$,
+  '39 учеников одним оператором — в лимит 40 укладываются');
 
+select throws_ok(
+  $q$ insert into public.students (center_id, full_name, payer_id)
+      select 'a0490000-0000-0000-0000-0000000000c1', 'Ученик ' || n, 'a0490000-0000-0000-0000-000000000030'
+        from generate_series(40, 41) as n $q$,
+  '23514', null,
+  'Ещё два одним оператором — отказ: AFTER-триггер видит строки своего оператора, пакет лимит не обходит (Р6)');
+
+select lives_ok(
+  $q$ insert into public.students (center_id, full_name, payer_id) values ('a0490000-0000-0000-0000-0000000000c1','Сороковой','a0490000-0000-0000-0000-000000000030') $q$,
+  '40-й по одному проходит');
 select throws_ok(
   $q$ insert into public.students (center_id, full_name, payer_id) values ('a0490000-0000-0000-0000-0000000000c1','Сорок первый','a0490000-0000-0000-0000-000000000030') $q$,
   '23514', null,
-  '41-й ученик на solo — отказ, хотя 30 из 40 в archived: лимит считает живые строки');
+  '41-й — отказ');
+
+-- Архив освобождает место, возврат из архива снова его занимает.
+update public.students set status = 'archived' where center_id = 'a0490000-0000-0000-0000-0000000000c1' and full_name = 'Ученик 1';
+select lives_ok(
+  $q$ insert into public.students (center_id, full_name, payer_id) values ('a0490000-0000-0000-0000-0000000000c1','Сорок первый','a0490000-0000-0000-0000-000000000030') $q$,
+  'После архивации одного 41-й проходит — место занимает не-архивный ученик (Р5)');
+select throws_ok(
+  $q$ update public.students set status = 'active' where center_id = 'a0490000-0000-0000-0000-0000000000c1' and full_name = 'Ученик 1' $q$,
+  '23514', null,
+  'Возврат из архива при полном списке — отказ (Р6: вход в считаемое состояние)');
+select lives_ok(
+  $q$ update public.students set notes = 'правка' where center_id = 'a0490000-0000-0000-0000-0000000000c1' and full_name = 'Ученик 2' $q$,
+  'Правка карточки лимитом не проверяется');
 
 
 -- 5. center_limits() (Р9) ------------------------------------------------------------------------------

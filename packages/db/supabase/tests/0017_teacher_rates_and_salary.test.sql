@@ -30,9 +30,11 @@ values
   ('00000000-0000-0000-0000-000000000000','55555555-5555-5555-5555-555555555555','authenticated','authenticated','parent@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','66666666-6666-6666-6666-666666666666','authenticated','authenticated','revoked@test.kg','','','','','','','','');
 
-insert into public.centers (id, name, slug, settings) values
-  ('cccccccc-0000-0000-0000-00000000000a','Центр А','centr-a-sal','{"timezone":"Asia/Bishkek"}'::jsonb),
-  ('cccccccc-0000-0000-0000-00000000000b','Центр Б','centr-b-sal','{"timezone":"Asia/Bishkek"}'::jsonb);
+-- plan = 'center': фикстура заводит 9 специалистов, а trial с 0049 ограничен
+-- пятью — лимит держится триггером и на тестовых данных тоже.
+insert into public.centers (id, name, slug, plan, settings) values
+  ('cccccccc-0000-0000-0000-00000000000a','Центр А','centr-a-sal','center','{"timezone":"Asia/Bishkek"}'::jsonb),
+  ('cccccccc-0000-0000-0000-00000000000b','Центр Б','centr-b-sal','center','{"timezone":"Asia/Bishkek"}'::jsonb);
 
 -- t1/t2 — с полным членством (нужны для ролевых тестов: "специалист видит
 -- только своё"). Остальные — только карточка, без входа: calc_salary/

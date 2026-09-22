@@ -44,23 +44,40 @@
 --       null). Одно определение: create_invitation заводит карточку до
 --       регистрации, accept_invitation добавляет членство после — счёт по
 --       memberships расходовал бы одну лицензию дважды в одном счётчике
---       и ни разу в другом. Лимит учеников — живые строки students
---       независимо от status: иначе 300 детей в archived держат карточки
---       на тарифе за 40.
+--       и ни разу в другом. Ученик занимает место, пока не в архиве
+--       (deleted_at is null and status <> 'archived'): у учеников нет
+--       мягкого удаления, archive_student ставит только status, и счёт по
+--       deleted_at оставил бы центр без способа освободить место — текст
+--       отказа врал бы о доступных действиях. Плата за активный список,
+--       не за историю; отступление от Plan Р5 записано в BUSINESS_RULES.
 --
 --   Р6. Лимит проверяется только на переходе В считаемое состояние:
---       insert и update deleted_at not null → null (восстановление).
---       Центр, превысивший лимит после понижения плана, живёт дальше и
---       теряет только право расти — правка телефона у ребёнка не должна
---       отбиваться лимитом (Plan Р5).
+--       insert живой строки, восстановление из deleted_at, у учеников —
+--       выход из archived. Центр, превысивший лимит после понижения
+--       плана, живёт дальше и теряет только право расти — правка телефона
+--       у ребёнка не должна отбиваться лимитом (Plan Р5). Триггеры AFTER:
+--       BEFORE не видит строк своего оператора, и пакетная вставка
+--       обходила бы лимит целиком (ревью). Смена center_id живой строки
+--       счёт не пересчитывает — прямой путь закрыт with check тенанта;
+--       если этап 9 заведёт перенос между филиалами, триггер расширить.
 --
 --   Р7. Гонка: pg_advisory_xact_lock по ключу 'center_limit:' ||
 --       center_id ДО count(*), один ключ для всех триггеров лимитов —
 --       иначе гонка переезжает между таблицами. Serializable не годится:
 --       под PostgREST транзакцией управляет не приложение (Plan Р5).
+--       Два одновременных восстановления одной карточки дадут 40P01 —
+--       errors.ts помечает его retryable, это приемлемо.
 --
---   Р8. Текст отказа — русский, errcode 23514, имя тарифа из plans.name:
---       «Тариф Solo: 1 специалист. Смените тариф в настройках».
+--   Р8. Текст отказа — русский, errcode 23514, имя тарифа из plans.name,
+--       без склонения числа: «Лимит тарифа Solo — специалистов: 1.
+--       Освободите место в архиве или смените тариф в настройках центра».
+--       Имени констрейнта нет, поэтому errors.ts отдаёт текст как есть
+--       (ветка 23514 без имени) — правка CHECK_MESSAGES не нужна.
+--       Фикстуры pgTAP, которым нужно больше 5 специалистов или 200
+--       учеников в одном центре, заводят центр с plan = 'center' (0017).
+--       Запись settings центром — в будущем только через RPC, которая
+--       мержит ключи и не трогает features; целый PATCH settings без
+--       ключа features триггер отобьёт как попытку снять фичи.
 --
 --   Р9. center_limits() — один RPC для экрана тарифа, баннера и
 --       онбординга: план, лимиты, использование, дни до конца в поясе
@@ -95,6 +112,7 @@ create table if not exists public.plans (
 comment on table public.plans is
   'Тарифы платформы (0049 Р1). Цены в тыйынах. limits: teachers/students/ai_notes_month, -1 = без ограничения. Пишет только администратор платформы; читает любой авторизованный — экран «Сменить план».';
 
+drop trigger if exists plans_set_updated_at on public.plans;
 create trigger plans_set_updated_at
   before update on public.plans
   for each row execute function extensions.moddatetime(updated_at);
@@ -116,11 +134,21 @@ create policy plans_select_authenticated on public.plans
   for select to authenticated
   using (true);
 
-revoke all on table public.plans from public, anon, authenticated, service_role;
+-- service_role чтение оставлено (конвенция 0024: revoke только у
+-- public/anon/authenticated): справочник тарифов — не персональные данные,
+-- а квота ИИ следующей миграции читает limits из контура воркера.
+revoke all on table public.plans from public, anon, authenticated;
 grant select on public.plans to authenticated;
 
--- Р2: centers.plan — ссылка, не литерал.
+-- Аудит: plans и platform_admins без center_id, а audit_log.center_id not
+-- null — apply_audit к ним неприменим. След смены тарифа есть в audit_log
+-- центра (centers под apply_audit); журнал изменений самих справочников —
+-- вместе с /admin-RPC, которые будут единственным путём записи.
+
+-- Р2: centers.plan — ссылка, не литерал. Перед деплоем на другую базу:
+-- select plan, count(*) from centers group by 1 — код 'ai' должен быть пуст.
 alter table public.centers drop constraint if exists centers_plan_check;
+alter table public.centers drop constraint if exists centers_plan_fk;
 alter table public.centers
   add constraint centers_plan_fk foreign key (plan) references public.plans (code) on delete restrict;
 
@@ -140,6 +168,13 @@ insert into public.platform_admins (email, note) values
   ('kadamlogopedbishkek@gmail.com', 'владелец платформы, решение 22.09.2026')
 on conflict (email) do nothing;
 
+-- Не по claim'у email из JWT, а по auth.users текущего uid и только при
+-- подтверждённом email: claim — это auth.users.email на момент выдачи
+-- токена, а signup с чужим адресом при выключенном подтверждении дал бы
+-- токен с этим email любому. Подтверждение email в облачном проекте —
+-- условие деплоя (ADR-004). Долг: после регистрации владельца перевести
+-- platform_admins на user_id (план Р15), строка по email — одноразовая
+-- заявка.
 create or replace function public.is_platform_admin()
   returns boolean
   language sql
@@ -149,13 +184,16 @@ create or replace function public.is_platform_admin()
 as $$
   select auth.uid() is not null
      and exists (
-       select 1 from public.platform_admins a
-        where a.email = lower(coalesce(auth.jwt() ->> 'email', ''))
+       select 1
+         from auth.users u
+         join public.platform_admins a on a.email = lower(u.email)
+        where u.id = auth.uid()
+          and u.email_confirmed_at is not null
      );
 $$;
 
 comment on function public.is_platform_admin() is
-  'Администратор платформы текущей сессии (0049 Р4). Проверка внутри каждой /admin-RPC — первой строкой, до current_center().';
+  'Администратор платформы текущей сессии (0049 Р4): auth.users по auth.uid(), email подтверждён, адрес в platform_admins. Проверка внутри каждой /admin-RPC — первой строкой, до current_center().';
 
 revoke all on function public.is_platform_admin() from public, anon;
 grant execute on function public.is_platform_admin() to authenticated;
@@ -245,8 +283,10 @@ $$;
 
 revoke all on function public.center_plan_name(uuid) from public, anon, authenticated, service_role;
 
--- Общая проверка: вызывается из триггеров на переходе в считаемое
--- состояние. Ключ advisory lock один на центр для всех лимитов (Р7).
+-- Общая проверка: вызывается из AFTER-триггеров, когда своя строка уже
+-- посчитана — поэтому сравнение строгое (>). Ключ advisory lock один на
+-- центр для всех лимитов (Р7). Текст не склоняет число: «1 специалистов»
+-- на экране, который должен убедить заплатить, недопустимо.
 create or replace function public.assert_center_limit(p_center_id uuid, p_key text, p_current integer, p_noun text)
   returns void
   language plpgsql
@@ -258,9 +298,9 @@ begin
   if v_limit < 0 then
     return;
   end if;
-  if p_current >= v_limit then
-    raise exception 'Тариф %: % %. Смените тариф в настройках центра',
-      public.center_plan_name(p_center_id), v_limit, p_noun
+  if p_current > v_limit then
+    raise exception 'Лимит тарифа % — %: %. Освободите место в архиве или смените тариф в настройках центра',
+      public.center_plan_name(p_center_id), p_noun, v_limit
       using errcode = '23514';
   end if;
 end;
@@ -268,6 +308,10 @@ $$;
 
 revoke all on function public.assert_center_limit(uuid, text, integer, text) from public, anon, authenticated, service_role;
 
+-- AFTER, не BEFORE: BEFORE-триггер не видит строк своего же оператора
+-- (cmin = curcid), и один insert с массивом из 500 учеников проходил бы
+-- лимит целиком. AFTER выполняется после инкремента командного счётчика и
+-- считает всё, включая свою строку.
 create or replace function public.teachers_check_limit()
   returns trigger
   language plpgsql
@@ -279,21 +323,20 @@ declare
 begin
   -- Р6: только вход в «живые»: insert живой карточки или восстановление.
   if new.deleted_at is not null then
-    return new;
+    return null;
   end if;
   if tg_op = 'UPDATE' and old.deleted_at is null then
-    return new;
+    return null;
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('center_limit:' || new.center_id::text, 0));
 
   select count(*)::integer into v_count
     from public.teachers t
-   where t.center_id = new.center_id and t.deleted_at is null
-     and (tg_op = 'INSERT' or t.id <> new.id);
+   where t.center_id = new.center_id and t.deleted_at is null;
 
   perform public.assert_center_limit(new.center_id, 'teachers', v_count, 'специалистов');
-  return new;
+  return null;
 end;
 $$;
 
@@ -301,9 +344,13 @@ revoke all on function public.teachers_check_limit() from public, anon, authenti
 
 drop trigger if exists teachers_check_limit on public.teachers;
 create trigger teachers_check_limit
-  before insert or update of deleted_at on public.teachers
+  after insert or update of deleted_at on public.teachers
   for each row execute function public.teachers_check_limit();
 
+-- Ученик занимает место, пока он не в архиве: archive_student (0005) ставит
+-- status = 'archived', deleted_at у учеников не выставляет ничто — считать
+-- по deleted_at значило бы, что место освободить нечем. Решение записано в
+-- docs/BUSINESS_RULES.md; center_limits() считает тем же условием.
 create or replace function public.students_check_limit()
   returns trigger
   language plpgsql
@@ -313,22 +360,21 @@ as $$
 declare
   v_count integer;
 begin
-  if new.deleted_at is not null then
-    return new;
+  if new.deleted_at is not null or new.status = 'archived' then
+    return null;
   end if;
-  if tg_op = 'UPDATE' and old.deleted_at is null then
-    return new;
+  if tg_op = 'UPDATE' and old.deleted_at is null and old.status <> 'archived' then
+    return null;
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('center_limit:' || new.center_id::text, 0));
 
   select count(*)::integer into v_count
     from public.students s
-   where s.center_id = new.center_id and s.deleted_at is null
-     and (tg_op = 'INSERT' or s.id <> new.id);
+   where s.center_id = new.center_id and s.deleted_at is null and s.status <> 'archived';
 
   perform public.assert_center_limit(new.center_id, 'students', v_count, 'учеников');
-  return new;
+  return null;
 end;
 $$;
 
@@ -336,7 +382,7 @@ revoke all on function public.students_check_limit() from public, anon, authenti
 
 drop trigger if exists students_check_limit on public.students;
 create trigger students_check_limit
-  before insert or update of deleted_at on public.students
+  after insert or update of deleted_at, status on public.students
   for each row execute function public.students_check_limit();
 
 
@@ -393,7 +439,7 @@ begin
     'limits',      v_p.limits,
     'usage', jsonb_build_object(
       'teachers', (select count(*) from public.teachers t where t.center_id = v_center and t.deleted_at is null),
-      'students', (select count(*) from public.students s where s.center_id = v_center and s.deleted_at is null),
+      'students', (select count(*) from public.students s where s.center_id = v_center and s.deleted_at is null and s.status <> 'archived'),
       'ai_notes_month', v_ai
     ),
     'onboarding', jsonb_build_object(

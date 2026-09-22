@@ -118,6 +118,12 @@ select results_eq(
 
 -- 5. Аудит пишется автоматически ---------------------------------------------
 
+-- С 0049 тариф меняет только администратор платформы: владелец A становится
+-- им на время этого блока (email подтверждён, адрес в platform_admins).
+update auth.users set email_confirmed_at = now() where id = '11111111-1111-1111-1111-111111111111';
+insert into public.platform_admins (email)
+select lower(email) from auth.users where id = '11111111-1111-1111-1111-111111111111';
+
 update public.centers set plan = 'solo' where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 select is(
