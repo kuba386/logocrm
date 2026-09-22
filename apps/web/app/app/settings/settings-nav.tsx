@@ -16,6 +16,7 @@ const SECTIONS = [
   { href: '/app/settings/subscription-types', label: 'Типы абонементов' },
   { href: '/app/settings/teacher-rates', label: 'Ставки' },
   { href: '/app/settings/notifications', label: 'Уведомления' },
+  { href: '/app/settings/plan', label: 'Тариф' },
 ]
 
 export function SettingsNav() {

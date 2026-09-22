@@ -7,6 +7,34 @@
 
 ### Добавлено
 
+- **Этап 8a, шаг 4: напоминания о сроке, пульт платформы по центрам, один
+  trial на владельца** — `0052_subscription_reminders.sql`. Планировщик
+  `subscription_reminders` (четвёртый шаг `schedule` n8n): `subscription.ending`
+  за 0–3 дня и `subscription.expired` после — по одному на (центр, срок),
+  не при открытой заявке; напоминания центр не выключает (`mandatory`).
+  `platform_centers()` и `platform_summary()` для `/admin` (MRR и выручка
+  считаются в SQL), `platform_create_center` — второй центр владельцу
+  заводит платформа. Триггеры «один trial-центр на владельца», включая
+  повышение до owner и мягко удалённые центры моложе 90 дней.
+- **Этап 8a, шаг 3: заявки на оплату и продление** —
+  `0051_platform_payments.sql`. `platform_payments`: центр подаёт заявку
+  «я оплатил» (сумма из прайса в SQL, одна открытая на центр, отзыв),
+  платформа подтверждает `extend_subscription` (план и срок одним
+  update, остаток trial не сгорает, повтор — отказ) или отклоняет с
+  причиной; список открытых заявок `platform_open_payments()`; события
+  `platform.payment_submitted` (администраторам платформы, только
+  telegram) и `subscription.extended` (owner/admin центра). Признаки
+  `audience`/`subject_required` в справочнике событий вместо литералов в
+  триггере. Контур бота при просрочке: `ai_job_begin` отдаёт `null` до
+  платных вызовов и один раз шлёт специалисту `subscription.voice_blocked`.
+- **Этап 8a, шаги 1–2: тарифы и только чтение** — `0049_plans_and_limits.sql`,
+  `0050_center_readonly.sql`. Справочник `plans` с ценами владельца (Solo
+  990, Studio 3 900, Center 7 900 сом), тариф меняет только платформа,
+  роль `platform_admin` по подтверждённому email, лимиты специалистов и
+  учеников триггерами, `center_limits()` для экрана тарифа. Просроченный
+  центр — только чтение: один guard-триггер на всех таблицах центра вместо
+  гейта в 70 функциях ([ADR-011](Decisions/ADR-011-center-readonly.md)),
+  код `PT402`.
 - **Этап 6, схема уведомлений** — `0032_event_queue.sql`,
   `0033_telegram.sql`, `0034_message_templates.sql`. События из `events`
   впервые кем-то читаются: n8n ходит в PostgREST и забирает пачку

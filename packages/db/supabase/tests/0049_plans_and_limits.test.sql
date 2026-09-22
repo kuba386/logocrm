@@ -33,8 +33,9 @@ values
 update auth.users set email_confirmed_at = now() where id = 'a0490000-0000-0000-0000-000000000002';
 
 -- Центр на solo: 1 специалист, 40 учеников.
-insert into public.centers (id, name, slug, plan, settings) values
-  ('a0490000-0000-0000-0000-0000000000c1','Центр 0049','centr-0049','solo','{"timezone":"Asia/Bishkek"}'::jsonb);
+-- subscription_until: с 0050 платный тариф без срока — только чтение.
+insert into public.centers (id, name, slug, plan, subscription_until, settings) values
+  ('a0490000-0000-0000-0000-0000000000c1','Центр 0049','centr-0049','solo', now() + interval '1 year','{"timezone":"Asia/Bishkek"}'::jsonb);
 
 insert into public.payers (id, center_id, full_name, phone) values
   ('a0490000-0000-0000-0000-000000000030','a0490000-0000-0000-0000-0000000000c1','Родитель 0049','+996700004901');
@@ -114,7 +115,7 @@ select public.tests_claims('a0490000-0000-0000-0000-000000000002', null, 'platfo
 select lives_ok(
   $q$ update public.centers set plan = 'studio', subscription_until = now() + interval '1 month' where id = 'a0490000-0000-0000-0000-0000000000c1' $q$,
   'Администратор платформы меняет тариф и срок');
-update public.centers set plan = 'solo', subscription_until = null where id = 'a0490000-0000-0000-0000-0000000000c1';
+update public.centers set plan = 'solo' where id = 'a0490000-0000-0000-0000-0000000000c1';
 
 
 -- 3. Лимит специалистов (Р5–Р8) -------------------------------------------------------------------------

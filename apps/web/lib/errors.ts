@@ -39,6 +39,10 @@ type PostgrestLike = {
 
 const CONFLICT = '23P01'
 const FORBIDDEN = '42501'
+// 0050: подписка центра истекла — PostgREST отдаёт PTxxx как HTTP 402.
+// Отдельно от 42501: действие у пользователя другое — не «попросить права»,
+// а оплатить.
+const PAYMENT_REQUIRED = 'PT402'
 const CHECK_VIOLATION = '23514'
 // Сериализация и deadlock: данные изменились под рукой, повтор обычно проходит.
 const SERIALIZATION_FAILURE = '40001'
@@ -89,6 +93,8 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   salary_runs_teacher_month_live_key:
     'Зарплата за этот месяц уже утверждена — чтобы утвердить заново, владелец отменяет снимок',
   payments_refund_once_key: 'Возврат по этому абонементу уже оформлен',
+  platform_payments_one_open_per_center:
+    'У центра уже есть открытая заявка на оплату — дождитесь подтверждения или отзовите её',
 }
 
 /**
@@ -220,6 +226,10 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
     }
 
     return { message: message || 'Время пересекается с другими занятиями', conflicts }
+  }
+
+  if (code === PAYMENT_REQUIRED) {
+    return { message: message || 'Подписка центра истекла — доступно только чтение' }
   }
 
   if (code === FORBIDDEN) {

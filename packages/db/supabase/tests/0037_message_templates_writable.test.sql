@@ -94,10 +94,14 @@ select matches(
   'center_id получил default current_center() — как у services/subscription_types (0037 Р1)'
 );
 
-select is(
-  (select count(*)::int from public.message_templates where center_id is null and deleted_at is null),
-  (select count(*)::int from public.notification_event_types) * 2,
-  'Дефолты платформы (center_id is null) не задеты алтером колонки'
+select is_empty(
+  $$ select t.event_type from public.notification_event_types t
+      where (select coalesce(array_agg(m.channel order by m.channel), '{}'::text[])
+               from public.message_templates m
+              where m.center_id is null and m.deleted_at is null and m.event_type = t.event_type)
+            is distinct from
+            (select coalesce(array_agg(c order by c), '{}'::text[]) from unnest(t.channels) c) $$,
+  'Дефолты платформы (center_id is null) не задеты алтером колонки — ровно объявленные каналы (0051)'
 );
 
 

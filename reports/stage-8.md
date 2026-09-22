@@ -388,6 +388,13 @@ integer)`, `funnel_summary(date, date)`, `export_center()`,
    trial требует `trial_ends_at`. Шов той же миграцией: существующим
    центрам проставить живой срок (тестовый центр владельца на staging уже
    просрочен 21.09), фикстуры 0017/0049 и seed — с живым сроком.
+   Шов затирает исходные сроки, поэтому перед деплоем 0050 список
+   затронутых центров снимается запросом и прикладывается сюда:
+   `select id, name, plan, trial_ends_at, subscription_until, deleted_at
+   from centers where (plan = 'trial' and (trial_ends_at is null or
+   trial_ends_at < now())) or (plan <> 'trial' and (subscription_until
+   is null or subscription_until < now()))`. Staging 22.09.2026: одна
+   строка — «Логопед Плюс», trial до 21.09.2026 11:45 UTC, не удалён.
 6. **Nullable `center_id`** (`message_templates`, `exercise_library`,
    `audit_log`) — в guard явная ветка: `center_id is null` из сессии
    центра — отказ, не пропуск.

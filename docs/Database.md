@@ -793,3 +793,128 @@ ADR-005): не выбрана, потому что переписывает `mar
 `mark_attendance_bulk` и `complete_lesson` ради одной колонки, тогда как
 узкая функция уже написана и покрывает единственный существующий
 сценарий (месячный отчёт).
+
+## Тарифы, роль платформы и только чтение (0049, 0050)
+
+`plans` — справочник платформы: `code`, `price_tiyin`, `limits` jsonb
+(`teachers`, `students`, `ai_notes_month`; `-1` — без ограничения),
+seed строками миграции. `centers.plan` — FK на `plans.code`, литерального
+списка больше нет. Отсутствие тарифа или ключа лимита — отказ, не
+безлимит.
+
+Тариф, сроки и `settings->'features'` центр не пишет: триггер
+`centers_protect_plan` пропускает только `is_platform_admin()`.
+Администратор платформы — по email в `platform_admins`, предикат идёт
+через `auth.users` текущего `uid` и требует подтверждённый email; роль вне
+`memberships`, поэтому `/admin`-RPC начинаются с этого предиката, а не с
+`current_center()`.
+
+Лимиты держат AFTER-триггеры `teachers_check_limit` и
+`students_check_limit` (BEFORE не видит строк своего оператора — пакетная
+вставка обходила бы лимит), с `pg_advisory_xact_lock` по
+`center_limit:<center_id>` до счёта. Лицензия специалиста — живая
+карточка `teachers`; место ученика — карточка не в архиве. Проверка
+только на входе в считаемое состояние: превысивший центр правит и
+архивирует, но не растёт. Фикстуры с >5 специалистов или >200 учеников в
+одном центре — `plan = 'center'` и `subscription_until`.
+
+Только чтение при просрочке — `a00_readonly_guard`, BEFORE-триггер на
+каждой базовой таблице `public`, навешен циклом по каталогу через
+`apply_readonly_guard(tbl, insert_only)`; исключения — в
+`readonly_guard_exempt_tables()` с причиной, забор pgTAP 0050 сверяет
+каталог с ними с обеих сторон (таблицы без `center_id` — тоже в списке).
+Срабатывает только при `auth.uid() is not null`; порядок —
+`center_writable` (PK), потом `is_platform_admin()`; `memberships`/
+`invitations` — только insert; карточку `teachers` гасит
+`revoke_membership` под транзакционным флагом `logocrm.revoke_membership`.
+`center_writable(center)` — живой trial или подписка до конца дня
+истечения в поясе центра, пустая дата — нет; `center_limits()` отдаёт
+`writable` из неё же. Код отказа `PT402` (PostgREST → HTTP 402), ветка в
+`errors.ts`. Механизм и границы — [ADR-011](Decisions/ADR-011-center-readonly.md).
+
+Новая таблица центра в миграции — три вызова подряд:
+
+```sql
+call public.apply_tenant_rls('tbl');
+call public.apply_audit('tbl');
+call public.apply_readonly_guard('tbl');
+```
+
+Два правила, без которых guard обходится: `center_id` заполняется только
+`default public.current_center()` — ни один BEFORE-триггер его не
+присваивает (guard увидел бы `null`, а следующий триггер подставил бы
+центр); таблица с nullable `center_id` (строки платформы) обязана иметь
+собственный рубеж записи, работающий и внутри definer — триггер по роли
+(0040) или `if` в единственной пишущей RPC (0037): строку с пустым
+`center_id` guard не судит, забор 0050 лишь напоминает о решении.
+`center_writable(uuid)` без гранта `authenticated`: экрану хватает
+`center_limits().writable`, а прямой RPC был бы оракулом по чужим центрам.
+
+### Заявки на оплату и продление (0051)
+
+`platform_payments` — заявка центра и решение платформы в одной строке,
+но разными колонками: центр пишет `claimed_plan`, `claimed_months`,
+`claimed_amount_tiyin` (= `plans.price_tiyin × months`, посчитано в SQL),
+`source`, `note` через `submit_platform_payment(plan, months, source,
+note)` (owner/admin, работает и в read-only — таблица в списке
+исключений guard); платформа — `confirmed_*`/`plan`/`months`/`amount_tiyin`
+через `extend_subscription(payment_id, plan, months, amount_tiyin,
+receipt_received)` или `rejected_*` через `reject_platform_payment`;
+центр отзывает свою открытую заявку `withdraw_platform_payment`. Одна
+открытая заявка на центр — частичный unique
+`platform_payments_one_open_per_center` по трём исходам. Инварианты
+подтверждения — констрейнты на колонках (`num_nonnulls(...) in (0, 4)`,
+`months 1..24`, `amount > 0`, `plan <> 'trial'`), функция повторяет их
+ради русского текста. Политика — только `select` (owner/admin своего
+центра, `is_platform_admin()` последним); `apply_tenant_rls` намеренно
+не применена — её `with check` дал бы центру дописать подтверждение.
+Чек не хранится: фото уходит платформе в Telegram с номером заявки.
+
+Список открытых заявок — `platform_open_payments()` для `/admin`;
+Telegram-уведомление платформе (`platform.payment_submitted` →
+`notification_platform_targets`, только telegram, только дефолтный
+шаблон) — дополнение. Условие выката: аккаунт владельца платформы
+зарегистрирован, email подтверждён, Telegram привязан.
+
+`notification_event_types` получил `audience` (`center`/`platform`) и
+`subject_required`: триггер `notification_log_subject_required` читает
+признак из справочника (тип вне справочника защищён по умолчанию), а
+триггер `message_templates_platform_audience` не даёт центру завести
+строку для платформенного типа. Событие `subscription.extended` идёт
+owner/admin центра с `{until}` в поясе центра;
+`subscription.voice_blocked` — заказчику диктовки, один раз на диктовку
+(дедупликация по `events` в `ai_job_begin`).
+
+### Напоминания о сроке и пульт платформы (0052)
+
+`subscription_reminders()` — четвёртый шаг сценария `schedule` n8n
+(`bot_worker`): центрам с местным часом ≥ 8 за 0–3 дня до срока —
+`subscription.ending` тремя ступенями (`ending_3` за 2–3 дня, `ending_1`,
+`ending_0`), после — `subscription.expired`; отметка
+`subscription_reminders_sent (center_id, until, kind)` — по самому сроку
+из `centers`, не по дате в поясе (пояс правит владелец). Пока у центра
+открыта заявка — «заканчивается» молчит без отметки, «истёк» идёт всегда.
+Тело одного центра в блоке исключений, число пропусков — `skipped_count`
+в ответе (нода n8n роняет прогон при > 0). `center_timezone()` с 0052
+отдаёт `Asia/Bishkek` для имени вне `pg_timezone_names`: поле правит
+владелец, один мусорный пояс не должен ронять читателей всех центров.
+`{when}` собирает SQL («сегодня»/«завтра»/«через N дн.»), только для
+«заканчивается». `notification_event_types.mandatory` + триггер
+`message_templates_mandatory_active`: центр правит текст, но не выключает
+рассылку (soft-delete строки — возврат к дефолту, проходит).
+
+Один trial-центр на владельца — `assert_one_trial_center(user, self)` из
+триггера на `memberships` (insert или смена роли на owner); trial-центры,
+закрытые меньше 90 дней назад, считаются; без сессии и для платформы
+триггер молчит; текст отказа различает «у вас» и «у этого участника».
+Возврат в trial и снятие архива достижимы только платформе — триггера на
+`centers` нет намеренно. Правило для фикстур: два центра — два разных
+владельца либо второму `plan <> 'trial'`. Второй центр владельцу —
+`platform_create_center(name, owner_email)` из платформенной сессии.
+
+`platform_centers()` (живые центры, срок и дни в поясе центра, `no_date`
+первыми), `platform_summary()` (счётчики, `mrr_tiyin` = прайс живых платных
+центров, выручка по месяцам подтверждения за 12 месяцев в поясе
+платформы) — деньги для `/admin` считает SQL, экран рисует.
+`platform_open_payments` фильтрует закрытые центры так же, как
+`platform_centers`.

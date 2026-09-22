@@ -32,9 +32,10 @@ values
 
 -- plan = 'center': фикстура заводит 9 специалистов, а trial с 0049 ограничен
 -- пятью — лимит держится триггером и на тестовых данных тоже.
-insert into public.centers (id, name, slug, plan, settings) values
-  ('cccccccc-0000-0000-0000-00000000000a','Центр А','centr-a-sal','center','{"timezone":"Asia/Bishkek"}'::jsonb),
-  ('cccccccc-0000-0000-0000-00000000000b','Центр Б','centr-b-sal','center','{"timezone":"Asia/Bishkek"}'::jsonb);
+-- subscription_until: с 0050 платный тариф без срока — только чтение.
+insert into public.centers (id, name, slug, plan, subscription_until, settings) values
+  ('cccccccc-0000-0000-0000-00000000000a','Центр А','centr-a-sal','center', now() + interval '1 year','{"timezone":"Asia/Bishkek"}'::jsonb),
+  ('cccccccc-0000-0000-0000-00000000000b','Центр Б','centr-b-sal','center', now() + interval '1 year','{"timezone":"Asia/Bishkek"}'::jsonb);
 
 -- t1/t2 — с полным членством (нужны для ролевых тестов: "специалист видит
 -- только своё"). Остальные — только карточка, без входа: calc_salary/

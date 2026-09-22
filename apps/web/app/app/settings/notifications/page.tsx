@@ -11,7 +11,7 @@ export const metadata = { title: 'Уведомления — LogoCRM' }
  * (event_messages, 0034). Тип, которого здесь нет, сообщений не порождает, и
  * добавить его правкой текста нельзя — нужна миграция.
  */
-const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: string[] }[] = [
+const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: string[]; mandatory?: boolean }[] = [
   { type: 'lesson.reminder', placeholders: ['{child}', '{date}', '{time}', '{teacher}'] },
   { type: 'subscription.low_balance', placeholders: ['{child}', '{left}'] },
   { type: 'subscription.exhausted', placeholders: ['{child}'] },
@@ -34,6 +34,17 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'lesson.note_approved', placeholders: ['{child}', '{date}', '{summary}'], whatsappPlaceholders: ['{child}', '{date}'] },
   // Специалисту, у которого нет своей WhatsApp-кнопки — как homework.submitted.
   { type: 'lesson.voice_failed', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  // 0051: продление — owner/admin центра, {until} в поясе центра.
+  { type: 'subscription.extended', placeholders: ['{plan_name}', '{months}', '{until}'] },
+  // 0051: специалисту, как lesson.voice_failed — whatsapp без {child}.
+  // platform.payment_submitted здесь нет намеренно: его читает платформа,
+  // строку центра отбивает триггер message_templates_platform_audience.
+  { type: 'subscription.voice_blocked', placeholders: ['{child}'], whatsappPlaceholders: [] },
+  // 0052: обязательные — выключить нельзя (триггер message_templates_mandatory_active),
+  // текст править можно. Источник истины — notification_event_types.mandatory,
+  // здесь зеркало для тумблера (справочник закрыт для чтения из браузера).
+  { type: 'subscription.ending', placeholders: ['{what}', '{until}', '{when}'], mandatory: true },
+  { type: 'subscription.expired', placeholders: ['{what}', '{until}'], mandatory: true },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
@@ -95,6 +106,7 @@ export default async function NotificationsSettingsPage() {
                   isActive={current?.isActive ?? true}
                   isOwn={current?.isOwn ?? false}
                   placeholders={placeholders}
+                  mandatory={event.mandatory}
                 />
               )
             })}
