@@ -16,7 +16,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(40);
+select plan(43);
 
 
 -- 1. Заборы по каталогу -----------------------------------------------------------------------------
@@ -57,17 +57,22 @@ select set_eq(
   $$ values ('centers'), ('plans'), ('platform_admins'), ('notification_event_types'), ('telegram_accounts'), ('telegram_link_codes') $$,
   'Таблицы без center_id — ровно шесть, все в списке исключений с причиной; новая требует решения (Р7)');
 
--- Р4: memberships/invitations — только insert.
+-- Р4: memberships/invitations — только insert. tgtype: 1 = ROW, 2 = BEFORE,
+-- 4 = INSERT, 8 = DELETE, 16 = UPDATE — время и уровень тоже под забором,
+-- иначе AFTER или FOR EACH STATEMENT прошли бы проверку по операциям.
 select is(
-  (select string_agg(case when tg.tgtype & 4 > 0 then 'i' else '' end || case when tg.tgtype & 16 > 0 then 'u' else '' end || case when tg.tgtype & 8 > 0 then 'd' else '' end, ',' order by tg.tgrelid::regclass::text)
+  (select string_agg(
+       case when tg.tgtype & 2 > 0 and tg.tgtype & 1 > 0 then 'before-row:' else 'wrong:' end
+       || case when tg.tgtype & 4 > 0 then 'i' else '' end || case when tg.tgtype & 16 > 0 then 'u' else '' end || case when tg.tgtype & 8 > 0 then 'd' else '' end,
+       ',' order by tg.tgrelid::regclass::text)
      from pg_trigger tg where tg.tgname = 'a00_readonly_guard' and tg.tgrelid in ('public.memberships'::regclass, 'public.invitations'::regclass)),
-  'i,i', 'memberships и invitations — guard только на insert (Р4)');
+  'before-row:i,before-row:i', 'memberships и invitations — BEFORE ROW guard только на insert (Р4)');
 
 select is(
   (select count(*)::int from pg_trigger tg where tg.tgname = 'a00_readonly_guard'
      and tg.tgrelid not in ('public.memberships'::regclass, 'public.invitations'::regclass)
-     and not (tg.tgtype & 4 > 0 and tg.tgtype & 16 > 0 and tg.tgtype & 8 > 0)),
-  0, 'На остальных таблицах guard объявлен на insert, update и delete (Р13)');
+     and not (tg.tgtype & 2 > 0 and tg.tgtype & 1 > 0 and tg.tgtype & 4 > 0 and tg.tgtype & 16 > 0 and tg.tgtype & 8 > 0)),
+  0, 'На остальных таблицах guard — BEFORE ROW на insert, update и delete (Р8/Р13)');
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -82,7 +87,8 @@ values
   ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000001','authenticated','authenticated','owner-0050@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000002','authenticated','authenticated','teacher-0050@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000003','authenticated','authenticated','platform-0050@test.kg','','','','','','','',''),
-  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000004','authenticated','authenticated','invitee-0050@test.kg','','','','','','','','');
+  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000004','authenticated','authenticated','invitee-0050@test.kg','','','','','','','',''),
+  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000005','authenticated','authenticated','owner-b-0050@test.kg','','','','','','','','');
 update auth.users set email_confirmed_at = now() where id = 'a0500000-0000-0000-0000-000000000003';
 insert into public.platform_admins (email) values ('platform-0050@test.kg');
 
@@ -100,7 +106,8 @@ insert into public.payers (id, center_id, full_name, phone) values
   ('a0500000-0000-0000-0000-000000000030','a0500000-0000-0000-0000-0000000000c1','Родитель 0050','+996700005001');
 insert into public.memberships (user_id, center_id, role, teacher_id) values
   ('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1','owner',  null),
-  ('a0500000-0000-0000-0000-000000000002','a0500000-0000-0000-0000-0000000000c1','teacher','a0500000-0000-0000-0000-000000000010');
+  ('a0500000-0000-0000-0000-000000000002','a0500000-0000-0000-0000-0000000000c1','teacher','a0500000-0000-0000-0000-000000000010'),
+  ('a0500000-0000-0000-0000-000000000005','a0500000-0000-0000-0000-0000000000c2','owner',  null);
 insert into public.students (id, center_id, full_name, payer_id) values
   ('a0500000-0000-0000-0000-000000000040','a0500000-0000-0000-0000-0000000000c1','Ребёнок 0050','a0500000-0000-0000-0000-000000000030');
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
@@ -146,8 +153,9 @@ select public.tests_claims('a0500000-0000-0000-0000-000000000002','a0500000-0000
 set local role authenticated;
 select throws_ok(
   $q$ select public.mark_attendance('a0500000-0000-0000-0000-000000000050','a0500000-0000-0000-0000-000000000040', null, null) $q$,
-  'PT402', null,
-  'Специалист просроченного центра не отмечает посещение — код режима, не 42501');
+  'PT402',
+  'Центр временно доступен только для чтения — обратитесь к администратору центра',
+  'Специалист просроченного центра не отмечает посещение — код режима, текст без «оплатите» (Р9)');
 reset role;
 
 select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
@@ -174,6 +182,9 @@ select throws_ok(
 select lives_ok(
   $q$ update public.centers set name = 'Центр 0050 переименован' where id = 'a0500000-0000-0000-0000-0000000000c1' $q$,
   'Название центра правится');
+select is(
+  (select name from public.centers where id = 'a0500000-0000-0000-0000-0000000000c1'),
+  'Центр 0050 переименован', 'Название действительно изменилось — не ноль строк под RLS (Р12)');
 select lives_ok(
   $q$ select public.revoke_membership('a0500000-0000-0000-0000-000000000002') $q$,
   'Отзыв доступа сотруднику проходит при просрочке (Р4/Р12)');
@@ -247,21 +258,40 @@ select lives_ok(
 reset role;
 
 
--- 6. Nullable center_id — guard не судит, строку платформы держат права (Р6) ------------------------------
--- Из сессии просроченного центра: отказ приходит от рубежа прав (42501), а не
--- от режима — у строки платформы нет подписки. Оба рубежа названы в Р6.
+-- 6. Nullable center_id — guard не судит, строку платформы держат свои рубежи (Р6) ------------------------
+-- Грант insert выдаётся внутри транзакции (приём 0040): иначе 42501 пришёл бы
+-- от отсутствия гранта, и тест не доказывал бы ни политику 0037, ни триггер
+-- 0040. Просроченный и живой центр — один и тот же отказ прав, не PT402 и не успех.
+
+grant insert on public.message_templates to authenticated;
+grant insert on public.exercise_library to authenticated;
 
 select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select throws_ok(
   $q$ insert into public.message_templates (center_id, event_type, channel, text) values (null, 'lesson.reminder', 'telegram', 'подмена платформы') $q$,
   '42501', null,
-  'message_templates с пустым center_id из сессии — отказ политики 0037, не режима');
+  'Просроченный центр, message_templates с пустым center_id — with check политики 0037, не режим');
 select throws_ok(
   $q$ insert into public.exercise_library (center_id, title) values (null, 'подмена платформы') $q$,
-  '42501', null,
-  'exercise_library с пустым center_id из сессии — отказ триггера 0040, не режима');
+  '42501', 'Упражнение платформы заводится только миграцией',
+  'Просроченный центр, exercise_library с пустым center_id — триггер 0040, не режим');
 reset role;
+
+select public.tests_claims('a0500000-0000-0000-0000-000000000005','a0500000-0000-0000-0000-0000000000c2');
+set local role authenticated;
+select throws_ok(
+  $q$ insert into public.message_templates (center_id, event_type, channel, text) values (null, 'lesson.reminder', 'telegram', 'подмена платформы') $q$,
+  '42501', null,
+  'Живой центр, message_templates с пустым center_id — тот же отказ прав');
+select throws_ok(
+  $q$ insert into public.exercise_library (center_id, title) values (null, 'подмена платформы') $q$,
+  '42501', 'Упражнение платформы заводится только миграцией',
+  'Живой центр, exercise_library с пустым center_id — тот же отказ прав');
+reset role;
+
+revoke insert on public.message_templates from authenticated;
+revoke insert on public.exercise_library from authenticated;
 select public.tests_claims(null, null);
 
 

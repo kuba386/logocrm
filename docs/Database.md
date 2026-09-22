@@ -839,3 +839,13 @@ call public.apply_tenant_rls('tbl');
 call public.apply_audit('tbl');
 call public.apply_readonly_guard('tbl');
 ```
+
+Два правила, без которых guard обходится: `center_id` заполняется только
+`default public.current_center()` — ни один BEFORE-триггер его не
+присваивает (guard увидел бы `null`, а следующий триггер подставил бы
+центр); таблица с nullable `center_id` (строки платформы) обязана иметь
+собственный рубеж записи, работающий и внутри definer — триггер по роли
+(0040) или `if` в единственной пишущей RPC (0037): строку с пустым
+`center_id` guard не судит, забор 0050 лишь напоминает о решении.
+`center_writable(uuid)` без гранта `authenticated`: экрану хватает
+`center_limits().writable`, а прямой RPC был бы оракулом по чужим центрам.

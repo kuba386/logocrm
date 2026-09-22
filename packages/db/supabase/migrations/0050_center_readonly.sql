@@ -21,7 +21,12 @@
 --       events исключены (иначе extend_subscription откатился бы на своём
 --       же аудите), platform_payments — когда появится. is_platform_admin()
 --       проходит guard всегда; проверяется после center_writable — живой
---       центр не ходит в auth.users на каждую строку.
+--       центр не ходит в auth.users на каждую строку. Следствие: сессия
+--       просроченного центра по-прежнему пишет в events через emit_event —
+--       принято осознанно: событие само по себе платформе ничего не стоит,
+--       а строки, о которых оно сообщает (lessons, lesson_notes,
+--       monthly_reports), уже не создать; единственная платная работа по
+--       событию — ai_job_begin — закрывается в 0051 (ADR-011).
 --
 --   Р3. Режим отказывает на входе в работу, никогда на её закрытии:
 --       notification_log, lesson_reminders_sent, center_digest_runs,
@@ -46,12 +51,16 @@
 --
 --   Р6. Nullable center_id (message_templates, exercise_library): строка
 --       платформы не принадлежит центру, подписки у неё нет — guard её
---       не судит. Кто вправе её писать, решают триггер 0040
---       (exercise_library: сессия — 42501) и политики 0037
---       (message_templates: with check по центру). Список таких таблиц
---       зафиксирован забором, чтобы новая получила решение осознанно.
---       Таблицы без center_id — только через список исключений (Р7).
---       audit_log исключён по Р2.
+--       не судит. Это fail-open по строкам платформы, и он держится на
+--       двух условиях, записанных в ADR-011 и Database.md: (а) у таблицы
+--       с nullable center_id есть свой рубеж записи, работающий и внутри
+--       definer — триггер по роли (0040 exercise_library) или if в
+--       единственной пишущей RPC (0037 message_templates); (б) center_id
+--       заполняется только default current_center(), ни один BEFORE-триггер
+--       его не присваивает — иначе guard увидит null, а следующий триггер
+--       подставит центр. Список таких таблиц зафиксирован забором, чтобы
+--       новая получила решение осознанно. Таблицы без center_id — только
+--       через список исключений (Р7). audit_log исключён по Р2.
 --
 --   Р7. Забор pgTAP двусторонний по ВСЕМ базовым таблицам public: каждая
 --       либо под guard на i/u/d (memberships/invitations — на insert),
@@ -68,7 +77,8 @@
 --   Р9. SQLSTATE 'PT402' — соглашение PostgREST: PTxxx → HTTP 402 Payment
 --       Required. Не 42501 (занят под права, действие у пользователя
 --       другое — оплатить) и не произвольный класс (PostgREST отдал бы
---       500). В errors.ts — отдельная ветка.
+--       500). В errors.ts — отдельная ветка. Текст — по роли: owner/admin
+--       читают «оплатите», остальные — «обратитесь к администратору».
 --
 --   Р10. Без кэша вердикта через set_config: соединение пула переживает
 --       сессию, вердикт одного центра утёк бы другому. Поиск по PK
@@ -103,14 +113,18 @@
 
 alter table public.centers disable trigger centers_protect_plan;
 
+-- Пустая дата trial — у всех строк (иначе не пройдёт констрейнт ниже);
+-- просроченные — только живые центры: закрытый центр 30 дней не получает.
+-- Список затронутых снимается запросом до деплоя (reports/stage-8.md).
 update public.centers
    set trial_ends_at = now() + interval '30 days'
  where plan = 'trial'
-   and (trial_ends_at is null or trial_ends_at < now());
+   and (trial_ends_at is null or (trial_ends_at < now() and deleted_at is null));
 
 update public.centers
    set subscription_until = now() + interval '30 days'
  where plan <> 'trial'
+   and deleted_at is null
    and (subscription_until is null or subscription_until < now());
 
 alter table public.centers enable trigger centers_protect_plan;
@@ -150,8 +164,10 @@ $$;
 comment on function public.center_writable(uuid) is
   'Центр может писать: живой trial или оплаченная подписка, до конца дня истечения в поясе центра (0050 Р5/Р11). null в дате — нет.';
 
-revoke all on function public.center_writable(uuid) from public, anon;
-grant execute on function public.center_writable(uuid) to authenticated;
+-- Без гранта authenticated: прямой RPC дал бы вердикт по любому UUID центра
+-- (существует, жив, платит). Зовут её guard и center_limits() изнутри definer;
+-- экрану хватает center_limits().writable.
+revoke all on function public.center_writable(uuid) from public, anon, authenticated, service_role;
 
 
 -- 2. Guard ---------------------------------------------------------------------------------------
@@ -199,7 +215,13 @@ begin
     return case when tg_op = 'DELETE' then old else new end;
   end if;
 
-  raise exception 'Подписка центра истекла — доступно только чтение. Оплатите тариф в настройках центра'
+  -- Р9: текст по роли — «оплатите» читает тот, кто может оплатить; родителю
+  -- и специалисту это выглядело бы как требование денег с них.
+  if coalesce(public.my_role(), '') in ('owner', 'admin') then
+    raise exception 'Подписка центра истекла — доступно только чтение. Оплатите тариф в настройках центра'
+      using errcode = 'PT402';
+  end if;
+  raise exception 'Центр временно доступен только для чтения — обратитесь к администратору центра'
     using errcode = 'PT402';
 end;
 $$;
@@ -253,7 +275,7 @@ begin
 end;
 $$;
 
-revoke execute on procedure public.apply_readonly_guard(text, boolean) from public, anon, authenticated;
+revoke execute on procedure public.apply_readonly_guard(text, boolean) from public, anon, authenticated, service_role;
 
 do $$
 declare
