@@ -17,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(45);
+select plan(46);
 
 
 -- 1. Заборы ----------------------------------------------------------------------------------------------
@@ -184,10 +184,12 @@ select is(
 select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
 update public.centers set subscription_until = public.tests_local_midnight(-2) where id = 'a0520000-0000-0000-0000-0000000000c1';
 select public.tests_claims(null, null);
+-- Два ассерта, не сумма: порядок вычисления подзапросов в одном выражении не гарантирован.
+select is((select center_count from public.subscription_reminders()), 1,
+  'А просрочен при открытой заявке: expired уходит — прогон дал одно событие');
 select is(
-  (select center_count from public.subscription_reminders()) +
   (select count(*)::int from public.events e where e.type = 'subscription.expired' and e.center_id = 'a0520000-0000-0000-0000-0000000000c1'),
-  2, 'А просрочен при открытой заявке: expired уходит (прогон 1 + событие 1)');
+  1, 'А: событие subscription.expired записано');
 select public.tests_claims('a0520000-0000-0000-0000-000000000001','a0520000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select public.withdraw_platform_payment((select id from public.platform_payments p where p.center_id = 'a0520000-0000-0000-0000-0000000000c1'));
