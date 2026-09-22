@@ -61,10 +61,14 @@ select is((select count(*)::int from public.plans), 4, 'Четыре тариф�
 select is((select price_tiyin from public.plans where code = 'solo'), 99000, 'Solo — 990 сом');
 select is((select (limits ->> 'teachers')::int from public.plans where code = 'center'), -1, 'Center — специалисты без ограничения (-1, не null)');
 
+-- От администратора платформы: иначе первым сработает триггер защиты
+-- тарифа (42501), и до FK дело не дойдёт.
+select public.tests_claims('a0490000-0000-0000-0000-000000000002', null, 'platform-0049@test.kg');
 select throws_ok(
   $q$ update public.centers set plan = 'ai' where id = 'a0490000-0000-0000-0000-0000000000c1' $q$,
   '23503', null,
   'Несуществующий код тарифа отбивает FK — литерального check больше нет');
+select public.tests_claims(null, null);
 
 select throws_ok(
   $q$ insert into public.plans (code, name, price_tiyin, limits) values ('x', 'X', 0, '{"teachers": 1}'::jsonb) $q$,
