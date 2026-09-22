@@ -317,6 +317,14 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     notes: NoteEntry[]
   } | null = null
 
+  // Дата заметки рендерится в поясе центра — та же дата, что уходит
+  // родителю в Telegram (0047); пояс браузера здесь не годится.
+  const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
+  const { data: clinicalCenter } = clinicalAllowed
+    ? await supabase.from('centers').select('settings').eq('id', clinicalCenterId ?? '').maybeSingle()
+    : { data: null }
+  const clinicalTimeZone = centerTimeZone(clinicalCenter?.settings)
+
   if (clinicalAllowed && isParent) {
     const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }, { data: noteRows }] = await Promise.all([
       supabase.rpc('student_diagnostics_brief', { p_student_id: id }),
@@ -696,7 +704,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <NotesPanel studentId={id} notes={clinicalSection.notes} canWrite={canWriteClinical} />
+              <NotesPanel
+                studentId={id}
+                notes={clinicalSection.notes}
+                canWrite={canWriteClinical}
+                timeZone={clinicalTimeZone}
+              />
             </CardContent>
           </Card>
         </>

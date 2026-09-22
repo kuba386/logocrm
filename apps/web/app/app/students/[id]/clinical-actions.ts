@@ -173,5 +173,7 @@ export async function approveLessonNote(studentId: string, noteId: string): Prom
   if (error) return toAppError(error, 'Не удалось утвердить заметку')
 
   revalidatePath(`/app/students/${studentId}`)
-  return { message: '', notice: 'Заметка утверждена — резюме уйдёт родителю' }
+  // Дойдёт ли резюме — решает доставка (event_messages, 0047), а не форма:
+  // отменённое занятие или родитель без канала — тишина по правилам базы.
+  return { message: '', notice: 'Заметка утверждена' }
 }

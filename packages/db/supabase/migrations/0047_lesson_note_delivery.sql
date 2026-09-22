@@ -22,10 +22,13 @@
 --       no_channel с полным текстом резюме в notification_log.text, и
 --       клиническое заключение окажется в журнале, который читает вся
 --       администрация и копирует в личный WhatsApp. Дефолтный текст без
---       резюме — не защита (его перетирают), защита — физическое
---       отсутствие переменной (тот же принцип, что 0045 Р7). Зеркало в
---       интерфейсе — whatsappPlaceholders без {summary}. Для
---       lesson.voice_failed по той же логике {child} только в telegram.
+--       резюме — не защита (его перетирают), защита — то, что в этот канал
+--       переменная приходит ПУСТОЙ (тот же принцип, что 0045 Р7). Именно
+--       пустой, а не отсутствующей: render_template (0034) оставляет
+--       неизвестный плейсхолдер в тексте буквально, и родитель без
+--       Telegram получил бы «…готово: {summary}». Зеркало в интерфейсе —
+--       whatsappPlaceholders без {summary}. Для lesson.voice_failed по той
+--       же логике {child} пуст вне telegram.
 --
 --   Р2. Адресат lesson.voice_failed — не requested_by из строки запроса, а
 --       результат запроса к memberships центра события на момент
@@ -35,34 +38,51 @@
 --       заведён notification_user_targets(center, user, event_type):
 --       plpgsql с проверкой auth.uid() is null (принимает произвольный
 --       user_id, шире notification_targets по плательщику), без грантов
---       — её зовёт только definer event_messages. Инлайн был бы второй
---       копией правила «получатель жив и в центре», а 0045 Р9/Р10/Р12 —
---       история именно про разъехавшиеся копии этого правила.
+--       — её зовёт только definer event_messages. Правило «получатель
+--       жив» — то же, что у круга 2 в 0045 Р12: owner/admin — по роли,
+--       teacher — только с живой карточкой teachers через profile_id
+--       (архивированная карточка при ещё не снятом членстве — период
+--       оформления ухода, и имя ребёнка туда идти не должно). Инлайн был
+--       бы второй копией этого правила, а 0045 Р9/Р10/Р12 — история именно
+--       про разъехавшиеся копии.
 --
 --   Р3. Утвердить резюме без текста для родителя нельзя — в самом
---       триггере перехода, а не в approve_lesson_note: у lesson_notes есть
---       grant update to authenticated и политика tenant_admin (0036),
---       owner/admin ставит status='approved' прямым PATCH, и триггер
---       честно эмитит событие с пустым резюме. Триггер, а не check:
---       констрейнт проверяется на существующих строках и упал бы на уже
---       утверждённых заметках без резюме в staging. Проверка в ветке
---       доставки остаётся вторым рубежом. Тест 0038 заводил заметку без
---       parent_summary и утверждал её — фикстура дополнена текстом.
+--       триггере перехода, а не в approve_lesson_note. Прямой update от
+--       authenticated закрыт с 0038 (revoke insert, update), но триггер
+--       нужен не от него: инвариант держится и при гонке двух транзакций,
+--       и при любом будущем пути к status='approved' не через эту RPC
+--       (бэкфилл, definer-функция следующего этапа, возвращённый грант).
+--       Триггер, а не check: констрейнт проверяется на существующих
+--       строках и упал бы на уже утверждённых заметках без резюме в
+--       staging. Проверка в ветке доставки остаётся вторым рубежом. Тест
+--       0038 заводил заметку без parent_summary и утверждал её —
+--       фикстура дополнена текстом.
+--
+--       Следствие, записанное как решение: «утверждено» теперь значит
+--       одновременно «заморожено» (0038) и «резюме ушло родителю».
+--       Чисто клиническая заметка без текста для родителя остаётся
+--       черновиком — её никто не рассылает, и правки ей не мешают.
+--       Отдельного статуса «заморожено без родителя» не заводится, пока
+--       его не попросит владелец.
 --
 --   Р4. Обе новые ветки перечитывают состояние на момент доставки (как
 --       0045 Р4). note_approved: заметка жива и утверждена, занятие не
 --       отменено и не удалено (тот же фильтр, что student_notes_brief),
---       ребёнок не архивирован. voice_failed: не слать, если по паре
---       (lesson_id, student_id) уже есть живая заметка — специалист успел
---       надиктовать заново, и «попробуйте ещё раз» подвёл бы его к 23505
---       «черновик уже готов»; плюс те же условия, что ai_job_begin
---       проверяет до траты.
+--       ребёнок не архивирован. voice_failed: не слать, если повтор
+--       диктовки уже бессмыслен — условие дословно то же, по которому
+--       ai_job_begin (0042) отказывается работать: заметка утверждена или
+--       есть голосовой черновик ДРУГОЙ диктовки (специалист успел
+--       надиктовать заново, и «попробуйте ещё раз» подвёл бы его к 23505).
+--       Ручной черновик, начатый до диктовки, доставку НЕ гасит: голос
+--       дополняет его (0042), повтор законен, и молчать здесь — значит
+--       вернуть «нет ответа», ради которого миграция и написана.
 --
 --   Р5. Длина {summary} ограничена в SQL: Telegram режет сообщение на
---       4096 байтах ошибкой 400, три попытки — и родителю ничего, а в
+--       4096 символах ошибкой 400, три попытки — и родителю ничего, а в
 --       журнале английский текст Telegram. Обрезка в узле n8n была бы
---       логикой доставки вне SQL. Граница 3500 символов с многоточием —
---       запас под остальной текст шаблона.
+--       логикой доставки вне SQL. Граница 3500 символов (length, не
+--       octet_length — лимит Telegram в символах) с многоточием — запас
+--       под остальной текст шаблона.
 --
 --   Р6. Сырая причина отказа (payload.reason — английский текст axios или
 --       Postgres) в чат не идёт: правило «все тексты — на русском». Она
@@ -86,6 +106,13 @@
 --       null): архивировали, написали новую, утвердили — родитель получит
 --       второе «Резюме занятия {date}». Это исправление, и оно должно
 --       дойти; сознательно не гасится.
+--
+--  Р10. Та же дыра, что Р1, была открыта веткой выше в этой же функции:
+--       report.monthly_ready (0043) отдавал {summary} в оба канала, а
+--       интерфейс предлагал плейсхолдер для WhatsApp. Два соседних
+--       правила в одной функции не могут противоречить друг другу — ветка
+--       выровнена: текст отчёта только в telegram, вне его переменная
+--       пуста. Зеркало в интерфейсе — whatsappPlaceholders без {summary}.
 --
 -- event_messages переиздаётся с базы 0045 (цепочка 0034 → 0035 drop+create
 -- → 0043 → 0045; 0046 её не трогала). Сигнатура и состав колонок не
@@ -159,13 +186,22 @@ begin
            ) rt on true
      where m.center_id = p_center_id
        and m.user_id = p_user_id
-       and m.role in ('owner', 'admin', 'teacher')
+       -- Р2: то же правило «специалист жив», что у круга 2 в 0045 —
+       -- owner/admin по роли, teacher только с живой карточкой.
+       and (
+         m.role in ('owner', 'admin')
+         or (m.role = 'teacher' and exists (
+              select 1 from public.teachers t
+               where t.profile_id = m.user_id
+                 and t.center_id = p_center_id
+                 and t.deleted_at is null))
+       )
        and rt.should_send;
 end;
 $$;
 
 comment on function public.notification_user_targets(uuid, uuid, text) is
-  'Получатель — конкретный сотрудник центра, живой на момент доставки (0047 Р2): членство проверяется здесь, а не берётся из payload события. Грантов нет — зовёт только event_messages.';
+  'Получатель — конкретный сотрудник центра, живой на момент доставки (0047 Р2): членство и живая карточка специалиста проверяются здесь, а не берутся из payload события. Грантов нет — зовёт только event_messages.';
 
 revoke all on function public.notification_user_targets(uuid, uuid, text)
   from public, anon, authenticated, service_role;
@@ -305,10 +341,12 @@ begin
       return;
     end if;
 
+    -- 0047 Р10: текст отчёта — только в telegram, вне его пусто.
     return query
       select r.user_id, r.channel, r.chat_id,
              public.render_template(r.template_text, jsonb_build_object(
-               'summary', coalesce(v_event.payload ->> 'summary', ''),
+               'summary', case when r.channel = 'telegram'
+                               then coalesce(v_event.payload ->> 'summary', '') else '' end,
                'month',   to_char((v_event.payload ->> 'period_month')::date, 'MM.YYYY'),
                'child',   (select s.full_name from public.students s where s.id = v_student)
              )),
@@ -353,12 +391,13 @@ begin
       'date',  to_char(v_lesson.starts_at at time zone v_tz, 'DD.MM.YYYY')
     );
 
+    -- Р1: вне telegram переменная пуста, а не отсутствует — иначе
+    -- render_template оставит «{summary}» буквально.
     return query
       select r.user_id, r.channel, r.chat_id,
              public.render_template(r.template_text,
-               v_vars || case when r.channel = 'telegram'
-                              then jsonb_build_object('summary', v_summary)
-                              else '{}'::jsonb end),
+               v_vars || jsonb_build_object('summary',
+                 case when r.channel = 'telegram' then v_summary else '' end)),
              v_student,
              null::jsonb
         from public.notification_targets(v_event.center_id, v_payer, v_event.type) r;
@@ -366,7 +405,7 @@ begin
   end if;
 
   -- 0047: отказ обработки диктовки — заказчику диктовки, если он всё ещё
-  -- сотрудник центра (Р2) и заметка по занятию так и не появилась (Р4).
+  -- сотрудник центра (Р2) и повтор диктовки ещё имеет смысл (Р4).
   -- Причина отказа в текст не идёт (Р6).
   if v_event.type = 'lesson.voice_failed' then
     select * into v_request from public.lesson_voice_requests r
@@ -376,11 +415,15 @@ begin
       return;
     end if;
 
+    -- Р4: дословно условие отказа ai_job_begin (0042) — утверждено или
+    -- голосовой черновик другой диктовки. Ручной черновик не гасит.
     if exists (
       select 1 from public.lesson_notes n
        where n.lesson_id = v_request.lesson_id
          and n.student_id = v_request.student_id
          and n.deleted_at is null
+         and (n.status = 'approved'
+              or (n.source = 'voice' and n.conduct_key is distinct from v_request.id))
     ) then
       return;
     end if;
@@ -402,9 +445,8 @@ begin
     return query
       select r.user_id, r.channel, r.chat_id,
              public.render_template(r.template_text,
-               case when r.channel = 'telegram'
-                    then jsonb_build_object('child', v_child)
-                    else '{}'::jsonb end),
+               jsonb_build_object('child',
+                 case when r.channel = 'telegram' then v_child else '' end)),
              v_student,
              null::jsonb
         from public.notification_user_targets(v_event.center_id, v_request.requested_by, v_event.type) r;
@@ -541,7 +583,7 @@ end;
 $$;
 
 comment on function public.event_messages(bigint) is
-  'Событие → кому и что отправить. Получатели, подстановка и формат денег — здесь, а не в сценарии n8n (0034 Р2). report.monthly_ready подставляет готовый текст из события (0043 Р4). Три ветки homework.* — 0045: assigned/reviewed идут родителю, submitted — специалисту через notification_homework_targets, обе перечитывают строку homework на момент доставки. lesson.note_approved (0047) — резюме родителю, {summary} только в telegram и не длиннее 3500 символов; lesson.voice_failed (0047) — заказчику диктовки через notification_user_targets, без причины отказа и только пока заметки по занятию нет. Пустой результат значит «получателей нет» — воркер обязан записать это строкой skipped, а не промолчать.';
+  'Событие → кому и что отправить. Получатели, подстановка и формат денег — здесь, а не в сценарии n8n (0034 Р2). report.monthly_ready подставляет готовый текст из события (0043 Р4), с 0047 — только в telegram. Три ветки homework.* — 0045: assigned/reviewed идут родителю, submitted — специалисту через notification_homework_targets, обе перечитывают строку homework на момент доставки. lesson.note_approved (0047) — резюме родителю, {summary} только в telegram и не длиннее 3500 символов; lesson.voice_failed (0047) — заказчику диктовки через notification_user_targets, без причины отказа и только пока повтор диктовки имеет смысл (условие ai_job_begin). Пустой результат значит «получателей нет» — воркер обязан записать это строкой skipped, а не промолчать.';
 
 revoke all on function public.event_messages(bigint) from public, anon, authenticated, service_role;
 grant execute on function public.event_messages(bigint) to bot_worker;

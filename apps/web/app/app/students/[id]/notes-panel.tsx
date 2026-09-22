@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
+import { formatInTimeZone } from '@/lib/timezone'
 import { approveLessonNote, type ClinicalState } from './clinical-actions'
 
 export type NoteSoap = {
@@ -44,12 +45,25 @@ const SOURCE_LABELS: Record<string, string> = {
   text: 'текстом',
 }
 
-function NoteCard({ studentId, note, canWrite }: { studentId: string; note: NoteEntry; canWrite: boolean }) {
+function NoteCard({
+  studentId,
+  note,
+  canWrite,
+  timeZone,
+}: {
+  studentId: string
+  note: NoteEntry
+  canWrite: boolean
+  timeZone: string
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<ClinicalState>(initial)
   const isDraft = note.status !== 'approved'
   const soapRows = SOAP_LABELS.filter(([key]) => note.soap?.[key])
+  // Зеркало SQL-правила (0047 Р3): без резюме утверждать нечего. Истина —
+  // в триггере lesson_notes_approval_transition, здесь только подсказка.
+  const summaryMissing = !note.parentSummary?.trim()
 
   function approve() {
     startTransition(async () => {
@@ -63,7 +77,10 @@ function NoteCard({ studentId, note, canWrite }: { studentId: string; note: Note
     <div className="space-y-2 rounded-md border border-border p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-medium">
-          {note.lessonAt ? new Date(note.lessonAt).toLocaleDateString('ru-RU') : 'Занятие'}
+          {/* Дата занятия — в поясе центра, той же, что уходит родителю в Telegram (0047). */}
+          {note.lessonAt
+            ? formatInTimeZone(note.lessonAt, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : 'Занятие'}
           <span className="text-muted-foreground"> · {SOURCE_LABELS[note.source] ?? note.source}</span>
         </p>
         <span
@@ -76,10 +93,12 @@ function NoteCard({ studentId, note, canWrite }: { studentId: string; note: Note
         </span>
       </div>
 
-      {note.parentSummary ? (
-        <p className="whitespace-pre-line text-sm">{note.parentSummary}</p>
+      {summaryMissing ? (
+        <p className="text-sm text-muted-foreground">
+          Резюме для родителя не заполнено{isDraft ? ' — без него заметку не утвердить.' : '.'}
+        </p>
       ) : (
-        <p className="text-sm text-muted-foreground">Резюме для родителя не заполнено.</p>
+        <p className="whitespace-pre-line text-sm">{note.parentSummary}</p>
       )}
 
       {soapRows.length > 0 ? (
@@ -124,7 +143,13 @@ function NoteCard({ studentId, note, canWrite }: { studentId: string; note: Note
       {canWrite ? (
         <div className="flex flex-wrap gap-2 pt-1">
           {isDraft ? (
-            <Button type="button" size="sm" disabled={pending} onClick={approve}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending || summaryMissing}
+              title={summaryMissing ? 'Сначала заполните резюме для родителя' : undefined}
+              onClick={approve}
+            >
               {pending ? 'Утверждаю…' : 'Утвердить'}
             </Button>
           ) : null}
@@ -147,10 +172,12 @@ export function NotesPanel({
   studentId,
   notes,
   canWrite,
+  timeZone,
 }: {
   studentId: string
   notes: NoteEntry[]
   canWrite: boolean
+  timeZone: string
 }) {
   if (notes.length === 0) {
     return <p className="text-sm text-muted-foreground">Заметок по занятиям пока нет.</p>
@@ -158,33 +185,22 @@ export function NotesPanel({
 
   const drafts = notes.filter((n) => n.status !== 'approved')
   const approved = notes.filter((n) => n.status === 'approved')
+  const card = (note: NoteEntry) => (
+    <NoteCard key={note.id} studentId={studentId} note={note} canWrite={canWrite} timeZone={timeZone} />
+  )
 
   return (
     <div className="space-y-4">
-      {drafts.length > 0 ? (
-        <div className="space-y-3">
-          {drafts.map((note) => (
-            <NoteCard key={note.id} studentId={studentId} note={note} canWrite={canWrite} />
-          ))}
-        </div>
-      ) : null}
+      {drafts.length > 0 ? <div className="space-y-3">{drafts.map(card)}</div> : null}
 
       {approved.length > 0 ? (
         drafts.length > 0 ? (
           <details className="text-sm" open={approved.length <= 3}>
             <summary className="cursor-pointer text-muted-foreground">Утверждённые ({approved.length})</summary>
-            <div className="mt-2 space-y-3">
-              {approved.map((note) => (
-                <NoteCard key={note.id} studentId={studentId} note={note} canWrite={canWrite} />
-              ))}
-            </div>
+            <div className="mt-2 space-y-3">{approved.map(card)}</div>
           </details>
         ) : (
-          <div className="space-y-3">
-            {approved.map((note) => (
-              <NoteCard key={note.id} studentId={studentId} note={note} canWrite={canWrite} />
-            ))}
-          </div>
+          <div className="space-y-3">{approved.map(card)}</div>
         )
       ) : null}
     </div>

@@ -13,7 +13,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(46);
+select plan(53);
 
 
 -- Фикстура ------------------------------------------------------------------------------------------
@@ -96,24 +96,28 @@ $$;
 
 select public.tests_claims('a0470000-0000-0000-0000-000000000001','a0470000-0000-0000-0000-0000000000c1');
 
--- Заметки: 60 — основной сценарий; 61 — занятие потом отменят; 62 — без
--- резюме; 63 — черновик, который «утвердят» подложенным событием; 64 —
--- живая заметка, из-за которой отказ диктовки по занятию 53 не шлётся;
--- 65 — длинное резюме.
-insert into public.lesson_notes (id, center_id, lesson_id, student_id, status, created_by, parent_summary) values
-  ('a0470000-0000-0000-0000-000000000060','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000050','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002','КАНАРЕЙКА-РЕЗЮМЕ для родителя.'),
-  ('a0470000-0000-0000-0000-000000000061','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000051','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002','Резюме по занятию, которое отменят.'),
-  ('a0470000-0000-0000-0000-000000000062','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000055','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002', null),
-  ('a0470000-0000-0000-0000-000000000063','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000056','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002','Черновик, не утверждён.'),
-  ('a0470000-0000-0000-0000-000000000064','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000053','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002','Уже надиктовано заново.'),
-  ('a0470000-0000-0000-0000-000000000065','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000054','a0470000-0000-0000-0000-000000000040','draft','a0470000-0000-0000-0000-000000000002', repeat('ы', 4000));
-
--- Запросы диктовки: 70 — упавшая, заметки нет; 71 — упавшая, но по
--- занятию уже есть заметка 64; 72 — заказчик уволен.
+-- Запросы диктовки: 70 — упавшая (по занятию 52 есть только ручной
+-- черновик 66 — повтор законен); 71 — упавшая, но по занятию 53 уже есть
+-- голосовой черновик 64 ДРУГОЙ диктовки 73; 72 — заказчик уволен.
 insert into public.lesson_voice_requests (id, token, center_id, lesson_id, student_id, teacher_id, requested_by, chat_id, expires_at, armed_at, consumed_at) values
   ('a0470000-0000-0000-0000-000000000070','t047-1','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000052','a0470000-0000-0000-0000-000000000040','a0470000-0000-0000-0000-000000000010','a0470000-0000-0000-0000-000000000002',780471, now() + interval '15 minutes', now() - interval '3 minutes', now() - interval '2 minutes'),
   ('a0470000-0000-0000-0000-000000000071','t047-2','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000053','a0470000-0000-0000-0000-000000000040','a0470000-0000-0000-0000-000000000010','a0470000-0000-0000-0000-000000000002',780471, now() + interval '15 minutes', now() - interval '3 minutes', now() - interval '2 minutes'),
-  ('a0470000-0000-0000-0000-000000000072','t047-3','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000052','a0470000-0000-0000-0000-000000000040','a0470000-0000-0000-0000-000000000010','a0470000-0000-0000-0000-000000000007',780475, now() + interval '15 minutes', now() - interval '3 minutes', now() - interval '2 minutes');
+  ('a0470000-0000-0000-0000-000000000072','t047-3','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000052','a0470000-0000-0000-0000-000000000040','a0470000-0000-0000-0000-000000000010','a0470000-0000-0000-0000-000000000007',780475, now() + interval '15 minutes', now() - interval '3 minutes', now() - interval '2 minutes'),
+  ('a0470000-0000-0000-0000-000000000073','t047-4','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000053','a0470000-0000-0000-0000-000000000040','a0470000-0000-0000-0000-000000000010','a0470000-0000-0000-0000-000000000002',780471, now() + interval '15 minutes', now() - interval '2 minutes', now() - interval '1 minute');
+
+-- Заметки: 60 — основной сценарий; 61 — занятие потом отменят; 62 — без
+-- резюме; 63 — черновик, который «утвердят» подложенным событием; 64 —
+-- голосовой черновик повторной диктовки 73 (гасит отказ по 71); 65 —
+-- длинное резюме; 66 — ручной черновик по занятию 52 (отказ по 70 НЕ
+-- гасит: голос его дополняет).
+insert into public.lesson_notes (id, center_id, lesson_id, student_id, status, source, conduct_key, created_by, parent_summary) values
+  ('a0470000-0000-0000-0000-000000000060','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000050','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002','КАНАРЕЙКА-РЕЗЮМЕ для родителя.'),
+  ('a0470000-0000-0000-0000-000000000061','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000051','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002','Резюме по занятию, которое отменят.'),
+  ('a0470000-0000-0000-0000-000000000062','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000055','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002', null),
+  ('a0470000-0000-0000-0000-000000000063','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000056','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002','Черновик, не утверждён.'),
+  ('a0470000-0000-0000-0000-000000000064','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000053','a0470000-0000-0000-0000-000000000040','draft','voice','a0470000-0000-0000-0000-000000000073','a0470000-0000-0000-0000-000000000002','Уже надиктовано заново.'),
+  ('a0470000-0000-0000-0000-000000000065','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000054','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002', repeat('ы', 4000)),
+  ('a0470000-0000-0000-0000-000000000066','a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000052','a0470000-0000-0000-0000-000000000040','draft','text',null,'a0470000-0000-0000-0000-000000000002','Начато руками до диктовки.');
 
 -- Все накопленные события до этого места — не наши.
 update public.events set processed_at = now() where processed_at is null;
@@ -277,6 +281,9 @@ select ok(
   (select message from public.event_messages(:'e_note60')) not like '%КАНАРЕЙКА-РЕЗЮМЕ%',
   '{summary} в whatsapp_link не подставляется, даже если центр его дописал (Р1)');
 select ok(
+  (select message from public.event_messages(:'e_note60')) not like '%{summary}%',
+  'И сам плейсхолдер в тексте не остаётся — переменная пуста, а не отсутствует (Р1)');
+select ok(
   (select message from public.event_messages(:'e_note60')) like '%КАНАРЕЙКА-ИМЯ%',
   'А {child} и {date} в этот канал по-прежнему идут');
 
@@ -349,7 +356,13 @@ select is(
 
 select is(
   (select count(*)::int from public.event_messages(:'e_vf_note')),
-  0, 'По занятию уже есть живая заметка — «попробуйте ещё раз» не шлётся (Р4)');
+  0, 'По занятию уже есть голосовой черновик другой диктовки — «попробуйте ещё раз» не шлётся (Р4)');
+-- Тот же вход — ai_job_begin согласен: по 71 работать нечего, по 70 — можно.
+select ok(
+  (select count(*)::int from public.lesson_notes n
+    where n.lesson_id = 'a0470000-0000-0000-0000-000000000052' and n.deleted_at is null
+      and (n.status = 'approved' or (n.source = 'voice' and n.conduct_key is distinct from 'a0470000-0000-0000-0000-000000000070'))) = 0,
+  'Ручной черновик по занятию 52 не подпадает под условие отказа ai_job_begin — и отказ по 70 выше доставлен');
 select is(
   (select count(*)::int from public.event_messages(:'e_vf_fired')),
   0, 'Заказчик без членства в центре — ноль получателей, хотя Telegram привязан (Р2)');
@@ -368,10 +381,25 @@ select is(
 select ok(
   (select message from public.event_messages(:'e_vf_ok')) not like '%КАНАРЕЙКА-ИМЯ%',
   'В whatsapp_link имя ребёнка не подставляется (Р1, как 0045 Р8)');
+select ok(
+  (select message from public.event_messages(:'e_vf_ok')) not like '%{child}%',
+  'И плейсхолдер {child} буквально не остаётся');
+
+-- Карточка специалиста архивирована, членство ещё не снято — молчание (Р2).
+update public.teachers set deleted_at = now() where id = 'a0470000-0000-0000-0000-000000000010';
+select is(
+  (select count(*)::int from public.event_messages(:'e_vf_ok')),
+  0, 'Специалист с архивной карточкой при живом членстве — ноль получателей (Р2, как 0045 Р12)');
 
 
 -- 5. Права и сохранность старых веток ----------------------------------------------------------------
 
+select ok(
+  not has_function_privilege('authenticated', 'public.notification_user_targets(uuid, uuid, text)', 'EXECUTE'),
+  'У authenticated нет EXECUTE на notification_user_targets');
+
+-- Второй рубеж: даже с грантом guard внутри функции отбивает живую сессию.
+grant execute on function public.notification_user_targets(uuid, uuid, text) to authenticated;
 select public.tests_claims('a0470000-0000-0000-0000-000000000002','a0470000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select throws_ok(
@@ -381,13 +409,10 @@ select throws_ok(
 select throws_ok(
   $q$ select public.notification_user_targets('a0470000-0000-0000-0000-0000000000c1','a0470000-0000-0000-0000-000000000002','lesson.voice_failed') $q$,
   '42501', null,
-  'notification_user_targets из сессии не вызвать');
+  'notification_user_targets с временным грантом всё равно отбивает сессию — держит guard, а не грант');
 reset role;
+revoke execute on function public.notification_user_targets(uuid, uuid, text) from authenticated;
 select public.tests_claims(null, null);
-
-select ok(
-  not has_function_privilege('authenticated', 'public.notification_user_targets(uuid, uuid, text)', 'EXECUTE'),
-  'У authenticated нет EXECUTE на notification_user_targets');
 
 -- lesson.reminder жив после переиздания: кнопка подтверждения на месте.
 -- Занятие 57 — у второго ребёнка: его родитель Telegram не отвязывал.
@@ -399,6 +424,31 @@ select ok(
      (select max(id) from public.events where type = 'lesson.reminder'))
     where recipient_user_id = 'a0470000-0000-0000-0000-000000000004') like 'c:%',
   'lesson.reminder после переиздания по-прежнему отдаёт кнопку с callback_data');
+
+-- report.monthly_ready после переиздания: текст отчёта только в telegram (Р10).
+insert into public.events (center_id, type, payload) values
+  ('a0470000-0000-0000-0000-0000000000c1', 'report.monthly_ready',
+   jsonb_build_object('student_id','a0470000-0000-0000-0000-000000000041',
+     'period_month','2026-09-01','summary','КАНАРЕЙКА-ОТЧЁТ'));
+select ok(
+  (select message from public.event_messages(
+     (select max(id) from public.events where type = 'report.monthly_ready'))) like '%КАНАРЕЙКА-ОТЧЁТ%',
+  'report.monthly_ready в telegram по-прежнему несёт текст отчёта');
+
+select public.tests_claims('a0470000-0000-0000-0000-000000000001','a0470000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select lives_ok(
+  $q$ select public.upsert_message_template('report.monthly_ready', 'whatsapp_link', 'Отчёт {month} {child}: {summary}', true) $q$,
+  'Центр дописал {summary} в whatsapp_link месячного отчёта');
+reset role;
+select public.tests_claims(null, null);
+update public.telegram_accounts set unlinked_at = now() where user_id = 'a0470000-0000-0000-0000-000000000004';
+select ok(
+  (select message from public.event_messages(
+     (select max(id) from public.events where type = 'report.monthly_ready'))) not like '%КАНАРЕЙКА-ОТЧЁТ%'
+  and (select message from public.event_messages(
+     (select max(id) from public.events where type = 'report.monthly_ready'))) not like '%{summary}%',
+  'В whatsapp_link текста отчёта нет и плейсхолдер не остаётся (Р10)');
 
 insert into public.events (center_id, type, payload) values
   ('a0470000-0000-0000-0000-0000000000c1', 'nobody.knows', '{}'::jsonb);

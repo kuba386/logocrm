@@ -19,7 +19,8 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'installment.due', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'installment.overdue', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}'] },
-  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'] },
+  // {summary} только в telegram — с 0047 то же правило, что у резюме занятия.
+  { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'], whatsappPlaceholders: ['{month}', '{child}'] },
   { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
   // whatsapp_link для homework.submitted не доставляется — у специалиста
   // нет своей WhatsApp-кнопки в интерфейсе, текст оседает только в журнале
