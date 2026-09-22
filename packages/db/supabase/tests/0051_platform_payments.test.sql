@@ -250,7 +250,8 @@ reset role;
 select public.tests_claims('a0510000-0000-0000-0000-000000000004', null);
 set local role authenticated;
 select public.extend_subscription(
-  (select id from public.platform_payments where center_id = 'a0510000-0000-0000-0000-0000000000c1' and confirmed_at is null),
+  (select id from public.platform_payments where center_id = 'a0510000-0000-0000-0000-0000000000c1'
+      and confirmed_at is null and rejected_at is null and withdrawn_at is null),
   'studio', 2, 780000, true);
 reset role;
 select is(
@@ -284,7 +285,8 @@ reset role;
 select public.tests_claims('a0510000-0000-0000-0000-000000000004', null);
 set local role authenticated;
 select public.reject_platform_payment(
-  (select id from public.platform_payments where center_id = 'a0510000-0000-0000-0000-0000000000c2' and confirmed_at is null),
+  (select id from public.platform_payments where center_id = 'a0510000-0000-0000-0000-0000000000c2'
+      and confirmed_at is null and rejected_at is null and withdrawn_at is null),
   'Чек не читается');
 reset role;
 select ok(
