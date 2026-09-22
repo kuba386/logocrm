@@ -73,6 +73,7 @@ from unnest(array[
   'public.centers_protect_plan()',
   'public.center_readonly_guard()',
   'public.readonly_guard_exempt_tables()',
+  'public.apply_readonly_guard(text, boolean)',
   'public.plan_limit(uuid,text)',
   'public.center_plan_name(uuid)',
   'public.assert_center_limit(uuid,text,integer,text)',

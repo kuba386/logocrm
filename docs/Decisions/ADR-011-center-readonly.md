@@ -23,21 +23,45 @@
 `reports/stage-8.md`. Ключевые:
 
 - guard действует только при `auth.uid() is not null`;
+- порядок проверок: `center_writable` (поиск по PK) раньше
+  `is_platform_admin()` (поход в `auth.users`) — живой центр платит за
+  guard одну выборку на строку;
 - путь разблокировки (`audit_log`, `events`, заявки на оплату) и
   закрытие работы воркера — вне guard;
 - `memberships`/`invitations` — только insert под guard;
+  `revoke_membership` гасит карточку `teachers` под транзакционным
+  флагом `logocrm.revoke_membership`, который ставит и снимает сама
+  функция; форму строки guard не сравнивает, прямой PATCH
+  `is_active = false` — обычная запись и отказ;
 - fail closed на пустых датах; отсечение — до конца дня в поясе центра;
+  `center_limits()` отдаёт `writable` из той же функции, граница дня
+  прогоняется pgTAP через обе;
 - SQLSTATE `PT402`;
-- забор pgTAP двусторонний: таблица либо под guard, либо в списке
-  исключений с причиной.
+- забор pgTAP двусторонний по всем базовым таблицам `public`: таблица
+  либо под guard, либо в `readonly_guard_exempt_tables()` с причиной;
+  таблицы без `center_id` перечислены там же. Новую таблицу вешает
+  `call public.apply_readonly_guard('tbl')` рядом с `apply_tenant_rls`.
+
+## Правило для платформы
+
+Тариф и срок меняются одним `update centers set plan = …,
+subscription_until = …` (в `extend_subscription`, 0051). Отдельными
+шагами нельзя: между ними центр с платным тарифом и пустой датой
+читает (fail closed), а trial без `trial_ends_at` не проходит
+констрейнт `centers_trial_has_end`.
 
 ## Известные границы
 
 Триггер не ловит:
 
-- миграции, RI-каскады и контур `bot_worker` (нет `auth.uid()`) — деньги
-  контура бота режутся узкой проверкой в `ai_job_begin` (0051);
-- `truncate` и `alter table … disable trigger` (только владелец);
+- миграции, RI-каскады и контур `bot_worker` (нет `auth.uid()`). Долг
+  контура бота, единственный список: (а) `ai_job_begin` отказывает
+  просроченному центру и не тратит деньги платформы; (б) специалист
+  получает сообщение «подписка истекла» вместо молчания — через
+  `emit_event_unchecked`, потому что `emit_event` требует членства.
+  Оба — в 0051 вместе с заявками на оплату (нужны тип события и шаблон);
+- `truncate` и `alter table … disable trigger` (только владелец;
+  миграция 0050 выключает `centers_protect_plan` на время шва со сроками);
 - `service_role` (в приложении не используется, ADR-004).
 
 ## Что центр обязан мочь в read-only

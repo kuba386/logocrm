@@ -819,10 +819,23 @@ seed строками миграции. `centers.plan` — FK на `plans.code`,
 одном центре — `plan = 'center'` и `subscription_until`.
 
 Только чтение при просрочке — `a00_readonly_guard`, BEFORE-триггер на
-каждой таблице с `center_id`, навешен циклом по каталогу; исключения — в
-`readonly_guard_exempt_tables()`, забор pgTAP 0050 сверяет каталог с ними.
-Срабатывает только при `auth.uid() is not null` и не для платформы;
-`memberships`/`invitations` — только insert. `center_writable(center)` —
-живой trial или подписка до конца дня истечения в поясе центра, пустая
-дата — нет. Код отказа `PT402` (PostgREST → HTTP 402), ветка в
+каждой базовой таблице `public`, навешен циклом по каталогу через
+`apply_readonly_guard(tbl, insert_only)`; исключения — в
+`readonly_guard_exempt_tables()` с причиной, забор pgTAP 0050 сверяет
+каталог с ними с обеих сторон (таблицы без `center_id` — тоже в списке).
+Срабатывает только при `auth.uid() is not null`; порядок —
+`center_writable` (PK), потом `is_platform_admin()`; `memberships`/
+`invitations` — только insert; карточку `teachers` гасит
+`revoke_membership` под транзакционным флагом `logocrm.revoke_membership`.
+`center_writable(center)` — живой trial или подписка до конца дня
+истечения в поясе центра, пустая дата — нет; `center_limits()` отдаёт
+`writable` из неё же. Код отказа `PT402` (PostgREST → HTTP 402), ветка в
 `errors.ts`. Механизм и границы — [ADR-011](Decisions/ADR-011-center-readonly.md).
+
+Новая таблица центра в миграции — три вызова подряд:
+
+```sql
+call public.apply_tenant_rls('tbl');
+call public.apply_audit('tbl');
+call public.apply_readonly_guard('tbl');
+```

@@ -1,10 +1,12 @@
 -- pgTAP: только чтение при истёкшей подписке (0050).
 --
--- Забор в начале: каждая таблица с center_id либо под a00_readonly_guard,
--- либо в списке исключений; список nullable center_id зафиксирован.
--- Главный путь — definer-RPC от сессии просроченного центра; прямой PATCH;
--- разблокировка платформой; owner не заперт; воркер без сессии проходит;
--- fail closed на пустых датах; порядок причин с лимитом.
+-- Забор в начале: каждая базовая таблица public либо под a00_readonly_guard,
+-- либо в списке исключений; таблицы без center_id и с nullable center_id
+-- зафиксированы поимённо. Главный путь — definer-RPC от сессии
+-- просроченного центра; прямой PATCH; отзыв доступа сотруднику с гашением
+-- карточки; приём приглашения закрыт; разблокировка платформой; owner не
+-- заперт; воркер без сессии проходит; fail closed на пустых датах; порядок
+-- причин с лимитом; граница дня через center_writable и center_limits.
 --
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
@@ -13,22 +15,20 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(29);
+select plan(39);
 
 
 -- 1. Заборы по каталогу -----------------------------------------------------------------------------
 
 select is_empty(
-  $$ select c.table_name
-       from information_schema.columns c
-       join information_schema.tables t
-         on t.table_schema = c.table_schema and t.table_name = c.table_name and t.table_type = 'BASE TABLE'
-      where c.table_schema = 'public' and c.column_name = 'center_id'
-        and c.table_name not in (select x.table_name from public.readonly_guard_exempt_tables() x)
+  $$ select t.table_name
+       from information_schema.tables t
+      where t.table_schema = 'public' and t.table_type = 'BASE TABLE'
+        and t.table_name not in (select x.table_name from public.readonly_guard_exempt_tables() x)
         and not exists (
           select 1 from pg_trigger tg
-           where tg.tgrelid = ('public.' || c.table_name)::regclass and tg.tgname = 'a00_readonly_guard' and not tg.tgisinternal) $$,
-  'Каждая таблица с center_id либо под guard, либо в явном списке исключений');
+           where tg.tgrelid = ('public.' || t.table_name)::regclass and tg.tgname = 'a00_readonly_guard' and not tg.tgisinternal) $$,
+  'Каждая базовая таблица public либо под guard, либо в явном списке исключений (Р7)');
 
 select is_empty(
   $$ select x.table_name from public.readonly_guard_exempt_tables() x
@@ -47,6 +47,14 @@ select set_eq(
       where c.table_schema = 'public' and c.column_name = 'center_id' and c.is_nullable = 'YES' $$,
   $$ values ('audit_log'), ('message_templates'), ('exercise_library') $$,
   'Таблицы с nullable center_id — ровно три; новая такая роняет CI и требует решения (Р6)');
+
+select set_eq(
+  $$ select t.table_name from information_schema.tables t
+      where t.table_schema = 'public' and t.table_type = 'BASE TABLE'
+        and not exists (select 1 from information_schema.columns c
+                         where c.table_schema = 'public' and c.table_name = t.table_name and c.column_name = 'center_id') $$,
+  $$ values ('centers'), ('plans'), ('platform_admins'), ('notification_event_types'), ('telegram_accounts'), ('telegram_link_codes') $$,
+  'Таблицы без center_id — ровно шесть, все в списке исключений с причиной; новая требует решения (Р7)');
 
 -- Р4: memberships/invitations — только insert.
 select is(
@@ -72,11 +80,12 @@ insert into auth.users (
 values
   ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000001','authenticated','authenticated','owner-0050@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000002','authenticated','authenticated','teacher-0050@test.kg','','','','','','','',''),
-  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000003','authenticated','authenticated','platform-0050@test.kg','','','','','','','','');
+  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000003','authenticated','authenticated','platform-0050@test.kg','','','','','','','',''),
+  ('00000000-0000-0000-0000-000000000000','a0500000-0000-0000-0000-000000000004','authenticated','authenticated','invitee-0050@test.kg','','','','','','','','');
 update auth.users set email_confirmed_at = now() where id = 'a0500000-0000-0000-0000-000000000003';
 insert into public.platform_admins (email) values ('platform-0050@test.kg');
 
--- Центр А — просроченный solo (истёк вчера в поясе центра); центр Б — живой trial.
+-- Центр А — просроченный solo (истёк позавчера); центр Б — живой trial.
 insert into public.centers (id, name, slug, plan, subscription_until, settings) values
   ('a0500000-0000-0000-0000-0000000000c1','Центр 0050 просрочен','centr-0050-a','solo', now() - interval '2 days','{"timezone":"Asia/Bishkek"}'::jsonb);
 insert into public.centers (id, name, slug, settings) values
@@ -97,6 +106,9 @@ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, s
   ('a0500000-0000-0000-0000-000000000050','a0500000-0000-0000-0000-0000000000c1','a0500000-0000-0000-0000-000000000010',
    'a0500000-0000-0000-0000-000000000040','a0500000-0000-0000-0000-000000000020','planned',
    now() - interval '2 hours', now() - interval '1 hour 15 minutes');
+-- Приглашение, выписанное до просрочки: принять его при просрочке нельзя (Р4).
+insert into public.invitations (id, center_id, role, token, expires_at) values
+  ('a0500000-0000-0000-0000-000000000060','a0500000-0000-0000-0000-0000000000c1','admin','tok-0050-expired-center', now() + interval '7 days');
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -114,12 +126,12 @@ select ok(not public.center_writable('a0500000-0000-0000-0000-0000000000c1'), '�
 select ok(public.center_writable('a0500000-0000-0000-0000-0000000000c2'), 'Живой trial — пишет');
 select ok(not public.center_writable('a0500000-0000-0000-0000-000000000099'), 'Несуществующий центр — не пишет');
 
+-- Срок и тариф centers меняет только платформа (centers_protect_plan, 0049) — claims платформы.
+select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
 select throws_ok(
   $q$ update public.centers set trial_ends_at = null where id = 'a0500000-0000-0000-0000-0000000000c2' $q$,
   '23514', null,
   'Trial без даты окончания невозможен — инвариант на centers (Р5)');
-
-select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
 update public.centers set plan = 'studio', subscription_until = null where id = 'a0500000-0000-0000-0000-0000000000c2';
 select ok(not public.center_writable('a0500000-0000-0000-0000-0000000000c2'), 'Платный тариф без subscription_until — не пишет (fail closed)');
 update public.centers set subscription_until = now() + interval '1 day' where id = 'a0500000-0000-0000-0000-0000000000c2';
@@ -145,12 +157,17 @@ select throws_ok(
   'Владелец просроченного центра не пишет через definer-RPC — то, чего политики RLS не ловили');
 select throws_ok(
   $q$ update public.students set full_name = 'Прямой PATCH' where id = 'a0500000-0000-0000-0000-000000000040' $q$,
-  'PT402', null,
-  'И прямой PATCH — тот же код: путь, который гейт в функциях не ловил');
+  'PT402',
+  'Подписка центра истекла — доступно только чтение. Оплатите тариф в настройках центра',
+  'И прямой PATCH — тот же код и тот же текст: путь, который гейт в функциях не ловил');
 select throws_ok(
   $q$ select * from public.create_invitation('teacher', 'Новый специалист') $q$,
   'PT402', null,
   'Приём нового сотрудника при просрочке закрыт (Р4)');
+select throws_ok(
+  $q$ update public.teachers set is_active = false where id = 'a0500000-0000-0000-0000-000000000010' $q$,
+  'PT402', null,
+  'Прямой PATCH is_active = false — обычная запись, не отзыв доступа (Р4)');
 
 -- Owner не заперт (Р12).
 select lives_ok(
@@ -162,9 +179,23 @@ select lives_ok(
 select is((select count(*)::int from public.students), 1, 'Чтение живо');
 reset role;
 
--- Порядок причин: просрочка + превышенный лимит → текст просрочки (Р8).
-select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
-update public.centers set plan = 'solo' where id = 'a0500000-0000-0000-0000-0000000000c1';
+select ok(
+  (select not t.is_active and t.profile_id is null from public.teachers t where t.id = 'a0500000-0000-0000-0000-000000000010'),
+  'revoke_membership погасил карточку: is_active = false, profile_id пуст — флаг сработал');
+select is(
+  current_setting('logocrm.revoke_membership', true), '',
+  'Флаг revoke_membership снят после update — не протекает в следующие записи');
+
+-- Приглашение, выписанное до просрочки, при просрочке не принимается.
+select public.tests_claims('a0500000-0000-0000-0000-000000000004', null);
+set local role authenticated;
+select throws_ok(
+  $q$ select public.accept_invitation('tok-0050-expired-center') $q$,
+  'PT402', null,
+  'accept_invitation: insert в memberships под guard — приём при просрочке закрыт (Р4)');
+reset role;
+
+-- Порядок причин: просрочка + полный лимит (solo: 1 специалист, карточка жива) → текст просрочки (Р8).
 select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select throws_ok(
@@ -184,12 +215,14 @@ select lives_ok(
   $q$ delete from auth.users where id = 'a0500000-0000-0000-0000-000000000002' $q$,
   'Удаление пользователя с карточкой в просроченном центре проходит (каскад on delete set null)');
 
+-- Платформа пишет через definer-RPC (/admin, 0051): uid платформы, строка видна — результат проверяем.
 select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
-set local role authenticated;
 select lives_ok(
   $q$ update public.students set full_name = 'Платформа' where id = 'a0500000-0000-0000-0000-000000000040' $q$,
   'Администратор платформы пишет в просроченном центре');
-reset role;
+select is(
+  (select full_name from public.students where id = 'a0500000-0000-0000-0000-000000000040'),
+  'Платформа', 'Запись платформы дошла до строки — не пустой update под RLS');
 
 
 -- 5. Разблокировка: платформа продлевает — центр снова пишет ----------------------------------------------
@@ -222,15 +255,27 @@ select throws_ok(
 select public.tests_claims(null, null);
 
 
--- 7. Грейс до конца дня в поясе центра (Р11) --------------------------------------------------------------
+-- 7. Грейс до конца дня в поясе центра — через center_writable и center_limits (Р11) ----------------------
 
 select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
 update public.centers set subscription_until = (now() at time zone 'Asia/Bishkek')::date::timestamp at time zone 'Asia/Bishkek' where id = 'a0500000-0000-0000-0000-0000000000c1';
 select ok(public.center_writable('a0500000-0000-0000-0000-0000000000c1'),
   'Срок «до сегодня» — сегодня ещё пишем (до конца дня в поясе центра)');
+select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select is((public.center_limits() ->> 'writable')::boolean, true, 'center_limits: writable = true на день истечения');
+select is((public.center_limits() ->> 'days_left')::int, 0, 'center_limits: days_left = 0 на день истечения');
+reset role;
+
+select public.tests_claims('a0500000-0000-0000-0000-000000000003', null);
 update public.centers set subscription_until = (now() at time zone 'Asia/Bishkek')::date::timestamp at time zone 'Asia/Bishkek' - interval '1 second' where id = 'a0500000-0000-0000-0000-0000000000c1';
 select ok(not public.center_writable('a0500000-0000-0000-0000-0000000000c1'),
   'Секунда до полуночи вчера в поясе центра — уже не пишем');
+select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select is((public.center_limits() ->> 'writable')::boolean, false, 'center_limits: writable = false на следующий день');
+select is((public.center_limits() ->> 'days_left')::int, -1, 'center_limits: days_left = -1 на следующий день — одна граница в обеих функциях');
+reset role;
 select public.tests_claims(null, null);
 
 select * from finish();
