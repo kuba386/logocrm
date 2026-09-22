@@ -162,6 +162,64 @@ export async function archiveHomework(studentId: string, homeworkId: string): Pr
   return { message: '', notice: 'Задание убрано' }
 }
 
+// --- Отчёт за месяц (0043) -----------------------------------------------------------
+
+export type MonthlyReport = {
+  student_id: string
+  student_name: string
+  period_month: string
+  lessons_total: number
+  absences: number
+  attendance: { date: string; status: string }[]
+  goals: { title: string; stage: string | null; from: number | null; to: number | null; points: number }[]
+  notes: { date: string; summary: string }[]
+  teacher_comment: string | null
+  is_empty: boolean
+  generated_at: string
+  sent: {
+    count: number
+    last_at: string
+    summary: string
+    stats: unknown
+    is_stale: boolean
+  } | null
+}
+
+export type MonthlyReportState = AppError & { report?: MonthlyReport }
+
+// Чтение отдельно от отправки — разные права (0043 Р3): родитель читает,
+// но не отправляет.
+export async function loadMonthlyReport(studentId: string, month: string): Promise<MonthlyReportState> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('student_monthly_report', {
+    p_student_id: studentId,
+    p_month: month,
+  })
+  if (error) return toAppError(error, 'Не удалось собрать отчёт')
+  return { message: '', report: data as unknown as MonthlyReport }
+}
+
+// Повтор — только с явным подтверждением и только администрацией (0043 Р5):
+// force сюда приходит из подтверждённого чекбокса, а право решает база.
+export async function sendMonthlyReport(
+  studentId: string,
+  month: string,
+  comment: string,
+  force: boolean,
+): Promise<ClinicalState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('send_monthly_report', {
+    p_student_id: studentId,
+    p_month: month,
+    p_comment: comment.trim() || undefined,
+    p_force: force,
+  })
+  if (error) return toAppError(error, 'Не удалось отправить отчёт')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Отчёт поставлен в очередь на отправку родителю' }
+}
+
 // --- Заметки занятий ---------------------------------------------------------------
 
 // Утверждение — единственная точка, после которой резюме уходит родителю, а

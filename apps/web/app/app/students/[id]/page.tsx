@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { centerTimeZone, isoDayInZone } from '@/lib/timezone'
+import { centerTimeZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
 import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { StudentForm, type StudentFormValues } from './student-form'
@@ -21,6 +21,8 @@ import {
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
+import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
+import type { MonthlyReport } from './clinical-actions'
 import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
@@ -324,6 +326,24 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ? await supabase.from('centers').select('settings').eq('id', clinicalCenterId ?? '').maybeSingle()
     : { data: null }
   const clinicalTimeZone = centerTimeZone(clinicalCenter?.settings)
+
+  // Отчёт за месяц (0043): текущий месяц в поясе центра плюс пять
+  // предыдущих; первый отчёт грузится здесь, смена месяца — действием.
+  const reportMonths: MonthOption[] = []
+  if (clinicalAllowed) {
+    const today = isoDayInZone(new Date(), clinicalTimeZone)
+    const [y, m] = today.split('-').map(Number)
+    for (let i = 0; i < 6; i += 1) {
+      const d = new Date(Date.UTC(y!, m! - 1 - i, 1))
+      const value = d.toISOString().slice(0, 10)
+      const label = formatInTimeZone(d, 'UTC', { month: 'long', year: 'numeric' })
+      reportMonths.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) })
+    }
+  }
+  const initialReportMonth = reportMonths[0]?.value ?? null
+  const { data: initialReport } = initialReportMonth
+    ? await supabase.rpc('student_monthly_report', { p_student_id: id, p_month: initialReportMonth })
+    : { data: null }
 
   if (clinicalAllowed && isParent) {
     const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }, { data: noteRows }] = await Promise.all([
@@ -712,6 +732,30 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               />
             </CardContent>
           </Card>
+
+          {initialReportMonth ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Отчёт за месяц</CardTitle>
+                <CardDescription>
+                  {isParent
+                    ? 'Посещения, динамика целей и резюме занятий за месяц.'
+                    : 'Собирается из посещений, оценок целей и утверждённых резюме. Родителю уходит в Telegram.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <MonthlyReportPanel
+                  studentId={id}
+                  months={reportMonths}
+                  initialMonth={initialReportMonth}
+                  initialReport={(initialReport as unknown as MonthlyReport | null) ?? null}
+                  canSend={canWriteClinical}
+                  canResend={isAdmin}
+                  timeZone={clinicalTimeZone}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
 
