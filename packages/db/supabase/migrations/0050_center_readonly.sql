@@ -44,11 +44,14 @@
 --       (платформа ставит план и срок одним update — ADR-011), но null
 --       означает «не оплачено» — центр без subscription_until читает.
 --
---   Р6. Nullable center_id (message_templates, exercise_library) и таблицы
---       без center_id вне списка исключений: запись из сессии центра —
---       отказ, не пропуск. Новая таблица без center_id и без строки в
---       списке исключений закрыта на запись из сессии, пока решение не
---       записано. audit_log исключён по Р2.
+--   Р6. Nullable center_id (message_templates, exercise_library): строка
+--       платформы не принадлежит центру, подписки у неё нет — guard её
+--       не судит. Кто вправе её писать, решают триггер 0040
+--       (exercise_library: сессия — 42501) и политики 0037
+--       (message_templates: with check по центру). Список таких таблиц
+--       зафиксирован забором, чтобы новая получила решение осознанно.
+--       Таблицы без center_id — только через список исключений (Р7).
+--       audit_log исключён по Р2.
 --
 --   Р7. Забор pgTAP двусторонний по ВСЕМ базовым таблицам public: каждая
 --       либо под guard на i/u/d (memberships/invitations — на insert),
@@ -178,20 +181,22 @@ begin
   v_row := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
   v_center := (v_row ->> 'center_id')::uuid;
 
+  -- Р6: строка платформы (center_id is null) не принадлежит центру — у неё
+  -- нет подписки, и guard её не судит. Кто вправе её писать, решают
+  -- триггер 0040 (exercise_library) и политики 0037 (message_templates);
+  -- забор 0050 фиксирует список таких таблиц, чтобы новая получила решение.
+  if v_center is null then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
   -- Р2/Р10: живой центр — дешёвая проверка по PK, без похода в auth.users.
-  if v_center is not null and public.center_writable(v_center) then
+  if public.center_writable(v_center) then
     return case when tg_op = 'DELETE' then old else new end;
   end if;
 
   -- Р2: платформа проходит всегда.
   if public.is_platform_admin() then
     return case when tg_op = 'DELETE' then old else new end;
-  end if;
-
-  -- Р6: строка платформы из сессии центра — отказ, не пропуск.
-  if v_center is null then
-    raise exception 'Запись без центра из сессии центра недоступна'
-      using errcode = 'PT402';
   end if;
 
   raise exception 'Подписка центра истекла — доступно только чтение. Оплатите тариф в настройках центра'

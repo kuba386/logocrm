@@ -6,7 +6,8 @@
 -- просроченного центра; прямой PATCH; отзыв доступа сотруднику с гашением
 -- карточки; приём приглашения закрыт; разблокировка платформой; owner не
 -- заперт; воркер без сессии проходит; fail closed на пустых датах; порядок
--- причин с лимитом; граница дня через center_writable и center_limits.
+-- причин с лимитом; строка платформы (center_id null) — отказ прав, не режима;
+-- граница дня через center_writable и center_limits.
 --
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
@@ -15,7 +16,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(39);
+select plan(40);
 
 
 -- 1. Заборы по каталогу -----------------------------------------------------------------------------
@@ -234,7 +235,8 @@ select lives_ok(
 select ok(
   (select (new_data ->> 'subscription_until')::timestamptz > now() from public.audit_log
     where table_name = 'centers' and row_id = 'a0500000-0000-0000-0000-0000000000c1' and action = 'UPDATE'
-    order by at desc limit 1),
+    -- at = now() одинаков на всю транзакцию — порядок только по id.
+    order by id desc limit 1),
   'Аудит центра записал продление — владелец видит, кто менял срок');
 
 select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
@@ -245,13 +247,21 @@ select lives_ok(
 reset role;
 
 
--- 6. Nullable center_id из сессии — отказ (Р6) ------------------------------------------------------------
+-- 6. Nullable center_id — guard не судит, строку платформы держат права (Р6) ------------------------------
+-- Из сессии просроченного центра: отказ приходит от рубежа прав (42501), а не
+-- от режима — у строки платформы нет подписки. Оба рубежа названы в Р6.
 
 select public.tests_claims('a0500000-0000-0000-0000-000000000001','a0500000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 select throws_ok(
   $q$ insert into public.message_templates (center_id, event_type, channel, text) values (null, 'lesson.reminder', 'telegram', 'подмена платформы') $q$,
-  'PT402', null,
-  'Строка платформы с пустым center_id из сессии центра — отказ, не пропуск');
+  '42501', null,
+  'message_templates с пустым center_id из сессии — отказ политики 0037, не режима');
+select throws_ok(
+  $q$ insert into public.exercise_library (center_id, title) values (null, 'подмена платформы') $q$,
+  '42501', null,
+  'exercise_library с пустым center_id из сессии — отказ триггера 0040, не режима');
+reset role;
 select public.tests_claims(null, null);
 
 
