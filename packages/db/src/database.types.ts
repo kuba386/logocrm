@@ -2121,6 +2121,7 @@ export type Database = {
           channels: string[]
           description: string
           event_type: string
+          mandatory: boolean
           subject_required: boolean
         }
         Insert: {
@@ -2128,6 +2129,7 @@ export type Database = {
           channels?: string[]
           description: string
           event_type: string
+          mandatory?: boolean
           subject_required?: boolean
         }
         Update: {
@@ -2135,6 +2137,7 @@ export type Database = {
           channels?: string[]
           description?: string
           event_type?: string
+          mandatory?: boolean
           subject_required?: boolean
         }
         Relationships: []
@@ -2948,6 +2951,35 @@ export type Database = {
           },
         ]
       }
+      subscription_reminders_sent: {
+        Row: {
+          center_id: string
+          kind: string
+          sent_at: string
+          until: string
+        }
+        Insert: {
+          center_id: string
+          kind: string
+          sent_at?: string
+          until: string
+        }
+        Update: {
+          center_id?: string
+          kind?: string
+          sent_at?: string
+          until?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_reminders_sent_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscription_types: {
         Row: {
           center_id: string
@@ -3645,6 +3677,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      assert_one_trial_center: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       assign_homework: {
         Args: {
           p_conduct_key?: string
@@ -4102,6 +4138,32 @@ export type Database = {
         Args: { p_center_id: string; p_key: string }
         Returns: number
       }
+      platform_centers: {
+        Args: never
+        Returns: {
+          center_id: string
+          created_at: string
+          days_left: number
+          is_trial: boolean
+          last_confirmed_at: string
+          name: string
+          no_date: boolean
+          open_claims: number
+          owner_email: string
+          plan: string
+          plan_name: string
+          slug: string
+          students: number
+          teachers: number
+          until: string
+          until_text: string
+          writable: boolean
+        }[]
+      }
+      platform_create_center: {
+        Args: { p_city?: string; p_name: string; p_owner_email: string }
+        Returns: string
+      }
       platform_open_payments: {
         Args: never
         Returns: {
@@ -4121,6 +4183,7 @@ export type Database = {
           submitted_by_email: string
         }[]
       }
+      platform_summary: { Args: never; Returns: Json }
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
         Returns: string
@@ -4491,6 +4554,12 @@ export type Database = {
           paid_tiyin: number
           payment_state: string
           price_tiyin: number
+        }[]
+      }
+      subscription_reminders: {
+        Args: never
+        Returns: {
+          center_count: number
         }[]
       }
       subscription_state: {
