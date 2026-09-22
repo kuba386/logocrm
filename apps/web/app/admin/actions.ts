@@ -39,6 +39,29 @@ export async function confirmPayment(_prev: AdminState, formData: FormData): Pro
   return { notice: t('admin', 'confirmed', { until: until ? until.slice(0, 10) : '—' }) }
 }
 
+/**
+ * Второй центр владельцу — platform_create_center (0052 Р9): владелец по
+ * подтверждённому email, платформа членства не получает, trial-лимит из
+ * платформенной сессии не действует.
+ */
+export async function createCenterForOwner(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const name = String(formData.get('name') ?? '').trim()
+  const ownerEmail = String(formData.get('ownerEmail') ?? '').trim()
+  const city = String(formData.get('city') ?? '').trim()
+  if (!name || !ownerEmail) return { message: t('admin', 'createCenterFailed') }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('platform_create_center', {
+    p_name: name,
+    p_owner_email: ownerEmail,
+    p_city: city || undefined,
+  })
+  if (error) return toAppError(error, t('admin', 'createCenterFailed'))
+
+  revalidatePath('/admin')
+  return { notice: t('admin', 'centerCreated', { name }) }
+}
+
 /** Отклонение с причиной — reject_platform_payment (0051 Р3). Центр видит причину в истории заявок. */
 export async function rejectPayment(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const paymentId = String(formData.get('paymentId') ?? '').trim()
