@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { MobileNav } from '@/app/app/mobile-nav'
 import { SidebarNav } from '@/app/app/sidebar-nav'
 import { BottomTabs } from '@/app/app/bottom-tabs'
+import { PlanBanner } from '@/app/app/plan-banner'
+import { parseCenterLimits } from '@/lib/plan'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -43,7 +45,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/select-center')
   }
 
-  const [{ data: center }, { count: centersCount }] = await Promise.all([
+  // Меню — по матрице прав (docs/FEATURE_MATRIX.md); это косметика, отказ
+  // приходит из базы: registrar/finance режут политики 0028, не эти флаги.
+  const isAdmin = role === 'owner' || role === 'admin'
+
+  const [{ data: center }, { count: centersCount }, { data: limitsJson }] = await Promise.all([
     supabase.from('centers').select('name, plan').eq('id', centerId).maybeSingle(),
     // Только свои членства: владельцу по RLS видны и чужие строки его центра,
     // из-за чего счётчик показывал «Сменить центр» при единственном центре.
@@ -51,11 +57,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .from('memberships')
       .select('center_id', { count: 'exact', head: true })
       .eq('user_id', user.id),
+    // Баннер тарифа — только тем, кто может оплатить: center_limits() закрыт
+    // для parent, а специалисту «оплатите» читать не нужно (0050 Р9).
+    isAdmin ? supabase.rpc('center_limits') : Promise.resolve({ data: null }),
   ])
-
-  // Меню — по матрице прав (docs/FEATURE_MATRIX.md); это косметика, отказ
-  // приходит из базы: registrar/finance режут политики 0028, не эти флаги.
-  const isAdmin = role === 'owner' || role === 'admin'
+  const limits = isAdmin ? parseCenterLimits(limitsJson) : null
   const frontDesk = isFrontDesk(role)
   const finance = isFinance(role)
   const payments = canPayments(role)
@@ -114,7 +120,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
           <span className="block text-xs text-muted-foreground">
             {roleLabel(role)}
-            {center?.plan ? ` · тариф ${center.plan}` : ''}
+            {limits ? ` · ${limits.planName}` : center?.plan ? ` · тариф ${center.plan}` : ''}
           </span>
         </Link>
 
@@ -146,7 +152,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
               <span className="block text-xs text-muted-foreground">
                 {roleLabel(role)}
-                {center?.plan ? ` · тариф ${center.plan}` : ''}
+                {limits ? ` · ${limits.planName}` : center?.plan ? ` · тариф ${center.plan}` : ''}
               </span>
             </Link>
 
@@ -174,6 +180,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
+
+        <PlanBanner limits={limits} />
 
         <main className={cn('container flex-1 py-8', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
           {children}

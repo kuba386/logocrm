@@ -153,6 +153,7 @@ RLS, а не код: страница для всех ролей одна.
 | `/app/settings/attendance-statuses`, `subscription-types` | В | В | — | — | — | — |
 | `/app/settings/teacher-rates` | В | В | — | — | — | В |
 | `/app/settings/notifications` — тексты уведомлений | В | В | — | — | — | — |
+| `/app/settings/plan` — тариф, лимиты, заявка на оплату | В | В | — | — | — | — |
 | `/app/notifications` — журнал отправок | В | В | — | — | — | — |
 | `/app/telegram` — своя привязка | В | В | В | В | В | В |
 
