@@ -161,3 +161,17 @@ export async function archiveHomework(studentId: string, homeworkId: string): Pr
   revalidatePath(`/app/students/${studentId}`)
   return { message: '', notice: 'Задание убрано' }
 }
+
+// --- Заметки занятий ---------------------------------------------------------------
+
+// Утверждение — единственная точка, после которой резюме уходит родителю, а
+// предложенные моделью оценки попадают в goal_progress (0042 Б1). Право —
+// в approve_lesson_note: owner/admin или автор черновика.
+export async function approveLessonNote(studentId: string, noteId: string): Promise<ClinicalState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('approve_lesson_note', { p_id: noteId })
+  if (error) return toAppError(error, 'Не удалось утвердить заметку')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Заметка утверждена — резюме уйдёт родителю' }
+}

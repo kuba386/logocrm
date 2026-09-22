@@ -27,6 +27,12 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // должен предлагать {child} там, где решение прямо запрещает его вставлять.
   { type: 'homework.submitted', placeholders: ['{child}'], whatsappPlaceholders: [] },
   { type: 'homework.reviewed', placeholders: ['{child}'] },
+  // {summary} — только telegram: в whatsapp_link событие не доставляется, а
+  // текст оседает в журнале, который читает вся администрация (0047 Р1).
+  // База в этот канал переменную не подставляет — интерфейс её не предлагает.
+  { type: 'lesson.note_approved', placeholders: ['{child}', '{date}', '{summary}'], whatsappPlaceholders: ['{child}', '{date}'] },
+  // Специалисту, у которого нет своей WhatsApp-кнопки — как homework.submitted.
+  { type: 'lesson.voice_failed', placeholders: ['{child}'], whatsappPlaceholders: [] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
