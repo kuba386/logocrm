@@ -2117,16 +2117,25 @@ export type Database = {
       }
       notification_event_types: {
         Row: {
+          audience: string
+          channels: string[]
           description: string
           event_type: string
+          subject_required: boolean
         }
         Insert: {
+          audience?: string
+          channels?: string[]
           description: string
           event_type: string
+          subject_required?: boolean
         }
         Update: {
+          audience?: string
+          channels?: string[]
           description?: string
           event_type?: string
+          subject_required?: boolean
         }
         Relationships: []
       }
@@ -2451,6 +2460,97 @@ export type Database = {
           note?: string | null
         }
         Relationships: []
+      }
+      platform_payments: {
+        Row: {
+          amount_tiyin: number | null
+          center_id: string
+          claimed_amount_tiyin: number
+          claimed_months: number
+          claimed_plan: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          id: string
+          months: number | null
+          note: string | null
+          plan: string | null
+          receipt_received: boolean
+          reject_reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          source: string
+          submitted_by: string | null
+          updated_at: string
+          withdrawn_at: string | null
+        }
+        Insert: {
+          amount_tiyin?: number | null
+          center_id: string
+          claimed_amount_tiyin: number
+          claimed_months: number
+          claimed_plan: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          id?: string
+          months?: number | null
+          note?: string | null
+          plan?: string | null
+          receipt_received?: boolean
+          reject_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          source: string
+          submitted_by?: string | null
+          updated_at?: string
+          withdrawn_at?: string | null
+        }
+        Update: {
+          amount_tiyin?: number | null
+          center_id?: string
+          claimed_amount_tiyin?: number
+          claimed_months?: number
+          claimed_plan?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          id?: string
+          months?: number | null
+          note?: string | null
+          plan?: string | null
+          receipt_received?: boolean
+          reject_reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          source?: string
+          submitted_by?: string | null
+          updated_at?: string
+          withdrawn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_payments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_payments_claimed_plan_fkey"
+            columns: ["claimed_plan"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "platform_payments_plan_fkey"
+            columns: ["plan"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       rooms: {
         Row: {
@@ -3780,6 +3880,10 @@ export type Database = {
         Args: { p_center_id?: string; p_payload?: Json; p_type: string }
         Returns: number
       }
+      emit_event_platform: {
+        Args: { p_center_id: string; p_payload: Json; p_type: string }
+        Returns: number
+      }
       emit_event_unchecked: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
         Returns: number
@@ -3794,6 +3898,16 @@ export type Database = {
           recipient_user_id: string
           subject_id: string
         }[]
+      }
+      extend_subscription: {
+        Args: {
+          p_amount_tiyin: number
+          p_months: number
+          p_payment_id: string
+          p_plan: string
+          p_receipt_received?: boolean
+        }
+        Returns: Json
       }
       fail_events: {
         Args: { p_error?: string; p_ids: number[] }
@@ -3927,6 +4041,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      notification_platform_targets: {
+        Args: { p_event_type: string }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
+      }
       notification_skip: {
         Args: { p_event_id: number; p_reason: string }
         Returns: string
@@ -3978,6 +4101,25 @@ export type Database = {
       plan_limit: {
         Args: { p_center_id: string; p_key: string }
         Returns: number
+      }
+      platform_open_payments: {
+        Args: never
+        Returns: {
+          center_id: string
+          center_name: string
+          center_plan: string
+          center_timezone: string
+          center_until: string
+          center_until_text: string
+          claimed_amount_tiyin: number
+          claimed_months: number
+          claimed_plan: string
+          created_at: string
+          note: string
+          payment_id: string
+          source: string
+          submitted_by_email: string
+        }[]
       }
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
@@ -4062,6 +4204,10 @@ export type Database = {
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
+      }
+      reject_platform_payment: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: undefined
       }
       release_stale_claims: { Args: { p_older_than?: string }; Returns: number }
       render_template: {
@@ -4310,6 +4456,15 @@ export type Database = {
         Args: { p_id: string; p_parent_note?: string }
         Returns: undefined
       }
+      submit_platform_payment: {
+        Args: {
+          p_months: number
+          p_note?: string
+          p_plan: string
+          p_source: string
+        }
+        Returns: string
+      }
       subscription_current_freeze: {
         Args: { p_on_date?: string; p_subscription_id: string }
         Returns: unknown
@@ -4439,6 +4594,10 @@ export type Database = {
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
       was_access_revoked: { Args: never; Returns: boolean }
+      withdraw_platform_payment: {
+        Args: { p_payment_id: string }
+        Returns: undefined
+      }
       write_lesson_note: {
         Args: {
           p_lesson_id: string
