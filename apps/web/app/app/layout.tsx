@@ -102,6 +102,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           ]
         : null
 
+  const menuLinks = bottomTabs
+    ? navLinks.filter((link) => !bottomTabs.some((tab) => tab.href === link.href))
+    : navLinks
+
   return (
     <div className="flex min-h-screen">
       {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
@@ -162,7 +166,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 </Button>
               </form>
 
-              {bottomTabs ? null : <MobileNav links={navLinks} />}
+              {/* Вкладки внизу не заменяют меню целиком: разделы, которых в
+                  них нет (Telegram у родителя и специалиста, Библиотека у
+                  родителя), остаются в гамбургере — иначе привязать бота с
+                  телефона неоткуда. */}
+              {menuLinks.length > 0 ? <MobileNav links={menuLinks} /> : null}
             </div>
           </div>
         </header>

@@ -20,9 +20,12 @@ function calendarDate(day: string, timeZone: string): string {
 export async function ParentDashboard({ timeZone }: { timeZone: string }) {
   const supabase = await createClient()
 
+  // Архивная карточка (дубль, ушедший ребёнок) родителю не показывается:
+  // на дашборде она выглядела бы как второй ребёнок «без абонемента».
   const { data: children } = await supabase
     .from('students_teacher_view')
     .select('id, full_name, age_years')
+    .neq('status', 'archived')
     .order('full_name')
 
   const childIds = (children ?? []).map((c) => c.id).filter((v): v is string => Boolean(v))
