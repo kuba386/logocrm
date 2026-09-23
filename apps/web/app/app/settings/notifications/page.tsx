@@ -45,8 +45,11 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // здесь зеркало для тумблера (справочник закрыт для чтения из браузера).
   { type: 'subscription.ending', placeholders: ['{what}', '{until}', '{when}'], mandatory: true },
   { type: 'subscription.expired', placeholders: ['{what}', '{until}'], mandatory: true },
-  // 0053: {child} только в telegram и с предлогом внутри (« по Имя»); числа — в оба канала.
-  { type: 'ai.quota_exceeded', placeholders: ['{child}', '{used}', '{limit}'], whatsappPlaceholders: ['{used}', '{limit}'] },
+  // 0053: обязательное (единственный сигнал о пропавшей диктовке). {child} —
+  // только telegram, с предлогом внутри (« по Имя»). {used}/{limit} доступны,
+  // но решение о блокировке смотрит и на работы в полёте, которых эти числа
+  // не показывают — дефолтный текст их не называет намеренно.
+  { type: 'ai.quota_exceeded', placeholders: ['{child}', '{used}', '{limit}'], whatsappPlaceholders: ['{used}', '{limit}'], mandatory: true },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const

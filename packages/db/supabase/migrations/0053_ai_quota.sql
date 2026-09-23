@@ -75,7 +75,7 @@ as $$
 $$;
 
 comment on function public.center_month_start(uuid) is
-  'Начало календарного месяца центра в его поясе, timestamptz — одна граница для квоты ИИ, экрана тарифа и гейта (0053 Р5).';
+  'Начало календарного месяца центра в его поясе, timestamptz — одна граница для квоты ИИ, экрана тарифа и гейта (0053 Р5). Без проверки auth.uid()/членства — как plan_limit и center_plan_name (0049): зовётся только изнутри definer-функций, гранта нет ни одной роли.';
 
 revoke all on function public.center_month_start(uuid) from public, anon, authenticated, service_role;
 
@@ -94,7 +94,7 @@ as $$
 $$;
 
 comment on function public.center_ai_notes_used(uuid) is
-  'Оплаченные голосовые резюме центра за текущий месяц в его поясе (0053 Р3). Резерв работ в полёте сюда не входит — экран и текст показывают только реестр.';
+  'Оплаченные голосовые резюме центра за текущий месяц в его поясе (0053 Р3). Резерв работ в полёте сюда не входит — экран и текст показывают только реестр. Без проверки auth.uid()/членства — как plan_limit (0049): зовётся только изнутри definer-функций.';
 
 revoke all on function public.center_ai_notes_used(uuid) from public, anon, authenticated, service_role;
 
@@ -116,7 +116,7 @@ as $$
 $$;
 
 comment on function public.ai_notes_reserved(uuid, bigint) is
-  'Работы в полёте, ещё не оплаченные (0053 Р3): running не старше 8 минут без строки summary; своя работа при перезахвате исключается.';
+  'Работы в полёте, ещё не оплаченные (0053 Р3): running не старше 8 минут без строки summary; своя работа при перезахвате исключается. Без проверки auth.uid()/членства — зовётся только изнутри ai_job_begin (bot_worker, нет сессии).';
 
 revoke all on function public.ai_notes_reserved(uuid, bigint) from public, anon, authenticated, service_role;
 
@@ -150,6 +150,9 @@ begin
     using errcode = '23514';
 end;
 $$;
+
+comment on function public.assert_ai_quota(uuid) is
+  'Раздутый вариант center_ai_notes_used с текстом отказа (0053 Р2/Р7). Без проверки auth.uid()/центра — зовётся только из request_voice_note с v_center = current_center() своей же сессии.';
 
 revoke all on function public.assert_ai_quota(uuid) from public, anon, authenticated, service_role;
 
@@ -239,9 +242,18 @@ grant execute on function public.request_voice_note(uuid, uuid) to authenticated
 
 
 -- 3. Событие и шаблоны (Р8–Р10) -------------------------------------------------------------------------------
+--
+-- mandatory = true (как subscription.ending/expired, 0052 Р1): это
+-- единственный сигнал о пропавшей диктовке — ai_job_begin отдаёт null,
+-- n8n делает ack, и без события след теряется целиком. Дефолтный текст
+-- не называет {used}/{limit}: решение о блокировке смотрит ещё и на
+-- резерв работ в полёте (Р3), которого экран не показывает, и число в
+-- сообщении могло бы разойтись с числом на экране тарифа в том же
+-- центре («исчерпан (29 из 30)»). Переменные остаются доступны центру
+-- для собственного текста — с этой оговоркой в подсказке формы.
 
 insert into public.notification_event_types (event_type, description, audience, subject_required, channels, mandatory) values
-  ('ai.quota_exceeded', 'Голосовое не расшифровано: лимит голосовых резюме исчерпан', 'center', false, '{telegram,whatsapp_link}', false)
+  ('ai.quota_exceeded', 'Голосовое не расшифровано: лимит голосовых резюме исчерпан', 'center', false, '{telegram,whatsapp_link}', true)
 on conflict (event_type) do update
   set audience = excluded.audience, subject_required = excluded.subject_required,
       channels = excluded.channels, mandatory = excluded.mandatory;
@@ -250,9 +262,9 @@ insert into public.message_templates (center_id, event_type, channel, text)
 select v.center_id, v.event_type, v.channel, v.text
   from (values
     (null::uuid, 'ai.quota_exceeded', 'telegram',
-     'Голосовое{child} не расшифровано: лимит голосовых резюме на этот месяц исчерпан ({used} из {limit}). Лимит снимает смена тарифа на экране «Тариф и оплата» (владелец центра); после смены диктовку нужно записать заново.'),
+     'Голосовое{child} не расшифровано: лимит голосовых резюме на этот месяц исчерпан. Проверьте использование на экране «Тариф и оплата» — лимит снимает смена тарифа; после смены диктовку нужно записать заново.'),
     (null::uuid, 'ai.quota_exceeded', 'whatsapp_link',
-     'Голосовое не расшифровано: лимит голосовых резюме на этот месяц исчерпан ({used} из {limit}). Лимит снимает смена тарифа на экране «Тариф и оплата» в LogoCRM; после смены диктовку нужно записать заново.')
+     'Голосовое не расшифровано: лимит голосовых резюме на этот месяц исчерпан. Проверьте использование на экране «Тариф и оплата» в LogoCRM; после смены тарифа диктовку нужно записать заново.')
   ) as v(center_id, event_type, channel, text)
  where not exists (
    select 1 from public.message_templates m
@@ -364,10 +376,12 @@ begin
   -- 0053 Р2–Р4: квота голосовых резюме. Замок тем же ключом, что лимиты 0049,
   -- до счёта и до insert ai_jobs; тарифа или ключа нет — null без события
   -- (fail closed); резерв — работы в полёте кроме своей (перезахват).
+  -- Перехват сужен до 23514 (единственный исход plan_limit при отсутствии
+  -- тарифа/ключа, 0049) — иначе настоящая поломка тонет молча без следа.
   perform pg_advisory_xact_lock(hashtextextended('center_limit:' || v_event.center_id::text, 0));
   begin
     v_limit := public.plan_limit(v_event.center_id, 'ai_notes_month');
-  exception when others then
+  exception when sqlstate '23514' then
     return null;
   end;
   if v_limit >= 0 then
