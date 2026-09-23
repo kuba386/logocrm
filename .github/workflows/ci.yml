@@ -101,9 +101,25 @@ jobs:
         with:
           version: 2.116.0
 
+      # ghcr.io регулярно отвечает toomanyrequests на подъёме образов
+      # (supabase/postgres, kong, gotrue и т.д.) — транзиентный лимит
+      # реестра, не связан с содержимым PR (23-24.09.2026, минимум пять
+      # прогонов подряд на разных PR). Пять попыток с растущей паузой.
       - name: Запуск локального Supabase
         working-directory: packages/db
-        run: supabase start
+        run: |
+          n=0
+          until [ "$n" -ge 5 ]; do
+            n=$((n + 1))
+            if supabase start; then
+              exit 0
+            fi
+            echo "::warning::supabase start упал (попытка $n/5) — часто ghcr.io toomanyrequests, транзиентный лимит реестра"
+            supabase stop --no-backup >/dev/null 2>&1 || true
+            sleep $((n * 15))
+          done
+          echo "::error::supabase start не поднялся за 5 попыток"
+          exit 1
 
       - name: Применение миграций с нуля
         working-directory: packages/db
@@ -228,9 +244,24 @@ jobs:
       - name: Установка зависимостей
         run: pnpm install --frozen-lockfile
 
+      # ghcr.io регулярно отвечает toomanyrequests на подъёме образов —
+      # транзиентный лимит реестра, не связан с содержимым PR (см. джоб
+      # db). Пять попыток с растущей паузой.
       - name: Запуск локального Supabase
         working-directory: packages/db
-        run: supabase start
+        run: |
+          n=0
+          until [ "$n" -ge 5 ]; do
+            n=$((n + 1))
+            if supabase start; then
+              exit 0
+            fi
+            echo "::warning::supabase start упал (попытка $n/5) — часто ghcr.io toomanyrequests, транзиентный лимит реестра"
+            supabase stop --no-backup >/dev/null 2>&1 || true
+            sleep $((n * 15))
+          done
+          echo "::error::supabase start не поднялся за 5 попыток"
+          exit 1
 
       # Схема собирается из миграций с нуля — тот же путь, что поедет в prod.
       - name: Применение миграций
