@@ -43,11 +43,17 @@ function parseSummary(json: unknown): Summary | null {
   }
 }
 
-/** «2026-09-24» — сегодня минус/плюс N дней, для навигации по 30-дневным окнам. */
-function isoDate(offsetDays: number): string {
-  const d = new Date()
+/** «2026-09-24» ± N дней от указанной даты — чистая работа со строкой, без часового пояса браузера. */
+function isoDateFrom(base: string, offsetDays: number): string {
+  const d = new Date(`${base}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + offsetDays)
   return d.toISOString().slice(0, 10)
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round(
+    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000,
+  )
 }
 
 const STUCK_DAYS = 14
@@ -55,7 +61,9 @@ const STUCK_DAYS = 14
 /**
  * Дашборд воронки (0055): всё из funnel_summary()/funnel_stuck() — счёт,
  * права и граница дня в поясе центра держит база, страница только рисует.
- * from/to в query — конец периода назад по 30 дней за раз.
+ * from/to в query — конец периода назад по 30 дней за раз. «Сегодня» и
+ * листание — от center_today(), не от Date() браузера/сервера (CLAUDE.md:
+ * время в поясе центра; ревью написанного SQL 23.09.2026, находка 4).
  */
 export default async function FunnelPage({
   searchParams,
@@ -73,9 +81,11 @@ export default async function FunnelPage({
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
 
-  const to = params.to ?? isoDate(0)
-  const from = params.from ?? isoDate(-30)
-  const prevTo = isoDate(-30 - (new Date(to).getTime() - new Date(from).getTime()) / 86400000)
+  const { data: today } = await supabase.rpc('center_today', {})
+  const todayStr = today ?? new Date().toISOString().slice(0, 10)
+
+  const to = params.to ?? todayStr
+  const from = params.from ?? isoDateFrom(to, -30)
 
   const [{ data: summaryJson, error: summaryError }, { data: stuck, error: stuckError }] = await Promise.all([
     supabase.rpc('funnel_summary', { p_from: from, p_to: to }),
@@ -88,12 +98,12 @@ export default async function FunnelPage({
     ? Math.round((summary.conversion.converted / summary.conversion.entered) * 100)
     : null
 
-  // 30-дневное окно назад/вперёд от текущего from/to.
-  const spanDays = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000))
-  const nextFrom = isoDate(spanDays)
-  const nextTo = isoDate(spanDays * 2)
-  const backFrom = isoDate(-spanDays * 2)
-  const backTo = isoDate(-spanDays)
+  // Листание — от границ текущего окна, тем же шагом, что и само окно.
+  const spanDays = Math.max(1, daysBetween(from, to))
+  const nextFrom = isoDateFrom(to, 1)
+  const nextTo = isoDateFrom(nextFrom, spanDays)
+  const backTo = isoDateFrom(from, -1)
+  const backFrom = isoDateFrom(backTo, -spanDays)
 
   return (
     <div className="space-y-6">

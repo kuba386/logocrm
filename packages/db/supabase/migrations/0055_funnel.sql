@@ -106,8 +106,12 @@
 --        графе не бывает физически (Р4), счёт по рёбрам всегда дал бы 0.
 --        Срез «сейчас на этапе» — по students.funnel_stage, deleted_at is
 --        null and status<>'archived'. Среднее время на этапе — открытые
---        интервалы (coalesce(next.at, now())), иначе застрявшие незаметно
---        улучшают метрику. Пояс — center_today/center_timezone (0032),
+--        интервалы (coalesce(next.at, now())), закрытые ЛЮБЫМ следующим
+--        событием (включая служебную коррекцию), но в отчёт идут только
+--        реальные входы на этап, начавшиеся в [from, to) — иначе архивный
+--        полгода назад ученик каждый день бесконечно портит метрику, а
+--        период на экране её не двигает (ревью написанного SQL 23.09.2026,
+--        находка 3). Пояс — center_today/center_timezone (0032),
 --        порядок funnel_events — (student_id, at, id): at одинаков внутри
 --        одной транзакции (backfill, автопереход из одного вызова).
 --        Роль внутри функции — owner/admin (бизнес-аналитика, не
@@ -117,6 +121,26 @@
 --   Р11. Гранты по умолчанию: funnel_stages и funnel_events получают явный
 --        revoke от anon/authenticated (Supabase выдаёт всё по умолчанию) —
 --        забор 0024/0007.
+--
+--   Р12. Ручная правка этапа (set_funnel_stage) и «застрявшие»
+--        (funnel_stuck) остаются can_front_desk() (owner/admin/registrar):
+--        обзвон застрявших и перевод лида на следующий шаг — операционная
+--        работа стойки, а не бизнес-аналитика (funnel_summary — по-прежнему
+--        только owner/admin, деньги и конверсия). Виджет на карточке
+--        ученика был жёстко ограничен isAdmin — уже RPC пускал registrar,
+--        а кнопку ему не показывали: грант шире своего единственного
+--        потребителя (ревью написанного SQL 23.09.2026, находка 5).
+--        Правильная сторона фикса — UI, не RPC: widget.tsx открыт
+--        can_front_desk; /app/funnel (сводка с деньгами) остаётся owner/
+--        admin как в роадмапе.
+--
+--   Р12б. transfer_remaining (0026) вставляет в subscriptions тем же
+--        INSERT, что и продажа — subscriptions_funnel_transition не
+--        отличал перенос остатка другому ребёнку от настоящей продажи и
+--        засчитывал его в конверсию (ревью, находка 8). Транзакционный
+--        флаг logocrm.funnel_transfer, тот же приём, что funnel_write/
+--        funnel_cause: помечает автопереход служебным (is_service=true)
+--        только для переноса, продажа (sell_subscription) флаг не ставит.
 
 -- 1. funnel_stages — глобальный справочник (А) -------------------------------------------------------
 
@@ -220,10 +244,21 @@ comment on function public.seed_attendance_statuses(uuid) is
 
 alter table public.attendance add column if not exists is_present boolean not null default false;
 
+-- Приём 0050 (шов centers_protect_plan): backfill денормализованной колонки
+-- не должен идти через прикладные триггеры. financial_period_guard не
+-- различает миграцию и сессию и откатил бы весь файл на первом закрытом
+-- месяце; ещё действующая (до create or replace ниже) редакция
+-- attendance_fill_and_check требует живое занятие — у мягко удалённого
+-- lessons.deleted_at строка посещения существует. user исключает только
+-- системные RI-триггеры — их на attendance нет (проверено ревью).
+alter table public.attendance disable trigger user;
+
 update public.attendance a
    set is_present = s.is_present
   from public.attendance_statuses s
  where a.status_id = s.id;
+
+alter table public.attendance enable trigger user;
 
 create or replace function public.attendance_fill_and_check()
   returns trigger
@@ -542,27 +577,34 @@ comment on trigger z99_students_funnel_events on public.students is
 
 
 -- Backfill (Г, Р8): по фактам, до NOT NULL/DEFAULT и до сужения check.
--- Триггеры уже стоят — auth.uid() is null здесь (миграция), guard пропускает
--- целиком; is_service=true помечает это событие как служебное, не конверсию.
--- is_local=true (транзакция миграции, не сессия) — иначе GUC пережил бы
--- эту миграцию и утёк бы на пуловое соединение (0050 Р10 — тот же риск).
-select set_config('logocrm.funnel_is_service', 'true', true);
+-- Триггеры отключены тем же приёмом, что и на attendance выше: история
+-- пишется явным insert со literal is_service=true, а не побочным эффектом
+-- z99-триггера через транзакционный GUC — SET LOCAL молча не действует вне
+-- транзакционного блока (ревью 0055), а этот insert не зависит от того,
+-- как раннер исполняет файл.
+alter table public.students disable trigger user;
 
-update public.students s
-   set funnel_stage = case
-     when exists (
-       select 1 from public.subscriptions sub
-        where sub.student_id = s.id and sub.center_id = s.center_id and sub.deleted_at is null
-     ) then 'active'
-     when exists (
-       select 1 from public.attendance a
-        where a.student_id = s.id and a.center_id = s.center_id and a.is_present
-     ) then 'active'
-     else 'lead'
-   end
- where s.funnel_stage is null;
+with backfilled as (
+  update public.students s
+     set funnel_stage = case
+       when exists (
+         select 1 from public.subscriptions sub
+          where sub.student_id = s.id and sub.center_id = s.center_id and sub.deleted_at is null
+       ) then 'active'
+       when exists (
+         select 1 from public.attendance a
+          where a.student_id = s.id and a.center_id = s.center_id and a.is_present
+       ) then 'active'
+       else 'lead'
+     end
+   where s.funnel_stage is null
+  returning s.id, s.center_id, s.funnel_stage
+)
+insert into public.funnel_events (student_id, center_id, from_stage, to_stage, at, by, cause, is_service)
+select id, center_id, null, funnel_stage, now(), null, null, true
+  from backfilled;
 
-select set_config('logocrm.funnel_is_service', '', true);
+alter table public.students enable trigger user;
 
 alter table public.students alter column funnel_stage set not null;
 alter table public.students alter column funnel_stage set default 'lead';
@@ -769,8 +811,13 @@ begin
     return new;
   end if;
 
+  -- Р12б: перенос остатка (transfer_remaining) вставляет новую строку в
+  -- subscriptions тем же INSERT, что и продажа — без метки этот триггер не
+  -- различит их и посчитает перенос конверсией (ревью, находка 8).
   perform set_config('logocrm.funnel_auto', '1', true);
-  perform set_config('logocrm.funnel_is_service', 'false', true);
+  perform set_config('logocrm.funnel_is_service',
+    case when current_setting('logocrm.funnel_transfer', true) = '1' then 'true' else 'false' end,
+    true);
   update public.students set funnel_stage = 'active'
    where id = new.student_id and center_id = new.center_id;
   perform set_config('logocrm.funnel_auto', '', true);
@@ -781,7 +828,7 @@ end;
 $$;
 
 comment on function public.subscriptions_funnel_transition() is
-  'Продажа абонемента переводит ученика в active (0055 Р5), если он ещё не там и не paused/archived. Реальная конверсия — is_service=false.';
+  'Продажа абонемента переводит ученика в active (0055 Р5), если он ещё не там и не paused/archived. Реальная конверсия — is_service=false; logocrm.funnel_transfer=1 (transfer_remaining, Р12б) метит служебной — перенос остатка на другого ребёнка не продажа.';
 
 revoke all on function public.subscriptions_funnel_transition() from public, anon, authenticated, service_role;
 
@@ -834,6 +881,80 @@ create trigger attendance_funnel_transition
   for each row execute function public.attendance_funnel_transition();
 
 
+-- 8б. transfer_remaining (0026) — метит свой auto-переход служебным (Р12б) ----------------------------
+
+create or replace function public.transfer_remaining(p_from uuid, p_to_student uuid)
+  returns uuid
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+declare
+  v_center  uuid := public.current_center();
+  v_from    public.subscriptions;
+  v_student public.students;
+  v_left    integer;
+  v_new     uuid;
+begin
+  if not public.can_front_desk() then
+    raise exception 'Недостаточно прав' using errcode = '42501';
+  end if;
+
+  select * into v_from from public.subscriptions
+   where id = p_from and center_id = v_center and deleted_at is null for update;
+  if not found then
+    raise exception 'Абонемент не найден' using errcode = '42704';
+  end if;
+
+  select * into v_student from public.students
+   where id = p_to_student and center_id = v_center and deleted_at is null;
+  if not found then
+    raise exception 'Ученик не найден' using errcode = '42704';
+  end if;
+
+  v_left := coalesce(public.subscription_lessons_left(p_from), 0);
+  if v_left <= 0 then
+    raise exception 'Переносить нечего: остаток пуст' using errcode = '22023';
+  end if;
+
+  update public.subscriptions
+     set lessons_written_off = lessons_written_off + v_left,
+         status = 'cancelled'
+   where id = p_from;
+
+  -- Р12б: следующий INSERT будит subscriptions_funnel_transition — метим
+  -- служебным до него, снимаем сразу после (та же дисциплина, что и везде
+  -- в файле).
+  perform set_config('logocrm.funnel_transfer', '1', true);
+
+  insert into public.subscriptions (
+    center_id, student_id, payer_id, type_id,
+    lessons_total, price_tiyin, lesson_price_tiyin, starts_at, ends_at, notes
+  )
+  values (
+    v_center, p_to_student, v_student.payer_id, v_from.type_id,
+    v_left, v_left * coalesce(v_from.lesson_price_tiyin, 0), v_from.lesson_price_tiyin,
+    public.center_today(v_center), v_from.ends_at,
+    'Перенос остатка с абонемента ' || p_from::text
+  )
+  returning id into v_new;
+
+  perform set_config('logocrm.funnel_transfer', '', true);
+
+  perform public.emit_event('subscription.transferred',
+    jsonb_build_object('center_id', v_center, 'from_subscription_id', p_from,
+                       'to_subscription_id', v_new, 'lessons', v_left), v_center);
+  return v_new;
+end;
+$$;
+
+comment on function public.transfer_remaining(uuid, uuid) is
+  'Перенос остатка абонемента другому ребёнку (0026). С 0055 — logocrm.funnel_transfer помечает автопереход в active служебным (Р12б): это не продажа и не должно считаться конверсией.';
+
+revoke all on function public.transfer_remaining(uuid, uuid) from public, anon, service_role;
+grant execute on function public.transfer_remaining(uuid, uuid) to authenticated;
+
+
 -- 9. funnel_summary / funnel_stuck (Р10) -----------------------------------------------------------------
 
 create or replace function public.funnel_summary(p_from date, p_to date)
@@ -880,7 +1001,8 @@ begin
     -- Переходы за период, только реальные (не служебные).
     'transitions', (
       select coalesce(jsonb_agg(jsonb_build_object(
-               'from_stage', e.from_stage, 'to_stage', e.to_stage, 'count', e.cnt) order by e.cnt desc), '[]'::jsonb)
+               'from_stage', e.from_stage, 'to_stage', e.to_stage, 'count', e.cnt)
+               order by e.cnt desc, e.from_stage nulls first, e.to_stage), '[]'::jsonb)
         from (
           select from_stage, to_stage, count(*)::integer as cnt
             from public.funnel_events
@@ -914,22 +1036,29 @@ begin
             ) first
         ) c
     ),
-    -- Среднее время на этапе: открытые интервалы (застрявшие не улучшают
-    -- метрику незаметно), порядок (student_id, at, id) — at совпадает
-    -- внутри одной транзакции (backfill, автопереход одним вызовом).
+    -- Среднее время на этапе: интервал закрывает СЛЕДУЮЩЕЕ событие любого
+    -- рода (включая служебную коррекцию — иначе коррекция не закрывает то,
+    -- что она же исправляет, находка 3), открытые — now(). Порядок
+    -- (student_id, at, id) — at совпадает внутри одной транзакции
+    -- (backfill, автопереход одним вызовом). В отчёт идут только реальные
+    -- входы НА этап (is_service=false), начавшиеся в периоде — иначе
+    -- застрявший полгода назад архивный ученик бесконечно портит метрику
+    -- (находка 3): фильтр по at/is_service — после вычисления closes_at,
+    -- чтобы lead() видел полную историю.
     'avg_days_on_stage', (
       select coalesce(jsonb_agg(jsonb_build_object('stage', d.stage, 'avg_days', round(d.avg_days, 1)) order by d.stage), '[]'::jsonb)
         from (
           select w.to_stage as stage, avg(extract(epoch from (w.closes_at - w.at)) / 86400.0) as avg_days
             from (
-              select to_stage, at,
+              select to_stage, at, is_service,
                      coalesce(
                        lead(at) over (partition by student_id order by at, id),
                        now()
                      ) as closes_at
                 from public.funnel_events
-               where center_id = v_center and is_service = false
+               where center_id = v_center
             ) w
+           where w.is_service = false and w.at >= v_from and w.at < v_to
            group by w.to_stage
         ) d
     ),
@@ -971,8 +1100,6 @@ create or replace function public.funnel_stuck(p_days integer default 14)
 as $$
 declare
   v_center uuid := public.current_center();
-  v_role   text := coalesce(public.my_role(), '');
-  v_tz     text;
 begin
   if auth.uid() is null or v_center is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -983,8 +1110,6 @@ begin
   if p_days is null or p_days < 1 then
     raise exception 'Число дней должно быть больше нуля' using errcode = '22023';
   end if;
-
-  v_tz := public.center_timezone(v_center);
 
   return query
     with last_event as (
@@ -998,19 +1123,19 @@ begin
            p.phone
       from public.students s
       join public.funnel_stages f on f.code = s.funnel_stage
-      join public.payers p on p.id = s.payer_id
+      left join public.payers p on p.id = s.payer_id and p.deleted_at is null
       left join last_event le on le.student_id = s.id
      where s.center_id = v_center
        and s.deleted_at is null
        and s.status = 'active'
        and s.funnel_stage not in ('active', 'completed')
        and coalesce(le.at, s.created_at) < now() - (p_days || ' days')::interval
-     order by coalesce(le.at, s.created_at);
+     order by coalesce(le.at, s.created_at), s.id;
 end;
 $$;
 
 comment on function public.funnel_stuck(integer) is
-  'Ученики без движения по воронке дольше p_days (0055) — для списка «застрявших» с кнопкой WhatsApp. Активные/закрытые/приостановленные/архивные не входят.';
+  'Ученики без движения по воронке дольше p_days (0055) — для списка «застрявших» с кнопкой WhatsApp. Активные/закрытые/приостановленные/архивные не входят. Роль — can_front_desk (owner/admin/registrar, 0055 Р12): обзвон застрявших — операционная работа стойки, не бизнес-аналитика (в отличие от funnel_summary).';
 
 revoke all on function public.funnel_stuck(integer) from public, anon, service_role;
 grant execute on function public.funnel_stuck(integer) to authenticated;

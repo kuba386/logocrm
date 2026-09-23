@@ -41,6 +41,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   if (!role) redirect('/select-center')
 
   const isAdmin = role === 'owner' || role === 'admin'
+  const isRegistrar = role === 'registrar'
   const isFinance = role === 'finance'
   const isTeacher = role === 'teacher'
   const isParent = role === 'parent'
@@ -49,8 +50,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   const canWriteClinical = isAdmin || isTeacher
 
   // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет;
-  // бухгалтеру — students_brief: ни телефона, ни заметок (0031).
-  const { data: base } = isAdmin
+  // бухгалтеру — students_brief: ни телефона, ни заметок (0031). Стойка
+  // (registrar) читает students напрямую тем же select — apply_role_rls уже
+  // даёт ей 'write' на students (0028), сужения здесь не добавляют: без
+  // своей ветки registrar получал бы витрину без funnel_stage и не видел
+  // бы виджет воронки, хотя set_funnel_stage/funnel_stuck ей открыты (0055
+  // Р12, ревью написанного SQL 23.09.2026, находка 5).
+  const { data: base } = isAdmin || isRegistrar
     ? await supabase
         .from('students')
         .select(
@@ -583,7 +589,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           {studentAge(student.birthDate)}
           {teacherName ? ` · специалист: ${teacherName}` : ' · специалист не назначен'}
         </p>
-        {isAdmin && 'funnel_stage' in base && base.funnel_stage ? (
+        {(isAdmin || isRegistrar) && 'funnel_stage' in base && base.funnel_stage ? (
           <div className="mt-2">
             <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
           </div>

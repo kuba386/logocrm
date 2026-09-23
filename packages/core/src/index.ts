@@ -50,3 +50,4 @@ export {
   type PaymentState,
   type InstallmentState,
 } from './finance'
+export { FUNNEL_STAGES, allowedFunnelTransitions, type FunnelStage } from './funnel'

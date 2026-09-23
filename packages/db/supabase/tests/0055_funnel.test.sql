@@ -9,9 +9,12 @@
 -- Прямой PATCH funnel_stage — 42501. Автопереход: продажа абонемента,
 -- первое присутствие; «Прогул» (is_present=false, deducts=true) не
 -- переводит; paused/archived не трогает; повтор не дублирует событие;
--- completed→active (реактивация) разрешён. Архив/восстановление не трогают
--- funnel_stage и не пишут историю. Видимость funnel_events по ролям и
--- центрам. funnel_summary/funnel_stuck — роль, счёт, пояс.
+-- completed→active (реактивация) разрешён. Автопереход под РЕАЛЬНОЙ
+-- сессией (не auth.uid() is null) — sell_subscription и прямая attendance
+-- под registrar; transfer_remaining метит перенос is_service=true, не
+-- продажу. Архив/восстановление не трогают funnel_stage и не пишут
+-- историю. Видимость funnel_events по ролям и центрам. funnel_summary/
+-- funnel_stuck — роль, счёт, пояс, avg_days_on_stage реагирует на период.
 --
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
@@ -20,7 +23,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(54);
+select plan(63);
 
 
 -- 1. Заборы ----------------------------------------------------------------------------------------------
@@ -86,6 +89,10 @@ insert into public.services (id, center_id, name, default_price_tiyin) values
 
 insert into public.payers (id, center_id, full_name, phone) values
   ('a0550000-0000-0000-0000-000000000030','a0550000-0000-0000-0000-0000000000c1','Родитель 0055','+996700005501');
+
+-- Для sell_subscription (реальный путь продажи, не прямой insert) в разделе 6б.
+insert into public.subscription_types (id, center_id, name, kind, lessons_count, price_tiyin) values
+  ('a0550000-0000-0000-0000-000000000040','a0550000-0000-0000-0000-0000000000c1','Пакет 8 занятий','lessons',8,700000);
 
 insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) values
   ('a0550000-0000-0000-0000-000000000001','a0550000-0000-0000-0000-0000000000c1','owner',    null, null),
@@ -372,6 +379,75 @@ select is(
   1, 'Реактивация оставила событие completed→active');
 
 
+-- 6б. Автопереход под реальной сессией (Р5, находка 2) ---------------------------------------------------
+--
+-- Раздел 6 выше вставляет subscriptions/attendance под tests_claims(null,
+-- null) — auth.uid() is null, и students_funnel_stage_guard выходит на
+-- границе 0050 Р1 ДО чтения logocrm.funnel_auto. В проде продажу делает
+-- кассир (auth.uid() не null) — это другая ветка того же триггера, и её
+-- раздел 6 не проверял вовсе.
+
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select public.create_student_with_payer('СессияПродажа 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+create temporary table t0055_sess_sale as select id from public.students where full_name = 'СессияПродажа 0055';
+select public.sell_subscription('a0550000-0000-0000-0000-000000000040', (select id from t0055_sess_sale));
+reset role;
+
+select is((select funnel_stage from public.students where id = (select id from t0055_sess_sale)), 'active',
+  'sell_subscription под реальной сессией registrar тоже переводит в active — ветка funnel_auto, не auth.uid() is null (находка 2)');
+select is(
+  (select count(*)::int from public.funnel_events where student_id = (select id from t0055_sess_sale) and to_stage = 'active' and is_service = false),
+  1, 'Событие конверсии под сессией — is_service=false');
+
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select public.create_student_with_payer('СессияПосещение 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+create temporary table t0055_sess_att as select id from public.students where full_name = 'СессияПосещение 0055';
+
+insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
+  ('a0550000-0000-0000-0000-000000000062','a0550000-0000-0000-0000-0000000000c1','a0550000-0000-0000-0000-000000000010',
+   (select id from t0055_sess_att),'a0550000-0000-0000-0000-000000000020','planned',
+   now() - interval '1 hour', now() - interval '15 minutes');
+
+-- registrar пишет attendance напрямую (apply_role_rls 'write', 0028) —
+-- тот же путь, что учитель использует на экране расписания.
+insert into public.attendance (center_id, lesson_id, student_id, status_id)
+values ('a0550000-0000-0000-0000-0000000000c1', 'a0550000-0000-0000-0000-000000000062', (select id from t0055_sess_att),
+        (select id from public.attendance_statuses where center_id = 'a0550000-0000-0000-0000-0000000000c1' and code = 'present'));
+reset role;
+
+select is((select funnel_stage from public.students where id = (select id from t0055_sess_att)), 'active',
+  'Отметка «Пришёл» под реальной сессией тоже переводит в active (находка 2)');
+select is(
+  (select count(*)::int from public.funnel_events where student_id = (select id from t0055_sess_att) and to_stage = 'active' and is_service = false),
+  1, 'Событие присутствия под сессией — is_service=false');
+
+-- Перенос остатка (transfer_remaining, 0026) — служебный автопереход,
+-- не продажа: не должен засчитываться конверсией (Р12б, находка 8).
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select public.create_student_with_payer('ДонорПереноса 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+create temporary table t0055_donor as select id from public.students where full_name = 'ДонорПереноса 0055';
+select public.sell_subscription('a0550000-0000-0000-0000-000000000040', (select id from t0055_donor));
+create temporary table t0055_donor_sub as
+  select id from public.subscriptions where student_id = (select id from t0055_donor) order by created_at desc limit 1;
+
+select public.create_student_with_payer('ПолучательПереноса 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+create temporary table t0055_receiver as select id from public.students where full_name = 'ПолучательПереноса 0055';
+select public.transfer_remaining((select id from t0055_donor_sub), (select id from t0055_receiver));
+reset role;
+
+select is((select funnel_stage from public.students where id = (select id from t0055_receiver)), 'active',
+  'Перенос остатка переводит получателя в active — у него появился абонемент');
+select is(
+  (select count(*)::int from public.funnel_events where student_id = (select id from t0055_receiver) and to_stage = 'active' and is_service = true),
+  1, 'Но событие — is_service=true (Р12б): перенос не продажа, funnel_summary.conversion его не считает');
+select is(
+  (select count(*)::int from public.funnel_events where student_id = (select id from t0055_receiver) and to_stage = 'active' and is_service = false),
+  0, 'И ни одного is_service=false события у получателя — двойного счёта конверсии нет');
+
+
 -- 7. Видимость funnel_events по ролям и центрам (Р6) ------------------------------------------------------
 
 select public.tests_claims('a0550000-0000-0000-0000-000000000002','a0550000-0000-0000-0000-0000000000c1');
@@ -445,6 +521,16 @@ select ok(
   'funnel_summary.conversion: считает по ученикам (вошёл в период → достиг active когда-либо после)');
 select is(jsonb_typeof((select s from t0055_summary) -> 'avg_days_on_stage'), 'array', 'avg_days_on_stage — массив');
 select is(jsonb_typeof((select s from t0055_summary) -> 'sources'), 'array', 'sources — массив');
+
+-- avg_days_on_stage обязан отвечать на период, а не быть за всё время
+-- (находка 3): за окно, где нет вообще никаких событий, массив пуст.
+select is(
+  (select public.funnel_summary('1990-01-01'::date, '1990-01-02'::date) -> 'avg_days_on_stage'),
+  '[]'::jsonb,
+  'avg_days_on_stage за период без единого события — пустой массив, не «за всё время» (находка 3)');
+select ok(
+  jsonb_array_length((select s from t0055_summary) -> 'avg_days_on_stage') > 0,
+  'а за период с реальными событиями (30 дней) — не пуст: подтверждает, что фильтр именно по периоду, не сломан вовсе');
 reset role;
 select public.tests_claims(null, null);
 
