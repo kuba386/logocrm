@@ -321,6 +321,7 @@ set local role authenticated;
 select public.create_student_with_payer('Посещение 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 create temporary table t0055_att as select id from public.students where full_name = 'Посещение 0055';
+grant select on t0055_att to authenticated;
 
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
   ('a0550000-0000-0000-0000-000000000060','a0550000-0000-0000-0000-0000000000c1','a0550000-0000-0000-0000-000000000010',
@@ -330,18 +331,26 @@ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, s
    (select id from t0055_att),'a0550000-0000-0000-0000-000000000020','planned',
    now() - interval '1 hour', now() - interval '15 minutes');
 
-select public.tests_claims(null, null);
+-- Реальная сессия, не tests_claims(null,null): attendance_recalc_trigger
+-- (0010) безусловно зовёт emit_event('attendance.marked', ...) на каждый
+-- insert, а emit_event (0002) с этой миграции требует auth.uid() — без
+-- сессии сама вставка падает раньше, чем что-либо про воронку.
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
 values ('a0550000-0000-0000-0000-0000000000c1', 'a0550000-0000-0000-0000-000000000060', (select id from t0055_att),
         (select id from public.attendance_statuses where center_id = 'a0550000-0000-0000-0000-0000000000c1' and code = 'absent'));
+reset role;
 
 select is((select funnel_stage from public.students where id = (select id from t0055_att)), 'lead',
   'Отметка «Прогул» (deducts_lesson=true, is_present=false) НЕ переводит в active — deducted не годится критерием (Д)');
 
-select public.tests_claims(null, null);
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
 values ('a0550000-0000-0000-0000-0000000000c1', 'a0550000-0000-0000-0000-000000000061', (select id from t0055_att),
         (select id from public.attendance_statuses where center_id = 'a0550000-0000-0000-0000-0000000000c1' and code = 'present'));
+reset role;
 
 select is((select funnel_stage from public.students where id = (select id from t0055_att)), 'active',
   'Отметка «Пришёл» (is_present=true) переводит в active (Р5)');
