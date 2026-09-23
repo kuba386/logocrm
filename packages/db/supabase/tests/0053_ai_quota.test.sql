@@ -91,7 +91,7 @@ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, s
    now() - interval '2 hours', now() - interval '1 hour 15 minutes'),
   ('a0530000-0000-0000-0000-000000000051','a0530000-0000-0000-0000-0000000000c1','a0530000-0000-0000-0000-000000000010',
    'a0530000-0000-0000-0000-000000000040','a0530000-0000-0000-0000-000000000020','planned',
-   now() - interval '2 hours', now() - interval '1 hour 15 minutes');
+   now() - interval '1 hour', now() - interval '15 minutes');
 
 insert into public.telegram_accounts (user_id, chat_id) values
   ('a0530000-0000-0000-0000-000000000002', 5302),
