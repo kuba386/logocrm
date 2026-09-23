@@ -203,14 +203,14 @@ reset role;
 select public.tests_claims('a0560000-0000-0000-0000-000000000003','a0560000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.record_center_export('{"students": 1}'::jsonb) $q$,
+  $q$ select public.record_center_export() $q$,
   '42501', null, 'teacher не вызывает record_center_export');
 reset role;
 
 select public.tests_claims('a0560000-0000-0000-0000-000000000001','a0560000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select lives_ok(
-  $q$ select public.record_center_export('{"students": 1, "attendance": 0}'::jsonb) $q$,
+  $q$ select public.record_center_export() $q$,
   'owner может отметить факт экспорта');
 reset role;
 select is(
