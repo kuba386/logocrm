@@ -116,6 +116,7 @@ export type Database = {
           created_at: string
           deducted: boolean
           id: string
+          is_present: boolean
           lesson_id: string
           marked_at: string
           marked_by: string | null
@@ -134,6 +135,7 @@ export type Database = {
           created_at?: string
           deducted?: boolean
           id?: string
+          is_present?: boolean
           lesson_id: string
           marked_at?: string
           marked_by?: string | null
@@ -152,6 +154,7 @@ export type Database = {
           created_at?: string
           deducted?: boolean
           id?: string
+          is_present?: boolean
           lesson_id?: string
           marked_at?: string
           marked_by?: string | null
@@ -227,6 +230,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           is_default: boolean
+          is_present: boolean
           name: string
           notify_parent: boolean
           pays_teacher: boolean
@@ -244,6 +248,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           is_default?: boolean
+          is_present?: boolean
           name: string
           notify_parent?: boolean
           pays_teacher?: boolean
@@ -261,6 +266,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           is_default?: boolean
+          is_present?: boolean
           name?: string
           notify_parent?: boolean
           pays_teacher?: boolean
@@ -715,6 +721,89 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      funnel_events: {
+        Row: {
+          at: string
+          by: string | null
+          cause: string | null
+          center_id: string
+          from_stage: string | null
+          id: number
+          is_service: boolean
+          student_id: string
+          to_stage: string
+        }
+        Insert: {
+          at?: string
+          by?: string | null
+          cause?: string | null
+          center_id: string
+          from_stage?: string | null
+          id?: number
+          is_service?: boolean
+          student_id: string
+          to_stage: string
+        }
+        Update: {
+          at?: string
+          by?: string | null
+          cause?: string | null
+          center_id?: string
+          from_stage?: string | null
+          id?: number
+          is_service?: boolean
+          student_id?: string
+          to_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_events_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funnel_events_from_stage_fkey"
+            columns: ["from_stage"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "funnel_events_student_center_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "funnel_events_to_stage_fkey"
+            columns: ["to_stage"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      funnel_stages: {
+        Row: {
+          code: string
+          name: string
+          sort: number
+        }
+        Insert: {
+          code: string
+          name: string
+          sort: number
+        }
+        Update: {
+          code?: string
+          name?: string
+          sort?: number
+        }
+        Relationships: []
       }
       goal_progress: {
         Row: {
@@ -2829,6 +2918,7 @@ export type Database = {
           custom_fields: Json
           deleted_at: string | null
           full_name: string
+          funnel_stage: string
           gender: string | null
           id: string
           notes: string | null
@@ -2847,6 +2937,7 @@ export type Database = {
           custom_fields?: Json
           deleted_at?: string | null
           full_name: string
+          funnel_stage?: string
           gender?: string | null
           id?: string
           notes?: string | null
@@ -2865,6 +2956,7 @@ export type Database = {
           custom_fields?: Json
           deleted_at?: string | null
           full_name?: string
+          funnel_stage?: string
           gender?: string | null
           id?: string
           notes?: string | null
@@ -2882,6 +2974,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "students_funnel_stage_fkey"
+            columns: ["funnel_stage"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["code"]
           },
           {
             foreignKeyName: "students_payer_fk"
@@ -3893,6 +3992,7 @@ export type Database = {
         Args: {
           p_birth_date?: string
           p_full_name: string
+          p_funnel_stage?: string
           p_gender?: string
           p_notes?: string
           p_payer_full_name?: string
@@ -3970,6 +4070,21 @@ export type Database = {
       freeze_subscription: {
         Args: { p_from: string; p_id: string; p_to?: string }
         Returns: undefined
+      }
+      funnel_stuck: {
+        Args: { p_days?: number }
+        Returns: {
+          days_on_stage: number
+          full_name: string
+          payer_phone: string
+          stage: string
+          stage_name: string
+          student_id: string
+        }[]
+      }
+      funnel_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
       }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       installment_plans_cancel_live: {
@@ -4426,6 +4541,15 @@ export type Database = {
       }
       set_default_attendance_status: {
         Args: { p_id: string }
+        Returns: undefined
+      }
+      set_funnel_stage: {
+        Args: {
+          p_cause?: string
+          p_is_service?: boolean
+          p_student_id: string
+          p_to_stage: string
+        }
         Returns: undefined
       }
       set_goal_status: {
