@@ -918,3 +918,22 @@ owner/admin центра с `{until}` в поясе центра;
 платформы) — деньги для `/admin` считает SQL, экран рисует.
 `platform_open_payments` фильтрует закрытые центры так же, как
 `platform_centers`.
+
+### Квота голосовых резюме (0053)
+
+Квота — гейт в горловине, не инвариант на реестре: единственный путь к
+платному вызову — `ai_job_begin` (`bot_worker`), единственный писатель
+`ai_usage` — `ai_usage_record`; триггер на `ai_usage` отбивал бы уже
+потраченные деньги. Счёт: `center_ai_notes_used(center)` — оплаченные
+`summary` за месяц от `center_month_start(center)` (timestamptz в поясе
+центра, ложится на индекс) — его видят экран (`center_limits`) и текст
+отказа; в `ai_job_begin` к нему добавляется резерв `ai_notes_reserved` —
+работы `running` не старше 8 минут без строки `summary`, своя работа при
+перезахвате исключается — под `pg_advisory_xact_lock('center_limit:…')`
+до `insert ai_jobs`. В `ai_job_begin` квота — булев исход (`null` +
+`ai.quota_exceeded` один раз на диктовку, unique `events_quota_exceeded_once`;
+тарифа нет — `null` без события), исключение живёт только в
+`assert_ai_quota` для `request_voice_note` — до гашения прежнего токена,
+текст по роли, имя тарифа через `center_plan_name`. Событие идёт заказчику
+диктовки (`{child}` только telegram, с предлогом) и owner/admin центра
+(`subject_required = false`).

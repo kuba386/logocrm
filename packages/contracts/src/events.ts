@@ -774,6 +774,20 @@ export const subscriptionExpiredSchema = z.object({
   }),
 })
 
+/**
+ * Лимит голосовых резюме по тарифу исчерпан (0053): ai_job_begin отдал null
+ * до платных вызовов, один раз на диктовку; заказчику и owner/admin центра.
+ */
+export const aiQuotaExceededSchema = z.object({
+  type: z.literal('ai.quota_exceeded'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    voice_request_id: z.string().uuid(),
+    used: z.number().int(),
+    limit: z.number().int(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -843,6 +857,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionVoiceBlockedSchema,
   subscriptionEndingSchema,
   subscriptionExpiredSchema,
+  aiQuotaExceededSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

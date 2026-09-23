@@ -435,6 +435,7 @@
     "subscription.extended": "Подписка продлена",
     "subscription.voice_blocked": "Голосовое не расшифровано: подписка истекла",
     "subscription.ending": "Срок подписки заканчивается",
-    "subscription.expired": "Срок подписки истёк"
+    "subscription.expired": "Срок подписки истёк",
+    "ai.quota_exceeded": "Лимит голосовых резюме исчерпан"
   }
 }

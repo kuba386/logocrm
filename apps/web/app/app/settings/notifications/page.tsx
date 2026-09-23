@@ -45,6 +45,8 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // здесь зеркало для тумблера (справочник закрыт для чтения из браузера).
   { type: 'subscription.ending', placeholders: ['{what}', '{until}', '{when}'], mandatory: true },
   { type: 'subscription.expired', placeholders: ['{what}', '{until}'], mandatory: true },
+  // 0053: {child} только в telegram и с предлогом внутри (« по Имя»); числа — в оба канала.
+  { type: 'ai.quota_exceeded', placeholders: ['{child}', '{used}', '{limit}'], whatsappPlaceholders: ['{used}', '{limit}'] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
