@@ -25,7 +25,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(36);
+select plan(37);
 
 
 -- 1. Заборы ----------------------------------------------------------------------------------------------
@@ -44,8 +44,9 @@ select is_empty(
 
 select is_empty(
   $$ select grantee from information_schema.role_table_grants
-      where table_schema = 'public' and table_name = 'ai_usage' and privilege_type = 'INSERT' $$,
-  'ai_usage по-прежнему без insert-гранта ни у кого — единственный писатель ai_usage_record (Р1)');
+      where table_schema = 'public' and table_name = 'ai_usage' and privilege_type = 'INSERT'
+        and grantee in ('public', 'anon', 'authenticated', 'service_role', 'bot_worker') $$,
+  'ai_usage по-прежнему без insert-гранта ни у кого из прикладных ролей — единственный писатель ai_usage_record (Р1); владелец таблицы (postgres) сюда не входит, как в 0051/0052');
 
 select set_eq(
   $$ select event_type || ':' || audience || ':' || subject_required::text || ':' || mandatory::text || ':' || array_to_string(channels, '+')
@@ -135,9 +136,10 @@ select is(public.center_ai_notes_used('a0530000-0000-0000-0000-0000000000c1'), 2
 
 
 -- 2b. Резерв: работы в полёте (Р3, Р4) — прямая арифметика, без полного цикла диктовки -----------------------
--- Синтетическая событие+работа для центра А; чистится в конце блока, чтобы
--- не задеть used=29 перед разделом 3. type — не lesson.voice_received,
--- чтобы не попасть под max(id) в разделе 5.
+-- Синтетическая событие+работа для центра А; чистится сразу после
+-- «summary», чтобы не задеть used=29 в кросс-тенантной проверке ниже и
+-- перед разделом 3. type — не lesson.voice_received, чтобы не попасть под
+-- max(id) в разделе 5.
 
 insert into public.events (id, center_id, type, payload) values
   (905301, 'a0530000-0000-0000-0000-0000000000c1', 'test.synthetic', '{}'::jsonb);
@@ -159,6 +161,15 @@ insert into public.ai_usage (center_id, event_id, kind, cost_tiyin) values
 select is(public.ai_notes_reserved('a0530000-0000-0000-0000-0000000000c1', null), 0,
   'Работа с уже записанной строкой summary не считается дважды — реестр, не резерв (Р3)');
 
+-- Уборка синтетики центра А немедленно: строка summary выше подняла его
+-- оплаченный счёт с 29 до 30 — если её оставить, следующая проверка
+-- (кросс-тенант) увидит 30 не из-за центра Б, а из-за этого же артефакта.
+delete from public.ai_usage where event_id = 905301;
+delete from public.ai_jobs where event_id = 905301;
+delete from public.events where id = 905301;
+select is(public.center_ai_notes_used('a0530000-0000-0000-0000-0000000000c1'), 29,
+  'После уборки счёт снова 29 — синтетическая summary-строка не осталась в реестре');
+
 -- Кросс-тенант: работа и оплаченное резюме центра Б не видны центру А.
 insert into public.ai_usage (center_id, kind, cost_tiyin) values
   ('a0530000-0000-0000-0000-0000000000c9', 'summary', 100);
@@ -172,14 +183,13 @@ select is(public.center_ai_notes_used('a0530000-0000-0000-0000-0000000000c1'), 2
 select is(public.ai_notes_reserved('a0530000-0000-0000-0000-0000000000c1', null), 0,
   'Работа в полёте чужого центра в резерв не попадает — кросс-тенант (Р3)');
 
--- Уборка: не задеть used=29 и «одну работу» разделов 3-5. Центра Б
--- ai_usage-строка без event_id (снимок «чужое оплаченное») чистится по
--- center_id — единственная в фикстуре, ключ event_id ей не подходит.
-delete from public.ai_usage where event_id in (905301, 905302) or center_id = 'a0530000-0000-0000-0000-0000000000c9';
-delete from public.ai_jobs where event_id in (905301, 905302);
-delete from public.events where id in (905301, 905302);
+-- Уборка центра Б: ai_usage-строка без event_id (снимок «чужое оплаченное»)
+-- чистится по center_id — единственная в фикстуре, ключ event_id ей не подходит.
+delete from public.ai_usage where center_id = 'a0530000-0000-0000-0000-0000000000c9';
+delete from public.ai_jobs where event_id = 905302;
+delete from public.events where id = 905302;
 select is(public.center_ai_notes_used('a0530000-0000-0000-0000-0000000000c1'), 29,
-  'После уборки счёт снова 29 — синтетика не осталась в реестре');
+  'Счёт центра А по-прежнему 29 после уборки центра Б');
 
 
 -- 3. request_voice_note: последний слот проходит, лимит отбивает (Р2, Р6, Р7) ------------------------------
