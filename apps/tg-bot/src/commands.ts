@@ -29,7 +29,7 @@ function time(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC',
+    timeZone: 'Asia/Bishkek',
   })
 }
 
@@ -85,8 +85,10 @@ export async function handleToday(chatId: number): Promise<void> {
     return
   }
 
-  // Время отдаёт база уже в поясе центра — здесь только форматирование,
-  // поэтому timeZone: 'UTC' (иначе хостинг подвинул бы час второй раз).
+  // bot_today отдаёт starts_at как настоящий timestamptz (честный UTC,
+  // не сдвинутый в пояс центра — at time zone в SQL там только для
+  // фильтра «сегодня»), поэтому здесь нужен явный часовой пояс центра,
+  // а не UTC: иначе бот показывал бы время на 6 часов раньше реального.
   const lines = rows.map((row) => `${time(row.starts_at)} — ${row.title} (${row.teacher_name ?? '—'})`)
   await sendMessage(chatId, `Занятия на сегодня:\n${lines.join('\n')}`)
 }
