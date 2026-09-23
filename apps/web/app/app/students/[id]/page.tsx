@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { centerTimeZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
-import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
+import { STUDENT_STATUS_CLASSES, statusLabel, studentAge, type FunnelStage } from '@/lib/students'
+import { FunnelStageWidget } from './funnel-stage-widget'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { StudentForm, type StudentFormValues } from './student-form'
 import {
@@ -40,6 +41,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   if (!role) redirect('/select-center')
 
   const isAdmin = role === 'owner' || role === 'admin'
+  const isRegistrar = role === 'registrar'
   const isFinance = role === 'finance'
   const isTeacher = role === 'teacher'
   const isParent = role === 'parent'
@@ -48,12 +50,17 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   const canWriteClinical = isAdmin || isTeacher
 
   // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет;
-  // бухгалтеру — students_brief: ни телефона, ни заметок (0031).
-  const { data: base } = isAdmin
+  // бухгалтеру — students_brief: ни телефона, ни заметок (0031). Стойка
+  // (registrar) читает students напрямую тем же select — apply_role_rls уже
+  // даёт ей 'write' на students (0028), сужения здесь не добавляют: без
+  // своей ветки registrar получал бы витрину без funnel_stage и не видел
+  // бы виджет воронки, хотя set_funnel_stage/funnel_stuck ей открыты (0055
+  // Р12, ревью написанного SQL 23.09.2026, находка 5).
+  const { data: base } = isAdmin || isRegistrar
     ? await supabase
         .from('students')
         .select(
-          'id, full_name, birth_date, gender, status, primary_teacher_id, source, notes, payer_id, created_at',
+          'id, full_name, birth_date, gender, status, funnel_stage, primary_teacher_id, source, notes, payer_id, created_at',
         )
         .eq('id', id)
         .is('deleted_at', null)
@@ -582,6 +589,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           {studentAge(student.birthDate)}
           {teacherName ? ` · специалист: ${teacherName}` : ' · специалист не назначен'}
         </p>
+        {(isAdmin || isRegistrar) && 'funnel_stage' in base && base.funnel_stage ? (
+          <div className="mt-2">
+            <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
+          </div>
+        ) : null}
       </div>
 
       <Card>
