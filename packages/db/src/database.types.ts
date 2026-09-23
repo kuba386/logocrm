@@ -3622,6 +3622,10 @@ export type Database = {
         Returns: undefined
       }
       ai_job_finish: { Args: { p_event_id: number }; Returns: undefined }
+      ai_notes_reserved: {
+        Args: { p_center_id: string; p_exclude_event_id?: number }
+        Returns: number
+      }
       ai_usage_record: {
         Args: {
           p_cost_tiyin: number
@@ -3668,6 +3672,7 @@ export type Database = {
         Args: { p_chat_id: number; p_token: string }
         Returns: Json
       }
+      assert_ai_quota: { Args: { p_center_id: string }; Returns: undefined }
       assert_center_limit: {
         Args: {
           p_center_id: string
@@ -3752,7 +3757,9 @@ export type Database = {
         Args: { p_from: string; p_reason?: string; p_series_id: string }
         Returns: number
       }
+      center_ai_notes_used: { Args: { p_center_id: string }; Returns: number }
       center_limits: { Args: never; Returns: Json }
+      center_month_start: { Args: { p_center_id: string }; Returns: string }
       center_plan_name: { Args: { p_center_id: string }; Returns: string }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
       center_today: { Args: { p_center_id?: string }; Returns: string }
