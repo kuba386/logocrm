@@ -779,6 +779,13 @@ export type Database = {
             referencedColumns: ["id", "center_id"]
           },
           {
+            foreignKeyName: "funnel_events_student_center_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
             foreignKeyName: "funnel_events_to_stage_fkey"
             columns: ["to_stage"]
             isOneToOne: false
@@ -4071,6 +4078,7 @@ export type Database = {
         Args: { p_from: string; p_id: string; p_to?: string }
         Returns: undefined
       }
+      funnel_stage_rank: { Args: { p_code: string }; Returns: number }
       funnel_stuck: {
         Args: { p_days?: number }
         Returns: {
@@ -4082,10 +4090,7 @@ export type Database = {
           student_id: string
         }[]
       }
-      funnel_summary: {
-        Args: { p_from: string; p_to: string }
-        Returns: Json
-      }
+      funnel_summary: { Args: { p_from: string; p_to: string }; Returns: Json }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       installment_plans_cancel_live: {
         Args: { p_subscription_id: string }
@@ -4386,6 +4391,7 @@ export type Database = {
         Returns: string
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
+      refund_calc_unchecked: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
