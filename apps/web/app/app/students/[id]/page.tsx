@@ -128,10 +128,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   const waNumber = payer?.phone ? whatsappNumber(payer.phone) : null
 
-  // Специалисту — только слово (student_subscription_badge), admin/owner —
-  // числа и действия (продать/заморозить/вернуть). Промт этапа 4: цифры и
-  // деньги видит только тот, кто уходит открывать кабинет через дорогу.
-  const subscriptionBadge = !isAdmin
+  // Специалисту — только слово (student_subscription_badge): деньги центра
+  // не его дело (ADR-005). Родителю раньше доставался тот же бейдж — теперь
+  // те же цифры, что admin/owner, но без единой кнопки (см. subscriptionsSection
+  // ниже, ветка isParent; Backlog.md, 23.09.2026).
+  const subscriptionBadge = isTeacher
     ? (await supabase.rpc('student_subscription_badge', { p_student_id: id })).data
     : null
 
@@ -144,6 +145,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     siblings: SiblingOption[]
     attendanceHistory: AttendanceHistoryRow[]
     timeZone: string
+    /** owner/admin — продажа/заморозка/возврат/перенос; родитель — только чтение. */
+    canManage: boolean
   } | null = null
 
   if (isAdmin) {
@@ -310,6 +313,98 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           comment: row.comment,
         }
       }),
+      canManage: true,
+    }
+  } else if (isParent) {
+    // Родителю — то же самое «Оплачено X из Y», статус и график рассрочки,
+    // что видит владелец, но без действий и без вкладки «Посещения»
+    // (attendance родителю закрыта целиком, 0044_attendance_comment_privacy.sql).
+    // Источник — RLS subscriptions_parent_read/installments_parent_read/
+    // student_balance, RPC subscription_summary/subscription_payment_summary
+    // (обе проверяют subscription_visible_to_caller, родителя пускают) — те
+    // же вызовы, что уже использует dashboard-parent.tsx, просто на одного
+    // ребёнка вместо всех сразу. Имя типа абонемента родителю не отдаётся
+    // (subscription_types закрыт ему RLS) — общий фолбэк «Абонемент», как и
+    // у admin-ветки для абонемента без типа.
+    const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
+
+    const [{ data: subsRows }, { data: balanceRow }, { data: center }] = await Promise.all([
+      supabase
+        .from('subscriptions')
+        .select('id, type_id, price_tiyin, starts_at, ends_at')
+        .eq('student_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('student_balance')
+        .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin')
+        .eq('student_id', id)
+        .maybeSingle(),
+      supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+    ])
+
+    const subscriptionIds = (subsRows ?? []).map((row) => row.id)
+
+    const [paymentSummaries, { data: installmentRows }, summaries] = await Promise.all([
+      Promise.all(
+        subscriptionIds.map((subscriptionId) =>
+          supabase.rpc('subscription_payment_summary', { p_subscription_id: subscriptionId }),
+        ),
+      ),
+      subscriptionIds.length
+        ? supabase
+            .from('installments_view')
+            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .in('subscription_id', subscriptionIds)
+            .is('cancelled_at', null)
+            .order('seq')
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+      Promise.all((subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id }))),
+    ])
+
+    const subscriptions: SubscriptionView[] = (subsRows ?? []).map((row, index) => {
+      const summary = summaries[index]?.data?.[0]
+      return {
+        id: row.id,
+        typeName: 'Абонемент',
+        priceTiyin: row.price_tiyin,
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
+        lessonsLeft: summary?.lessons_left ?? null,
+        state: summary?.state ?? '',
+        freezeDays: summary?.freeze_days ?? 0,
+        refundTiyin: summary?.refund_tiyin ?? 0,
+        freezeFrom: summary?.freeze_from ?? null,
+        freezeTo: summary?.freeze_to ?? null,
+        paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
+        paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        installments: (installmentRows ?? [])
+          .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
+          .map((r) => ({
+            seq: r.seq as number,
+            dueDate: r.due_date as string,
+            amountTiyin: r.amount_tiyin as number,
+            state: r.state ?? '',
+          })),
+      }
+    })
+
+    subscriptionsSection = {
+      balance: {
+        lessonsLeft: balanceRow?.lessons_left ?? null,
+        activeSubscriptionId: balanceRow?.active_subscription_id ?? null,
+        endsAt: balanceRow?.ends_at ?? null,
+        debtTiyin: balanceRow?.debt_tiyin ?? 0,
+        overdrawnTiyin: balanceRow?.overdrawn_tiyin ?? 0,
+      },
+      subscriptions,
+      types: [],
+      sources: [],
+      siblings: [],
+      today: isoDayInZone(new Date(), centerTimeZone(center?.settings)),
+      timeZone: centerTimeZone(center?.settings),
+      attendanceHistory: [],
+      canManage: false,
     }
   }
 
@@ -655,8 +750,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       {subscriptionsSection ? (
         <Card>
           <CardHeader>
-            <CardTitle>Абонементы и посещения</CardTitle>
-            <CardDescription>Продажа, заморозка, возврат — суммы видит только администратор.</CardDescription>
+            <CardTitle>{subscriptionsSection.canManage ? 'Абонементы и посещения' : 'Абонементы'}</CardTitle>
+            <CardDescription>
+              {subscriptionsSection.canManage
+                ? 'Продажа, заморозка, возврат — доступны только администратору.'
+                : 'Оплачено, состояние и график рассрочки — те же данные, что видит центр.'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <SubscriptionsPanel studentId={id} {...subscriptionsSection} />
