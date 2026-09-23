@@ -107,7 +107,6 @@ export function StudentForm({
           <div className="space-y-2">
             <Label htmlFor="status">Статус</Label>
             <Select id="status" name="status" defaultValue={student.status}>
-              <option value="lead">Заявка</option>
               <option value="active">Занимается</option>
               <option value="paused">Пауза</option>
               <option value="archived">В архиве</option>

@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { centerTimeZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
-import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
+import { STUDENT_STATUS_CLASSES, statusLabel, studentAge, type FunnelStage } from '@/lib/students'
+import { FunnelStageWidget } from './funnel-stage-widget'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { StudentForm, type StudentFormValues } from './student-form'
 import {
@@ -53,7 +54,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ? await supabase
         .from('students')
         .select(
-          'id, full_name, birth_date, gender, status, primary_teacher_id, source, notes, payer_id, created_at',
+          'id, full_name, birth_date, gender, status, funnel_stage, primary_teacher_id, source, notes, payer_id, created_at',
         )
         .eq('id', id)
         .is('deleted_at', null)
@@ -582,6 +583,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           {studentAge(student.birthDate)}
           {teacherName ? ` · специалист: ${teacherName}` : ' · специалист не назначен'}
         </p>
+        {isAdmin && 'funnel_stage' in base && base.funnel_stage ? (
+          <div className="mt-2">
+            <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
+          </div>
+        ) : null}
       </div>
 
       <Card>

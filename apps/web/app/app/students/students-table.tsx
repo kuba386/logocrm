@@ -66,7 +66,6 @@ export function StudentsTable({
         />
         <Select value={status} onChange={(event) => setStatus(event.target.value)} className="max-w-[190px]">
           <option value="">Все статусы</option>
-          <option value="lead">Заявка</option>
           <option value="active">Занимается</option>
           <option value="paused">Пауза</option>
           <option value="archived">В архиве</option>

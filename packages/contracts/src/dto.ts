@@ -77,8 +77,14 @@ export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>
 export const payerRelationSchema = z.enum(['мама', 'папа', 'бабушка', 'дедушка', 'опекун', 'другое'])
 export type PayerRelation = z.infer<typeof payerRelationSchema>
 
-export const studentStatusSchema = z.enum(['lead', 'active', 'paused', 'archived'])
+export const studentStatusSchema = z.enum(['active', 'paused', 'archived'])
 export type StudentStatus = z.infer<typeof studentStatusSchema>
+
+/** Семь шагов воронки (0055) — совпадает с funnel_stages.code в базе. */
+export const funnelStageSchema = z.enum([
+  'lead', 'contacted', 'consultation', 'assessment', 'trial', 'active', 'completed',
+])
+export type FunnelStage = z.infer<typeof funnelStageSchema>
 
 export const genderSchema = z.enum(['м', 'ж'])
 

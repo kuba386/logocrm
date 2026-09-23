@@ -54,8 +54,8 @@ select set_eq(
       where t.table_schema = 'public' and t.table_type = 'BASE TABLE'
         and not exists (select 1 from information_schema.columns c
                          where c.table_schema = 'public' and c.table_name = t.table_name and c.column_name = 'center_id') $$,
-  $$ values ('centers'), ('plans'), ('platform_admins'), ('notification_event_types'), ('telegram_accounts'), ('telegram_link_codes') $$,
-  'Таблицы без center_id — ровно шесть, все в списке исключений с причиной; новая требует решения (Р7)');
+  $$ values ('centers'), ('plans'), ('platform_admins'), ('notification_event_types'), ('telegram_accounts'), ('telegram_link_codes'), ('funnel_stages') $$,
+  'Таблицы без center_id — ровно семь (funnel_stages с 0055), все в списке исключений с причиной; новая требует решения (Р7)');
 
 -- Р4: memberships/invitations — только insert. tgtype: 1 = ROW, 2 = BEFORE,
 -- 4 = INSERT, 8 = DELETE, 16 = UPDATE — время и уровень тоже под забором,

@@ -941,3 +941,62 @@ owner/admin центра с `{until}` в поясе центра;
 сигнал о пропавшей диктовке, дефолтный текст не называет `{used}/{limit}`,
 потому что решение о блокировке видит ещё и резерв, которого экран не
 показывает.
+
+## Воронка учеников (0055)
+
+`funnel_stage` — отдельная колонка на `students` (не `status`): семь
+шагов (`funnel_stages`, глобальный справочник без `center_id`, как
+`plans`) — `lead → contacted → consultation → assessment → trial →
+active → completed`. `status` (`active/paused/archived`) остался про
+состояние ученика, `funnel_stage` — про этап продажи; `'lead'` снят из
+`students.status` тем же 0055 — он был мёртвым значением (ни одной строки
+на проде, `create_student_with_payer` его никогда не ставил).
+
+Путь записи — три контура, различаемых транзакционными GUC-флагами
+(`logocrm.funnel_write`/`logocrm.funnel_auto`, ставит и снимает сам
+вызывающий — приём `logocrm.revoke_membership` из 0050):
+
+- **ручной** — только через `set_funnel_stage(student, to_stage, cause,
+  is_service)`; прямой `PATCH students.funnel_stage` (доступен
+  owner/admin через `apply_tenant_rls` и registrar через `apply_role_rls`)
+  отбивает `42501` — «переходы в функции» не защищают, пока есть прямой
+  путь;
+- **автоматический** — продажа абонемента (`AFTER INSERT` на
+  `subscriptions`) и первое присутствие (`AFTER INSERT OR UPDATE OF
+  status_id` на `attendance`, по `attendance.is_present`, не по
+  `deducted` — у статуса «Прогул» `deducts_lesson = true`) переводят в
+  `active` из любого этапа до него или из `completed` (реактивация
+  вернувшегося клиента), если `status` не `paused`/`archived`;
+- **без сессии** — миграции, backfill, RI-каскады (`auth.uid() is
+  null`), проходят целиком.
+
+Граф переходов — `BEFORE UPDATE OF funnel_stage` на `students`
+(`students_funnel_stage_guard`), инвариант, а не проверка в RPC: ручной
+путь — вперёд на один шаг или назад на любой более ранний; автопуть —
+прямой скачок в `active`; `INSERT` с `funnel_stage = 'completed'`
+запрещён всегда. `AFTER`-триггер `students_funnel_events` пишет историю в
+`funnel_events` (id, student_id, center_id, from_stage, to_stage, at, by,
+cause, is_service) — только чтение для `owner`/`admin`/`registrar`
+(`can_front_desk()`, без `apply_tenant_rls`); `teacher`/`parent`/`finance`
+не видят ни строки — коммерческая история. `is_service = true` — правка
+ошибки оператора, не реальное движение: `funnel_summary` её не считает.
+
+`archive_student`/`restore_student` **не трогают** `funnel_stage` и не
+пишут `funnel_events` — цикл архив→восстановление возвращает этап туда,
+где он был.
+
+`funnel_summary(from, to)` — owner/admin, `jsonb`: срез «сейчас» по
+`students` (не по `funnel_events` — архивные и удалённые не искажают),
+переходы и конверсия за период по `funnel_events` (`is_service = false`);
+конверсия считается **по ученикам** (вошёл в период → достиг `active`
+когда-либо после), не по рёбрам графа — ребра `lead → active` в графе
+физически не существует, счёт по рёбрам всегда дал бы 0. Среднее время
+на этапе — открытые интервалы (`coalesce(next.at, now())`), иначе
+застрявшие незаметно улучшают метрику. `funnel_stuck(days)` —
+`can_front_desk()`, список без движения дольше `days` для кнопки
+WhatsApp.
+
+`attendance_statuses.is_present`/`attendance.is_present` — новый явный
+признак присутствия, заморожен на строку в `attendance_fill_and_check`
+при каждой смене статуса (как `pays_teacher`, не как `subscription_id`):
+не обратен `counts_absence` и не то же самое, что `deducted`.
