@@ -224,10 +224,13 @@ select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000
 set local role authenticated;
 select public.set_funnel_stage((select id from t0055_student), 'contacted', 'перезвонили сами', false);
 reset role;
+-- order by at, id: at одинаков внутри одной транзакции (весь файл — один
+-- begin/rollback), id — единственный надёжный тай-брейк (тот же приём,
+-- что funnel_summary, header Р10).
 select ok(
   (select fe.cause = 'перезвонили сами' and fe.is_service = false and fe.by = 'a0550000-0000-0000-0000-000000000003'
      from public.funnel_events fe where fe.student_id = (select id from t0055_student) and fe.to_stage = 'contacted'
-    order by fe.at desc limit 1),
+    order by fe.at desc, fe.id desc limit 1),
   'cause/is_service/by записаны верно (В)');
 
 -- Коррекция ошибки оператора — is_service=true, отдельно от обычного шага.
@@ -238,7 +241,7 @@ reset role;
 select ok(
   (select fe.is_service = true and fe.cause = 'опечатка при вводе'
      from public.funnel_events fe where fe.student_id = (select id from t0055_student) and fe.to_stage = 'consultation'
-    order by fe.at desc limit 1),
+    order by fe.at desc, fe.id desc limit 1),
   'p_is_service=true доезжает до строки — коррекция, а не обычный шаг (Р10 её исключает из funnel_summary.transitions)');
 
 
@@ -517,8 +520,15 @@ select throws_ok(
   '22023', null,
   'from > to отбивается');
 
+-- center_today(), не current_date: сессия CI — в UTC, а funnel_summary
+-- переводит границы периода в пояс центра (Asia/Bishkek, +6) — вечером по
+-- UTC «сегодня» в Бишкеке уже следующий день, и current_date снаружи не
+-- совпадал бы с той датой, которую функция считает «сегодня» внутри.
 create temporary table t0055_summary as
-  select public.funnel_summary(current_date - 30, current_date) as s;
+  select public.funnel_summary(
+    public.center_today('a0550000-0000-0000-0000-0000000000c1') - 30,
+    public.center_today('a0550000-0000-0000-0000-0000000000c1')
+  ) as s;
 
 select ok(
   (select count(*)::int from jsonb_array_elements((select s from t0055_summary) -> 'current') x
