@@ -2,6 +2,7 @@ import { formatSom } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { dayInZone, formatInTimeZone, timeInZone } from '@/lib/timezone'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ShowMore } from '@/components/ui/show-more'
 import { cn } from '@/lib/utils'
 import { label, t } from '@/lib/messages'
 
@@ -90,20 +91,21 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
 
   // Платежи и рассрочка — свои по RLS (payments_parent_read,
   // installments_parent_read): родитель видит, что заплатил и что должен,
-  // и ничего агрегированного по центру.
+  // и ничего агрегированного по центру. Без limit: раньше жёсткий предел в
+  // 10 записей обрезал историю насовсем, без возможности посмотреть дальше
+  // (Backlog.md, 23.09.2026) — теперь режет только отрисовку, ShowMore
+  // разворачивает то, что уже пришло с сервера, без второго запроса.
   const [{ data: paymentRows }, { data: installmentRows }] = await Promise.all([
     supabase
       .from('payments')
       .select('id, student_id, amount_tiyin, paid_at, kind')
-      .order('paid_at', { ascending: false })
-      .limit(10),
+      .order('paid_at', { ascending: false }),
     supabase
       .from('installments_view')
       .select('id, student_id, due_date, amount_tiyin, state, cancelled_at')
       .is('cancelled_at', null)
       .neq('state', 'paid')
-      .order('due_date')
-      .limit(10),
+      .order('due_date'),
   ])
   const payments = paymentRows ?? []
   const installments = (installmentRows ?? []).filter((r) => r.due_date && r.amount_tiyin != null)
@@ -177,17 +179,20 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
             <CardTitle>{t('dashboard', 'parentInstallments')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
-            {installments.map((row) => (
-              <p key={row.id as string} className={cn('flex justify-between gap-2', row.state === 'overdue' && 'text-destructive')}>
-                <span className="truncate">{childName.get(row.student_id ?? '') || '—'}</span>
-                <span className="shrink-0">
-                  {t('dashboard', row.state === 'overdue' ? 'parentInstallmentOverdue' : 'parentInstallmentDue', {
-                    amount: formatSom(row.amount_tiyin as number),
-                    due: calendarDate(row.due_date as string, timeZone),
-                  })}
-                </span>
-              </p>
-            ))}
+            <ShowMore
+              items={installments.map((row) => (
+                <p key={row.id as string} className={cn('flex justify-between gap-2', row.state === 'overdue' && 'text-destructive')}>
+                  <span className="truncate">{childName.get(row.student_id ?? '') || '—'}</span>
+                  <span className="shrink-0">
+                    {t('dashboard', row.state === 'overdue' ? 'parentInstallmentOverdue' : 'parentInstallmentDue', {
+                      amount: formatSom(row.amount_tiyin as number),
+                      due: calendarDate(row.due_date as string, timeZone),
+                    })}
+                  </span>
+                </p>
+              ))}
+              moreLabel={(hidden) => t('dashboard', 'showMore', { count: hidden })}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -200,15 +205,18 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
           {payments.length === 0 ? (
             <p className="text-muted-foreground">{t('dashboard', 'parentPaymentsEmpty')}</p>
           ) : (
-            payments.map((p) => (
-              <p key={p.id} className="flex justify-between gap-2">
-                <span className="truncate text-muted-foreground">
-                  {dayInZone(p.paid_at, timeZone)} · {label('paymentKind', p.kind)}
-                  {p.student_id ? ` · ${childName.get(p.student_id) || ''}` : ''}
-                </span>
-                <span className={cn('shrink-0 font-medium', p.amount_tiyin < 0 && 'text-destructive')}>{formatSom(p.amount_tiyin)}</span>
-              </p>
-            ))
+            <ShowMore
+              items={payments.map((p) => (
+                <p key={p.id} className="flex justify-between gap-2">
+                  <span className="truncate text-muted-foreground">
+                    {dayInZone(p.paid_at, timeZone)} · {label('paymentKind', p.kind)}
+                    {p.student_id ? ` · ${childName.get(p.student_id) || ''}` : ''}
+                  </span>
+                  <span className={cn('shrink-0 font-medium', p.amount_tiyin < 0 && 'text-destructive')}>{formatSom(p.amount_tiyin)}</span>
+                </p>
+              ))}
+              moreLabel={(hidden) => t('dashboard', 'showMore', { count: hidden })}
+            />
           )}
         </CardContent>
       </Card>

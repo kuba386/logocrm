@@ -191,7 +191,8 @@
     "parentPaymentsEmpty": "Платежей пока нет.",
     "parentInstallments": "Ближайшие платежи по рассрочке",
     "parentInstallmentDue": "{amount} — до {due}",
-    "parentInstallmentOverdue": "{amount} — просрочен с {due}"
+    "parentInstallmentOverdue": "{amount} — просрочен с {due}",
+    "showMore": "Показать все (ещё {count})"
   },
   "teacherRates": {
     "title": "Ставки специалистов",
