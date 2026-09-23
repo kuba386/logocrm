@@ -523,12 +523,15 @@ function SubscriptionCard({
   siblings,
   sources,
   timeZone,
+  canManage,
 }: {
   studentId: string
   subscription: SubscriptionView
   siblings: SiblingOption[]
   sources: SourceOption[]
   timeZone: string
+  /** Родитель видит те же цифры, что администратор, но без продажи/заморозки/возврата/переноса (Backlog.md, 23.09.2026). */
+  canManage: boolean
 }) {
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
@@ -594,7 +597,7 @@ function SubscriptionCard({
           начавшаяся), freeze_subscription всё равно откажет «уже есть
           незакрытая заморозка» — кнопка не должна предлагать заведомо
           проигрышное действие. */}
-      {(subscription.state === 'active' || subscription.state === 'exhausted') && !subscription.freezeFrom ? (
+      {canManage && (subscription.state === 'active' || subscription.state === 'exhausted') && !subscription.freezeFrom ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           <FreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>
@@ -606,7 +609,7 @@ function SubscriptionCard({
           снять раньше срока нельзя — RPC откажет «У абонемента нет
           открытой заморозки», и кнопка обещала бы несбыточное
           (продуктовое решение 2, см. заголовок миграции 0015). */}
-      {subscription.freezeFrom && !(subscription.freezeTo && subscription.state === 'frozen') ? (
+      {canManage && subscription.freezeFrom && !(subscription.freezeTo && subscription.state === 'frozen') ? (
         <div className="border-t border-border pt-3">
           <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>
@@ -617,8 +620,11 @@ function SubscriptionCard({
           источник оплаты. Перенос остатка — отдельное условие: он про
           lessons_left, а не про деньги, и на period/unlimited/исчерпанном
           абонементе transfer_remaining откажет «переносить нечего»
-          (Architect-ревью 0054, Р7 — было слито в одно условие с возвратом). */}
-      {subscription.state !== 'cancelled' ? (
+          (Architect-ревью 0054, Р7 — было слито в одно условие с возвратом).
+          canManage: родитель видит те же цифры выше, но без единой кнопки —
+          продать/заморозить/вернуть/перенести остаются стойке и владельцу
+          (Backlog.md, 23.09.2026). */}
+      {canManage && subscription.state !== 'cancelled' ? (
         <div className="flex flex-wrap items-start gap-2 border-t border-border pt-3">
           <RefundForm
             studentId={studentId}
@@ -671,6 +677,7 @@ export function SubscriptionsPanel({
   siblings,
   attendanceHistory,
   timeZone,
+  canManage,
 }: {
   studentId: string
   balance: BalanceView
@@ -682,8 +689,46 @@ export function SubscriptionsPanel({
   siblings: SiblingOption[]
   attendanceHistory: AttendanceHistoryRow[]
   timeZone: string
+  /**
+   * owner/admin — продажа, заморозка, возврат, перенос; родитель — те же
+   * цифры (оплачено/график рассрочки), но без единой кнопки и без вкладки
+   * «Посещения» (attendance закрыта родителю целиком, 0044) — вместо
+   * словесного бейджа, который раньше был единственным, что он видел
+   * (Backlog.md, 23.09.2026).
+   */
+  canManage: boolean
 }) {
   const [tab, setTab] = useState<'subscriptions' | 'attendance'>('subscriptions')
+
+  const subscriptionsList = (
+    <div className="space-y-4">
+      <BalanceStrip balance={balance} timeZone={timeZone} />
+      {subscriptions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Абонементов пока нет.</p>
+      ) : (
+        <div className="space-y-3">
+          {subscriptions.map((subscription) => (
+            <SubscriptionCard
+              key={subscription.id}
+              studentId={studentId}
+              subscription={subscription}
+              siblings={siblings}
+              sources={sources}
+              timeZone={timeZone}
+              canManage={canManage}
+            />
+          ))}
+        </div>
+      )}
+      {canManage ? (
+        <SellForm studentId={studentId} types={types} sources={sources} today={today} timeZone={timeZone} />
+      ) : null}
+    </div>
+  )
+
+  if (!canManage) {
+    return subscriptionsList
+  }
 
   return (
     <div className="space-y-4">
@@ -710,30 +755,7 @@ export function SubscriptionsPanel({
         </button>
       </div>
 
-      {tab === 'subscriptions' ? (
-        <div className="space-y-4">
-          <BalanceStrip balance={balance} timeZone={timeZone} />
-          {subscriptions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Абонементов пока нет.</p>
-          ) : (
-            <div className="space-y-3">
-              {subscriptions.map((subscription) => (
-                <SubscriptionCard
-                  key={subscription.id}
-                  studentId={studentId}
-                  subscription={subscription}
-                  siblings={siblings}
-                  sources={sources}
-                  timeZone={timeZone}
-                />
-              ))}
-            </div>
-          )}
-          <SellForm studentId={studentId} types={types} sources={sources} today={today} timeZone={timeZone} />
-        </div>
-      ) : (
-        <AttendanceHistoryTable rows={attendanceHistory} timeZone={timeZone} />
-      )}
+      {tab === 'subscriptions' ? subscriptionsList : <AttendanceHistoryTable rows={attendanceHistory} timeZone={timeZone} />}
     </div>
   )
 }
