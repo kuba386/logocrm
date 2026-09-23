@@ -125,6 +125,8 @@ insert, изменение связанной строки, действие з�
 | Возврат абонемента реально возвращает не больше внесённого — стоимость неотработанных занятий и деньги на руках часто разные числа при частичной оплате | `refund_subscription`: `least(refund_calc, paid_tiyin)` — `0030_refund_payment_and_overpay_guard.sql` |
 | Повторный возврат по одному абонементу невозможен, даже в обход RPC | `payments_refund_once_key` (частичный unique) — `0030` |
 | Переплата через обычный платёж (`kind = 'payment'`) сверх цены абонемента невозможна; корректировка (`kind = 'correction'`) — единственный намеренный путь провести переплату | `payments_recalc_paid_overpay_guard` — `0030` |
+| Возврат за абонемент «на срок» (и «безлимит» с заданным сроком — дискриминатор `ends_at`, не ярлык `kind`) — пропорционально дням, что останутся до `ends_at`, от знаменателя `period_days` типа, а не `ends_at - starts_at` (та растёт с каждой закрытой заморозкой); дни ещё не закрытой открытой заморозки досчитываются отдельно, `ends_at` их не отражает. После отмены возврат не продолжает таять по дням | `refund_calc_unchecked` — `0054_period_subscription_refund.sql` |
+| `refund_calc` — `definer` с explicit-гейтом видимости (`subscription_visible_to_caller`), не `invoker`+RLS: расчёту нужен `subscription_types`/`subscription_freezes`, закрытые для родителя/registrar/finance напрямую | `refund_calc` — `0054` (тот же приём, что `subscription_freeze_days`/`_unchecked`, `0015`) |
 
 ---
 
