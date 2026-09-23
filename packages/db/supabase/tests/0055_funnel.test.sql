@@ -416,10 +416,12 @@ set local role authenticated;
 select public.create_student_with_payer('СессияПосещение 0055', 'a0550000-0000-0000-0000-000000000030');
 create temporary table t0055_sess_att as select id from public.students where full_name = 'СессияПосещение 0055';
 
+-- Не now()-1h/-15m: тот же слот у того же специалиста уже занят лесс. 061
+-- в разделе 6 (lessons_teacher_no_overlap отбил бы вставку).
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
   ('a0550000-0000-0000-0000-000000000062','a0550000-0000-0000-0000-0000000000c1','a0550000-0000-0000-0000-000000000010',
    (select id from t0055_sess_att),'a0550000-0000-0000-0000-000000000020','planned',
-   now() - interval '1 hour', now() - interval '15 minutes');
+   now() - interval '3 hours', now() - interval '2 hours 15 minutes');
 
 -- registrar пишет attendance напрямую (apply_role_rls 'write', 0028) —
 -- тот же путь, что учитель использует на экране расписания.
