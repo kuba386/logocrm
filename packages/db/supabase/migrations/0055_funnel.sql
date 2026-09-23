@@ -544,7 +544,9 @@ comment on trigger z99_students_funnel_events on public.students is
 -- Backfill (Г, Р8): по фактам, до NOT NULL/DEFAULT и до сужения check.
 -- Триггеры уже стоят — auth.uid() is null здесь (миграция), guard пропускает
 -- целиком; is_service=true помечает это событие как служебное, не конверсию.
-select set_config('logocrm.funnel_is_service', 'true', false);
+-- is_local=true (транзакция миграции, не сессия) — иначе GUC пережил бы
+-- эту миграцию и утёк бы на пуловое соединение (0050 Р10 — тот же риск).
+select set_config('logocrm.funnel_is_service', 'true', true);
 
 update public.students s
    set funnel_stage = case
@@ -560,7 +562,7 @@ update public.students s
    end
  where s.funnel_stage is null;
 
-select set_config('logocrm.funnel_is_service', '', false);
+select set_config('logocrm.funnel_is_service', '', true);
 
 alter table public.students alter column funnel_stage set not null;
 alter table public.students alter column funnel_stage set default 'lead';
