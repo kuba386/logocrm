@@ -397,22 +397,31 @@ function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscr
 
 /**
  * refundTiyin (subscription_summary.refund_tiyin = refund_calc) — стоимость
- * НЕОТРАБОТАННЫХ занятий, не деньги. Реально вернуть можно не больше
- * внесённого (0030, Р1): по абонементу, оплаченному частично, сервер
- * капнет сумму сам — форма показывает это явно, а не только «к возврату»
- * из одной цифры, которая по частичной оплате её же не покроет.
+ * НЕОТРАБОТАННЫХ занятий (lessons) или оставшегося срока (period, 0054), не
+ * деньги. Реально вернуть можно не больше внесённого (0030, Р1): по
+ * абонементу, оплаченному частично, сервер капнет сумму сам — форма
+ * показывает это явно, а не только «к возврату» из одной цифры, которая по
+ * частичной оплате её же не покроет.
+ *
+ * refundTiyin === 0 — законный случай (истёкший срок, исчерпанный пакет), не
+ * повод прятать кнопку: «Отменить» доступно всегда, «вернуть деньги» —
+ * только когда есть что возвращать (0054, решение владельца, Р0б). Источник
+ * оплаты в форме и так появляется только при moneyBack > 0 (не менялось).
  */
 function RefundForm({
   studentId,
   subscriptionId,
   refundTiyin,
   paidTiyin,
+  isPeriod,
   sources,
 }: {
   studentId: string
   subscriptionId: string
   refundTiyin: number
   paidTiyin: number
+  /** ends_at абонемента задан — возврат посчитан по оставшимся дням, не по занятиям (0054). */
+  isPeriod: boolean
   sources: SourceOption[]
 }) {
   const [state, formAction] = useActionState(refundSubscription, initial)
@@ -422,7 +431,7 @@ function RefundForm({
   if (!confirming) {
     return (
       <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-        {t('sale', 'refund')}
+        {refundTiyin > 0 ? t('sale', 'refund') : t('sale', 'cancelOnly')}
       </Button>
     )
   }
@@ -433,15 +442,21 @@ function RefundForm({
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedTiyin" value={refundTiyin} />
       <p className="text-sm">
-        {t('sale', 'unworkedCost', { sum: formatSom(refundTiyin) })}
-        {moneyBack < refundTiyin ? (
+        {refundTiyin > 0 ? (
           <>
-            {' '}
-            {t('sale', 'moneyBack', { sum: formatSom(moneyBack) })}
+            {t('sale', isPeriod ? 'unworkedPeriodCost' : 'unworkedCost', { sum: formatSom(refundTiyin) })}
+            {moneyBack < refundTiyin ? (
+              <>
+                {' '}
+                {t('sale', 'moneyBack', { sum: formatSom(moneyBack) })}
+              </>
+            ) : null}
+            {'. '}
+            {t('sale', 'refundHint')}
           </>
-        ) : null}
-        {'. '}
-        {t('sale', 'refundHint')}
+        ) : (
+          t('sale', 'cancelNoRefund')
+        )}
       </p>
       {moneyBack > 0 ? (
         <div className="space-y-1">
@@ -457,7 +472,7 @@ function RefundForm({
         </div>
       ) : null}
       <div className="flex gap-2">
-        <SubmitButton variant="destructive">{t('sale', 'confirmRefund')}</SubmitButton>
+        <SubmitButton variant="destructive">{t('sale', moneyBack > 0 ? 'confirmRefund' : 'confirmCancel')}</SubmitButton>
         <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(false)}>
           {t('sale', 'cancel')}
         </Button>
@@ -597,16 +612,25 @@ function SubscriptionCard({
         </div>
       ) : null}
 
-      {subscription.state !== 'cancelled' && subscription.refundTiyin > 0 ? (
+      {/* Отменить доступно всегда (даже при возврате 0 — истёкший срок,
+          исчерпанный пакет, 0054): RefundForm сама решает, показывать ли
+          источник оплаты. Перенос остатка — отдельное условие: он про
+          lessons_left, а не про деньги, и на period/unlimited/исчерпанном
+          абонементе transfer_remaining откажет «переносить нечего»
+          (Architect-ревью 0054, Р7 — было слито в одно условие с возвратом). */}
+      {subscription.state !== 'cancelled' ? (
         <div className="flex flex-wrap items-start gap-2 border-t border-border pt-3">
           <RefundForm
             studentId={studentId}
             subscriptionId={subscription.id}
             refundTiyin={subscription.refundTiyin}
             paidTiyin={subscription.paidTiyin}
+            isPeriod={subscription.endsAt != null}
             sources={sources}
           />
-          <TransferForm studentId={studentId} subscriptionId={subscription.id} siblings={siblings} />
+          {subscription.lessonsLeft != null && subscription.lessonsLeft > 0 ? (
+            <TransferForm studentId={studentId} subscriptionId={subscription.id} siblings={siblings} />
+          ) : null}
         </div>
       ) : null}
     </div>

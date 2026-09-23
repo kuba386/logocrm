@@ -419,7 +419,8 @@ reset role;
 | `mark_attendance` / `mark_attendance_bulk` | owner, admin, teacher (своё занятие) | единственный прикладной путь отметки; статус занятия не трогает |
 | `subscription_summary(uuid)` | owner, admin | остаток, состояние, дни заморозки, сумма возврата; чужой — исключение |
 | `student_subscription_badge(uuid)` | все роли своего центра | «нет / заканчивается / есть», без сумм |
-| `subscription_lessons_left` / `subscription_state` / `subscription_freeze_days` / `refund_calc` | внутренние | `security invoker`: чужой абонемент даёт **NULL**, а NULL у остатка значит и «безлимит». Из приложения не вызывать — только `subscription_summary` |
+| `subscription_lessons_left` / `subscription_state` | внутренние | `security invoker`: чужой абонемент даёт **NULL**, а NULL у остатка значит и «безлимит». Из приложения не вызывать — только `subscription_summary` |
+| `subscription_freeze_days` / `refund_calc` | внутренние | `security definer` + explicit-гейт `subscription_visible_to_caller` (не голый invoker+RLS: расчёту нужны `subscription_types`/`subscription_freezes`, закрытые напрямую для родителя/registrar/finance, 0054) — невидимый/чужой абонемент так же даёт **NULL**. Из приложения не вызывать — только `subscription_summary` |
 
 `student_balance` — `security_invoker`, но строки берёт из `students_brief()`
 (definer: owner/admin/registrar/finance — весь центр, parent — свои дети,
