@@ -64,7 +64,7 @@ insert into public.subscription_types (id, center_id, name, kind, period_days, p
 insert into public.subscription_types (id, center_id, name, kind, lessons_count, price_tiyin) values
   ('77777777-0000-0000-0000-00000000000c','cccccccc-0000-0000-0000-0000000000a3','8 занятий','lessons',8,400000);
 insert into public.subscription_types (id, center_id, name, kind, price_tiyin) values
-  ('77777777-0000-0000-0000-00000000000u','cccccccc-0000-0000-0000-0000000000a3','Безлимит без срока','unlimited',300000);
+  ('77777777-0000-0000-0000-00000000000e','cccccccc-0000-0000-0000-0000000000a3','Безлимит без срока','unlimited',300000);
 
 insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) values
   ('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-0000000000a3','owner', null, null),
@@ -250,7 +250,7 @@ select is(
 
 -- 17. Unlimited БЕЗ периода — регрессия, всё ещё 0 -----------------------------------------
 
-insert into t_ins values ('u_plain', public.sell_subscription('77777777-0000-0000-0000-00000000000u', 'eeeeeeee-0000-0000-0000-000000000001'));
+insert into t_ins values ('u_plain', public.sell_subscription('77777777-0000-0000-0000-00000000000e', 'eeeeeeee-0000-0000-0000-000000000001'));
 
 select is(
   public.refund_calc((select id from t_ins where name = 'u_plain')), 0,
