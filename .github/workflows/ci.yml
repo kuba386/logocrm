@@ -101,9 +101,27 @@ jobs:
         with:
           version: 2.116.0
 
+      # ghcr.io отдаёт toomanyrequests на скачивании образов Supabase — не
+      # редкость на общем пуле раннеров GitHub Actions, не про этот
+      # репозиторий; бывает и затяжной (часы, не секунды). Один упавший
+      # supabase start не значит, что подъём невозможен: растущая пауза между
+      # попытками (30с..4м, ~10 минут суммарно) даёт больше шансов пережить
+      # именно длинный троттлинг, укладываясь в timeout-minutes джоба. stop
+      # перед повтором — не оставлять полуподнятые контейнеры предыдущей
+      # попытки.
       - name: Запуск локального Supabase
         working-directory: packages/db
-        run: supabase start
+        run: |
+          delay=30
+          for i in 1 2 3 4 5 6; do
+            supabase start && exit 0
+            echo "supabase start — попытка $i/6 не удалась (вероятно, ghcr.io toomanyrequests), пробую снова через ${delay}с"
+            supabase stop --no-backup || true
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+          echo "supabase start не поднялся после 6 попыток" >&2
+          exit 1
 
       - name: Применение миграций с нуля
         working-directory: packages/db
@@ -228,9 +246,20 @@ jobs:
       - name: Установка зависимостей
         run: pnpm install --frozen-lockfile
 
+      # Retry на toomanyrequests от ghcr.io — тот же приём, что в джобе db.
       - name: Запуск локального Supabase
         working-directory: packages/db
-        run: supabase start
+        run: |
+          delay=30
+          for i in 1 2 3 4 5 6; do
+            supabase start && exit 0
+            echo "supabase start — попытка $i/6 не удалась (вероятно, ghcr.io toomanyrequests), пробую снова через ${delay}с"
+            supabase stop --no-backup || true
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+          echo "supabase start не поднялся после 6 попыток" >&2
+          exit 1
 
       # Схема собирается из миграций с нуля — тот же путь, что поедет в prod.
       - name: Применение миграций
