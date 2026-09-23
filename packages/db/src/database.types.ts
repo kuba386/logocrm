@@ -4271,6 +4271,7 @@ export type Database = {
         Returns: string
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
+      refund_calc_unchecked: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
