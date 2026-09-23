@@ -166,6 +166,7 @@ reset role;
 
 create temporary table t0055_student as
   select id from public.students where full_name = 'Граф 0055';
+grant select on t0055_student to authenticated;
 
 
 -- 3. Граф переходов: ручной путь (Р3, Р4) -----------------------------------------------------------------
@@ -292,6 +293,7 @@ set local role authenticated;
 select public.create_student_with_payer('Продажа 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 create temporary table t0055_sale as select id from public.students where full_name = 'Продажа 0055';
+grant select on t0055_sale to authenticated;
 
 select public.tests_claims(null, null);
 insert into public.subscriptions (center_id, student_id, payer_id, price_tiyin, starts_at)
