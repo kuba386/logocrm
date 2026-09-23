@@ -522,7 +522,7 @@ create temporary table t0055_summary as
 
 select ok(
   (select count(*)::int from jsonb_array_elements((select s from t0055_summary) -> 'current') x
-    where (x ->> 'stage') = 'active' and (x ->> 'count')::int >= 2),
+    where (x ->> 'stage') = 'active' and (x ->> 'count')::int >= 2) > 0,
   'funnel_summary.current: минимум двое active сейчас (Продажа 0055, Посещение 0055)');
 select ok(
   (select count(*)::int from jsonb_array_elements((select s from t0055_summary) -> 'transitions') x
