@@ -79,6 +79,17 @@ const CHECK_MESSAGES: Record<string, string> = {
   installment_plans_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
   installments_seq_positive: 'Номер платежа рассрочки начинается с единицы',
   diagnostic_referrals_note_len: 'Заметка к направлению — не длиннее 500 символов',
+  student_articulation_collected_at_check: 'Дата осмотра вне допустимого диапазона',
+  student_articulation_lips_structure_check: 'Недопустимое значение строения губ',
+  student_articulation_teeth_check: 'Недопустимое значение по зубам',
+  student_articulation_soft_palate_check: 'Недопустимое значение мягкого нёба',
+  student_articulation_tongue_structure_check: 'Недопустимое значение строения языка',
+  student_articulation_lips_mobility_check: 'Недопустимое значение подвижности губ',
+  student_articulation_bite_check: 'Недопустимое значение прикуса',
+  student_articulation_hard_palate_check: 'Недопустимое значение твёрдого нёба',
+  student_articulation_tongue_mobility_check: 'Недопустимое значение подвижности языка',
+  student_articulation_frenulum_check: 'Недопустимое значение подъязычной связки',
+  student_articulation_notes_check: 'Заметка — не длиннее 2000 символов',
 }
 
 /**
@@ -96,6 +107,7 @@ const UNIQUE_MESSAGES: Record<string, string> = {
   payments_refund_once_key: 'Возврат по этому абонементу уже оформлен',
   platform_payments_one_open_per_center:
     'У центра уже есть открытая заявка на оплату — дождитесь подтверждения или отзовите её',
+  student_articulation_student_key: 'Осмотр уже создан — обновите страницу',
 }
 
 /**
