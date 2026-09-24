@@ -95,29 +95,29 @@ values
   ('00000000-0000-0000-0000-000000000000','a0590000-0000-0000-0000-000000000007','authenticated','authenticated','owner-c-0059@test.kg','','','','','','','','');
 
 insert into public.centers (id, name, slug, settings) values
-  ('a0590000-0000-0000-0000-0000000000c1','Центр А 0058','centr-a-0058','{"timezone":"Asia/Bishkek"}'::jsonb),
-  ('a0590000-0000-0000-0000-0000000000c2','Центр Б 0058','centr-b-0058','{"timezone":"Asia/Bishkek"}'::jsonb);
+  ('a0590000-0000-0000-0000-0000000000c1','Центр А 0059','centr-a-0059','{"timezone":"Asia/Bishkek"}'::jsonb),
+  ('a0590000-0000-0000-0000-0000000000c2','Центр Б 0059','centr-b-0059','{"timezone":"Asia/Bishkek"}'::jsonb);
 -- Центр В — просроченный trial с рождения (раздел 5).
 insert into public.centers (id, name, slug, settings, trial_ends_at) values
-  ('a0590000-0000-0000-0000-0000000000c3','Центр В 0058 (просрочен)','centr-c-0058','{"timezone":"Asia/Bishkek"}'::jsonb, now() - interval '2 days');
+  ('a0590000-0000-0000-0000-0000000000c3','Центр В 0059 (просрочен)','centr-c-0059','{"timezone":"Asia/Bishkek"}'::jsonb, now() - interval '2 days');
 
 insert into public.payers (id, center_id, full_name, phone) values
-  ('a0590000-0000-0000-0000-000000000031','a0590000-0000-0000-0000-0000000000c3','Родитель В 0058','+996700005803');
+  ('a0590000-0000-0000-0000-000000000031','a0590000-0000-0000-0000-0000000000c3','Родитель В 0059','+996700005803');
 insert into public.students (id, center_id, full_name, payer_id) values
-  ('a0590000-0000-0000-0000-000000000041','a0590000-0000-0000-0000-0000000000c3','Ребёнок В 0058','a0590000-0000-0000-0000-000000000031');
+  ('a0590000-0000-0000-0000-000000000041','a0590000-0000-0000-0000-0000000000c3','Ребёнок В 0059','a0590000-0000-0000-0000-000000000031');
 
 insert into public.teachers (id, center_id, full_name, profile_id) values
-  ('a0590000-0000-0000-0000-000000000010','a0590000-0000-0000-0000-0000000000c1','Специалист 0058','a0590000-0000-0000-0000-000000000002'),
-  ('a0590000-0000-0000-0000-000000000011','a0590000-0000-0000-0000-0000000000c1','Специалист-2 0058','a0590000-0000-0000-0000-000000000003');
+  ('a0590000-0000-0000-0000-000000000010','a0590000-0000-0000-0000-0000000000c1','Специалист 0059','a0590000-0000-0000-0000-000000000002'),
+  ('a0590000-0000-0000-0000-000000000011','a0590000-0000-0000-0000-0000000000c1','Специалист-2 0059','a0590000-0000-0000-0000-000000000003');
 
 insert into public.services (id, center_id, name, duration_min, default_price_tiyin) values
   ('a0590000-0000-0000-0000-000000000020','a0590000-0000-0000-0000-0000000000c1','Логопед',45,70000);
 
 insert into public.payers (id, center_id, full_name, phone) values
-  ('a0590000-0000-0000-0000-000000000030','a0590000-0000-0000-0000-0000000000c1','Родитель 0058','+996700005801');
+  ('a0590000-0000-0000-0000-000000000030','a0590000-0000-0000-0000-0000000000c1','Родитель 0059','+996700005801');
 
 insert into public.students (id, center_id, full_name, payer_id, primary_teacher_id) values
-  ('a0590000-0000-0000-0000-000000000040','a0590000-0000-0000-0000-0000000000c1','Ребёнок 0058','a0590000-0000-0000-0000-000000000030','a0590000-0000-0000-0000-000000000010');
+  ('a0590000-0000-0000-0000-000000000040','a0590000-0000-0000-0000-0000000000c1','Ребёнок 0059','a0590000-0000-0000-0000-000000000030','a0590000-0000-0000-0000-000000000010');
 
 -- Живое занятие — граница clinical_teacher_sees для специалиста-1.
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at, status) values
@@ -206,16 +206,26 @@ select lives_ok(
 select is(
   (select count(*)::int from public.diagnostic_clinical_forms where diagnostic_id = (select id from t0059_d) and deleted_at is null), 1,
   'Снятая форма погашена, живая одна');
+
+-- Погашенная строка физически на месте, но обе permissive-политики
+-- (tenant_admin из apply_tenant_rls, *_teacher_read) фильтруют deleted_at is
+-- null — authenticated её не увидит даже как owner; читаем как postgres.
+reset role;
 select is(
   (select count(*)::int from public.diagnostic_clinical_forms where diagnostic_id = (select id from t0059_d)), 2,
   '«Ничего не удаляется» — строка осталась с deleted_at');
+select public.tests_claims('a0590000-0000-0000-0000-000000000001','a0590000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 
 select lives_ok(
   $q$ select public.update_diagnostic((select id from t0059_d), null, null, null, null, null, array['dysarthria_erased', 'stuttering'], null) $q$,
   'Возврат снятой формы проходит (частичный unique, не 23505)');
+reset role;
 select is(
   (select count(*)::int from public.diagnostic_clinical_forms where diagnostic_id = (select id from t0059_d) and form_code = 'stuttering'), 2,
   'Возвращённая форма — вторая строка, история сохранена (Р2)');
+select public.tests_claims('a0590000-0000-0000-0000-000000000001','a0590000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 
 select lives_ok(
   $q$ select public.update_diagnostic((select id from t0059_d), null, null, null, null, null, '{}'::text[], '[]'::jsonb) $q$,

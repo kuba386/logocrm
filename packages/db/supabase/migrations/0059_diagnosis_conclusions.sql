@@ -211,7 +211,7 @@ alter table public.diagnostics
   add column if not exists conclusion_code text references public.speech_conclusions (code);
 
 comment on column public.diagnostics.conclusion_code is
-  'Заключение из справочника speech_conclusions (0059). NULL имеет ДВА смысла — «запись старше 0058» и «пока не определено»; «речь в норме» — код norm, не NULL. Отчёт по нозологии обязан показывать NULL отдельной строкой «не заполнено», а не складывать с остальными (0059 Р11). Фаза 2 (подсказка из speech_areas) пишет в отдельную таблицу, не сюда (Р12).';
+  'Заключение из справочника speech_conclusions (0059). NULL имеет ДВА смысла — «запись старше 0059» и «пока не определено»; «речь в норме» — код norm, не NULL. Отчёт по нозологии обязан показывать NULL отдельной строкой «не заполнено», а не складывать с остальными (0059 Р11). Фаза 2 (подсказка из speech_areas) пишет в отдельную таблицу, не сюда (Р12).';
 
 create index if not exists diagnostics_conclusion_idx
   on public.diagnostics (center_id, conclusion_code) where deleted_at is null;
