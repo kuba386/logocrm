@@ -5,8 +5,8 @@ import { supabaseEnv } from '@/lib/env'
 
 // /api/health — для внешнего монитора без сессии (docs/OBSERVABILITY_SETUP.md):
 // без этого он получал бы 307 на /login, и keyword-проверка «"ok":true»
-// никогда бы не проходила.
-const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite', '/api/health']
+// никогда бы не проходила. /book — публичная витрина записи (0057).
+const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite', '/book', '/api/health']
 
 
 /**

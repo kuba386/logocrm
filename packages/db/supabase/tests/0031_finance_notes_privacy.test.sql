@@ -35,7 +35,7 @@ select set_eq(
     ('subscription_freezes:tenant_registrar_select'), ('payments:tenant_registrar_select'),
     ('installment_plans:tenant_registrar_select'), ('installments:tenant_registrar_select'),
     ('student_payers:tenant_registrar_select'), ('financial_periods:tenant_registrar_select'),
-    ('lesson_participants:tenant_registrar_select'),
+    ('lesson_participants:tenant_registrar_select'), ('booking_requests:tenant_registrar_select'),
     ('teacher_rates:tenant_finance_select'), ('teacher_rates:tenant_finance_insert'),
     ('expense_categories:tenant_finance_select'), ('expense_categories:tenant_finance_insert'), ('expense_categories:tenant_finance_update'),
     ('payment_sources:tenant_finance_select'), ('payment_sources:tenant_finance_insert'), ('payment_sources:tenant_finance_update'),

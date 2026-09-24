@@ -319,6 +319,112 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_requests: {
+        Row: {
+          center_id: string
+          child_name: string
+          converted_lesson_id: string | null
+          converted_student_id: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decline_reason: string | null
+          deleted_at: string | null
+          ends_at: string
+          id: string
+          parent_name: string
+          parent_phone: string
+          service_id: string
+          starts_at: string
+          status: string
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id: string
+          child_name: string
+          converted_lesson_id?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decline_reason?: string | null
+          deleted_at?: string | null
+          ends_at: string
+          id?: string
+          parent_name: string
+          parent_phone: string
+          service_id: string
+          starts_at: string
+          status?: string
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          child_name?: string
+          converted_lesson_id?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decline_reason?: string | null
+          deleted_at?: string | null
+          ends_at?: string
+          id?: string
+          parent_name?: string
+          parent_phone?: string
+          service_id?: string
+          starts_at?: string
+          status?: string
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_requests_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_requests_converted_lesson_id_fkey"
+            columns: ["converted_lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_requests_converted_student_id_fkey"
+            columns: ["converted_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_requests_converted_student_id_fkey"
+            columns: ["converted_student_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_requests_service_fk"
+            columns: ["service_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "booking_requests_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       center_digest_runs: {
         Row: {
           center_id: string
@@ -3805,6 +3911,31 @@ export type Database = {
       }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
+      booking_center_info: {
+        Args: { p_slug: string }
+        Returns: {
+          center_name: string
+          is_open: boolean
+          services: Json
+          teachers: Json
+          timezone: string
+        }[]
+      }
+      booking_published: { Args: { p_center_id: string }; Returns: boolean }
+      booking_request_payer_match: {
+        Args: { p_request_id: string }
+        Returns: {
+          payer_id: string
+          payer_name: string
+        }[]
+      }
+      booking_teacher_busy: {
+        Args: { p_date: string; p_slug: string; p_teacher_id: string }
+        Returns: {
+          ends_at: string
+          starts_at: string
+        }[]
+      }
       bot_balance: {
         Args: { p_chat_id: number }
         Returns: {
@@ -3915,6 +4046,13 @@ export type Database = {
         Args: { p?: Json; p_lesson_id: string }
         Returns: undefined
       }
+      confirm_booking_request: {
+        Args: { p_payer_id?: string; p_request_id: string }
+        Returns: {
+          lesson_id: string
+          student_id: string
+        }[]
+      }
       confirm_lesson: {
         Args: { p_chat_id: number; p_lesson_id: string; p_student_id: string }
         Returns: boolean
@@ -4024,6 +4162,10 @@ export type Database = {
         Returns: {
           center_count: number
         }[]
+      }
+      decline_booking_request: {
+        Args: { p_reason?: string; p_request_id: string }
+        Returns: undefined
       }
       emit_clinical_event: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
@@ -4215,6 +4357,15 @@ export type Database = {
           p_text?: string
         }
         Returns: boolean
+      }
+      notification_front_desk_targets: {
+        Args: { p_center_id: string; p_event_type: string }
+        Returns: {
+          channel: string
+          chat_id: number
+          template_text: string
+          user_id: string
+        }[]
       }
       notification_homework_recipients: {
         Args: { p_center_id: string; p_homework_id: string }
@@ -4581,6 +4732,7 @@ export type Database = {
           starts_at: string
         }[]
       }
+      set_booking_enabled: { Args: { p_enabled: boolean }; Returns: undefined }
       set_default_attendance_status: {
         Args: { p_id: string }
         Returns: undefined
@@ -4687,6 +4839,18 @@ export type Database = {
           primary_teacher_id: string
           status: string
         }[]
+      }
+      submit_booking_request: {
+        Args: {
+          p_child_name: string
+          p_parent_name: string
+          p_parent_phone: string
+          p_service_id: string
+          p_slug: string
+          p_starts_at: string
+          p_teacher_id: string
+        }
+        Returns: string
       }
       submit_homework: {
         Args: { p_id: string; p_parent_note?: string }
