@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { toAppError } from '@/lib/errors'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AddStudentDialog } from './add-student-dialog'
 import { StudentsTable, type StudentRowView } from './students-table'
@@ -101,6 +102,28 @@ export default async function StudentsPage() {
       }))
   }
 
+  // 0059 Р10: последнее заключение — только через RPC с ролью внутри.
+  // diagnostics закрыта бухгалтеру и стойке, а специалисту — только свои:
+  // embed отдал бы им пустой массив без ошибки, и фильтр в браузере считал
+  // бы по неполным данным. Бухгалтеру не запрашиваем вовсе (0031 Р2).
+  const conclusionByStudent = new Map<string, { code: string; name: string }>()
+  let conclusionsError: string | null = null
+  if (!isFinance) {
+    const { data: conclusionRows, error } = await supabase.rpc('student_conclusions')
+    if (error) {
+      // Отказ RPC — не «ни у кого нет диагнозов»: показываем, а не прочерки.
+      conclusionsError = toAppError(error, 'Не удалось загрузить заключения').message
+    }
+    for (const row of conclusionRows ?? []) {
+      conclusionByStudent.set(row.student_id, { code: row.conclusion_code, name: row.conclusion_name })
+    }
+  }
+  const studentsWithConclusions = students.map((s) => ({
+    ...s,
+    conclusionCode: conclusionByStudent.get(s.id)?.code ?? null,
+    conclusionName: conclusionByStudent.get(s.id)?.name ?? null,
+  }))
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -123,8 +146,13 @@ export default async function StudentsPage() {
           <CardDescription>Всего: {students.length}</CardDescription>
         </CardHeader>
         <CardContent>
+          {conclusionsError ? (
+            <p role="alert" className="mb-3 text-sm text-destructive">
+              {conclusionsError}
+            </p>
+          ) : null}
           <StudentsTable
-            students={students}
+            students={studentsWithConclusions}
             teachers={teacherOptions}
             canSeeContacts={canSeeContacts}
           />

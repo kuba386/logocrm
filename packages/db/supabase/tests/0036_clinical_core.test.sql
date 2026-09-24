@@ -436,8 +436,8 @@ reset role;
 
 select is(
   pg_get_function_result('public.student_diagnostics_brief(uuid)'::regprocedure),
-  'TABLE(id uuid, date date, conclusion text, teacher_name text)',
-  'В диагностике для родителя нет колонок sounds и speech_areas — физически');
+  'TABLE(id uuid, date date, conclusion text, teacher_name text, conclusion_name text)',
+  'В диагностике для родителя нет колонок sounds и speech_areas — физически (0058: плюс conclusion_name, без форм и направлений)');
 
 select is(
   pg_get_function_result('public.student_notes_brief(uuid)'::regprocedure),

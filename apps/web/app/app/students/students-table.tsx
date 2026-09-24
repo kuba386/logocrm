@@ -19,6 +19,9 @@ export type StudentRowView = {
   payerName: string | null
   /** Только для владельца и администратора: специалисту телефон не приходит с сервера. */
   payerPhone: string | null
+  /** Последнее заключение из student_conclusions() (0059); бухгалтеру не приходит. */
+  conclusionCode?: string | null
+  conclusionName?: string | null
 }
 
 export function StudentsTable({
@@ -33,6 +36,16 @@ export function StudentsTable({
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
   const [teacherId, setTeacherId] = useState('')
+  const [conclusion, setConclusion] = useState('')
+
+  // Варианты фильтра — только те заключения, что реально есть в списке.
+  const conclusionOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const s of students) {
+      if (s.conclusionCode && s.conclusionName) seen.set(s.conclusionCode, s.conclusionName)
+    }
+    return [...seen.entries()].map(([code, name]) => ({ code, name }))
+  }, [students])
 
   const filtered = useMemo(() => {
     const trimmed = query.trim().toLowerCase()
@@ -41,6 +54,7 @@ export function StudentsTable({
     return students.filter((student) => {
       if (status && student.status !== status) return false
       if (teacherId && student.teacherId !== teacherId) return false
+      if (conclusion && student.conclusionCode !== conclusion) return false
       if (!trimmed) return true
 
       if (student.fullName.toLowerCase().includes(trimmed)) return true
@@ -53,7 +67,7 @@ export function StudentsTable({
 
       return false
     })
-  }, [students, query, status, teacherId, canSeeContacts])
+  }, [students, query, status, teacherId, conclusion, canSeeContacts])
 
   return (
     <div className="space-y-4">
@@ -84,6 +98,20 @@ export function StudentsTable({
             ))}
           </Select>
         ) : null}
+        {conclusionOptions.length > 0 ? (
+          <Select
+            value={conclusion}
+            onChange={(event) => setConclusion(event.target.value)}
+            className="max-w-[260px]"
+          >
+            <option value="">Все заключения</option>
+            {conclusionOptions.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
       </div>
 
       {filtered.length === 0 ? (
@@ -99,6 +127,7 @@ export function StudentsTable({
               <TableHead>Специалист</TableHead>
               <TableHead>Плательщик</TableHead>
               <TableHead>Статус</TableHead>
+              {conclusionOptions.length > 0 ? <TableHead>Заключение</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -129,6 +158,9 @@ export function StudentsTable({
                     {statusLabel(student.status)}
                   </span>
                 </TableCell>
+                {conclusionOptions.length > 0 ? (
+                  <TableCell className="text-sm text-muted-foreground">{student.conclusionName ?? '—'}</TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>

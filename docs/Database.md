@@ -699,6 +699,35 @@ subject_id)`: строка «получателей нет» имеет пуст
 условиях. Состав заданий родитель видит через
 `clinical_homework_visible` — иначе ДЗ приходит без названий упражнений.
 
+### Заключение как справочник (0059)
+
+`diagnostics.conclusion_code` → `speech_conclusions` (по Левиной: норма,
+ФНР, ФФНР, ОНР I–IV, ЗРР); клинические формы и направления — junction
+`diagnostic_clinical_forms` / `diagnostic_referrals` (форма
+`homework_exercises`: `deleted_at` + частичный unique — снятая форма
+остаётся историей). Три справочника **глобальные**, как `funnel_stages`,
+но с `is_active`: вывести код из оборота, не трогая строки, на которые он
+ссылается. Запись — только `record_diagnostic`/`update_diagnostic`
+(новые параметры в конце сигнатуры), `update_diagnostic` берёт `for
+update` по строке `diagnostics` до правки связок: без замка две сессии
+складывают два заключения в одно. `null` = «не передано», `'{}'`/`'[]'`
+= «очистить».
+
+Видимость связок — `clinical_diagnostic_visible(uuid)`: круг самой
+`diagnostics` (owner/admin, teacher через `clinical_teacher_sees`), **без
+родителя** — `clinical_visible_to_caller` его включает, и родитель
+прочитал бы «направлена к психиатру» прямым запросом. Родителю через
+`student_diagnostics_brief` уходит только `conclusion_name`.
+`archive_diagnostic` гасит связки каскадом: `tenant_admin` на junction
+фильтрует по своему `deleted_at`, не по диагностике.
+
+Фильтр «все с ОНР III» в списке учеников — `student_conclusions()`
+(роль внутри): `diagnostics` закрыта стойке и бухгалтеру, а embed отдал
+бы им пустой массив без ошибки. `export_center_lookups()` — справочники
+в выгрузку центра: коды в junction без них нечитаемы (0056, находка 11).
+`null` в `conclusion_code` — и «до 0059», и «не определено» (Р11).
+Фаза 2 (подсказка из `speech_areas`) пишет в отдельную таблицу, не сюда.
+
 **Исключение из «нет физически» — `student_goals_brief.trend` (0046).**
 Тренд по цели за 3 последних занятия (`regress`/`stagnant`/`growth`/
 `stable`, `null` только при <3 записей) закрыт от родителя не отсутствием
