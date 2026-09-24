@@ -447,6 +447,20 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ? await supabase.rpc('student_monthly_report', { p_student_id: id, p_month: initialReportMonth })
     : { data: null }
 
+  // 0059: справочники заключения — глобальные, читает любой authenticated;
+  // нужны панели для формы и для расшифровки кодов из junction.
+  const [{ data: conclusionRows }, { data: formLookupRows }, { data: referralLookupRows }] = await Promise.all([
+    supabase.from('speech_conclusions').select('code, name').eq('is_active', true).order('sort'),
+    supabase.from('clinical_forms').select('code, name').eq('is_active', true).order('sort'),
+    supabase.from('referral_targets').select('code, name').eq('is_active', true).order('sort'),
+  ])
+  const conclusionLookup = (conclusionRows ?? []).map((r) => ({ code: r.code, name: r.name }))
+  const formLookup = (formLookupRows ?? []).map((r) => ({ code: r.code, name: r.name }))
+  const referralLookup = (referralLookupRows ?? []).map((r) => ({ code: r.code, name: r.name }))
+  const conclusionNameByCode = new Map(conclusionLookup.map((r) => [r.code, r.name]))
+  const formNameByCode = new Map(formLookup.map((r) => [r.code, r.name]))
+  const referralNameByCode = new Map(referralLookup.map((r) => [r.code, r.name]))
+
   if (clinicalAllowed && isParent) {
     const [{ data: diagRows }, { data: goalRows }, { data: homeworkRows }, { data: noteRows }] = await Promise.all([
       supabase.rpc('student_diagnostics_brief', { p_student_id: id }),
@@ -469,6 +483,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         teacherName: d.teacher_name,
         sounds: {},
         speechAreas: {},
+        // Родителю — формулировка заключения из брифа; формы и направления
+        // сюда не приходят физически (0059 Р4).
+        conclusionName: d.conclusion_name,
+        clinicalForms: [],
+        referrals: [],
       })),
       goals: (goalRows ?? []).map((g) => ({
         id: g.id,
@@ -519,7 +538,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ] = await Promise.all([
       supabase
         .from('diagnostics')
-        .select('id, date, conclusion, sounds, speech_areas, teacher_id')
+        .select('id, date, conclusion, sounds, speech_areas, teacher_id, conclusion_code')
         .eq('student_id', id)
         .is('deleted_at', null)
         .order('date', { ascending: false }),
@@ -616,6 +635,39 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       exerciseIdsByHomework.set(row.homework_id, list)
     }
 
+    // 0059: формы и направления — отдельными запросами по id диагностик,
+    // не embed (у junction только составной FK — 0022 Р6). Видимость
+    // держит политика через clinical_diagnostic_visible.
+    const diagIds = (diagRows ?? []).map((d) => d.id)
+    const [{ data: formRows }, { data: referralRows }] = await Promise.all([
+      diagIds.length
+        ? supabase
+            .from('diagnostic_clinical_forms')
+            .select('diagnostic_id, form_code')
+            .in('diagnostic_id', diagIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [] as { diagnostic_id: string; form_code: string }[] }),
+      diagIds.length
+        ? supabase
+            .from('diagnostic_referrals')
+            .select('diagnostic_id, target_code, note')
+            .in('diagnostic_id', diagIds)
+            .is('deleted_at', null)
+        : Promise.resolve({ data: [] as { diagnostic_id: string; target_code: string; note: string | null }[] }),
+    ])
+    const formsByDiag = new Map<string, string[]>()
+    for (const row of formRows ?? []) {
+      const list = formsByDiag.get(row.diagnostic_id) ?? []
+      list.push(formNameByCode.get(row.form_code) ?? row.form_code)
+      formsByDiag.set(row.diagnostic_id, list)
+    }
+    const referralsByDiag = new Map<string, { target: string; note: string | null }[]>()
+    for (const row of referralRows ?? []) {
+      const list = referralsByDiag.get(row.diagnostic_id) ?? []
+      list.push({ target: referralNameByCode.get(row.target_code) ?? row.target_code, note: row.note })
+      referralsByDiag.set(row.diagnostic_id, list)
+    }
+
     clinicalSection = {
       diagnostics: (diagRows ?? []).map((d) => ({
         id: d.id,
@@ -624,6 +676,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         teacherName: d.teacher_id ? (teacherNameById.get(d.teacher_id) ?? null) : null,
         sounds: (d.sounds ?? {}) as Record<string, string>,
         speechAreas: (d.speech_areas ?? {}) as Record<string, number>,
+        conclusionName: d.conclusion_code ? (conclusionNameByCode.get(d.conclusion_code) ?? null) : null,
+        clinicalForms: formsByDiag.get(d.id) ?? [],
+        referrals: referralsByDiag.get(d.id) ?? [],
       })),
       goals: (goalRows ?? []).map((g) => ({
         id: g.id,
@@ -791,6 +846,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 studentId={id}
                 entries={clinicalSection.diagnostics}
                 canWrite={canWriteClinical}
+                conclusions={conclusionLookup}
+                forms={formLookup}
+                referralTargets={referralLookup}
               />
             </CardContent>
           </Card>

@@ -65,14 +65,22 @@ export async function exportCenterData(_prev: ExportState, _formData: FormData):
   // Дата в имени файла — из пояса центра (center_today()), не из UTC
   // браузера сервера: иначе вечером в Бишкеке файл называет вчерашним
   // числом сегодняшнюю выгрузку (CLAUDE.md: время в поясе центра).
-  const [{ data: center, error: centerError }, { data: tables, error: tablesError }, { data: today }] =
-    await Promise.all([
-      supabase.rpc('export_center_info'),
-      supabase.rpc('export_center_tables'),
-      supabase.rpc('center_today', {}),
-    ])
+  // lookups (0059 Р9): глобальные справочники без center_id — коды в
+  // junction-таблицах диагностики нечитаемы без них вне нашей базы.
+  const [
+    { data: center, error: centerError },
+    { data: tables, error: tablesError },
+    { data: lookups, error: lookupsError },
+    { data: today },
+  ] = await Promise.all([
+    supabase.rpc('export_center_info'),
+    supabase.rpc('export_center_tables'),
+    supabase.rpc('export_center_lookups'),
+    supabase.rpc('center_today', {}),
+  ])
   if (centerError) return { message: toAppError(centerError, t('plan', 'exportFailed')).message }
   if (tablesError || !tables) return { message: toAppError(tablesError, t('plan', 'exportFailed')).message }
+  if (lookupsError) return { message: toAppError(lookupsError, t('plan', 'exportFailed')).message }
 
   const result: Record<string, unknown> = {}
   for (const { table_name } of tables) {
@@ -86,7 +94,7 @@ export async function exportCenterData(_prev: ExportState, _formData: FormData):
   await supabase.rpc('record_center_export')
 
   return {
-    json: JSON.stringify({ generated_at: new Date().toISOString(), center, tables: result }, null, 2),
+    json: JSON.stringify({ generated_at: new Date().toISOString(), center, lookups, tables: result }, null, 2),
     filename: `logocrm-export-${today ?? new Date().toISOString().slice(0, 10)}.json`,
   }
 }

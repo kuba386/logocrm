@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { formatInTimeZone } from '@/lib/timezone'
 import { archiveDiagnostic, recordDiagnostic, type ClinicalState } from './clinical-actions'
 
 const SOUNDS = ['р', 'л', 'ш', 'ж', 'с', 'з', 'ц', 'ч', 'щ']
@@ -26,6 +27,8 @@ const SOUND_COLORS: Record<string, string> = {
   замена: 'bg-primary/10 text-primary',
 }
 
+export type Lookup = { code: string; name: string }
+
 export type DiagnosticEntry = {
   id: string
   date: string
@@ -33,18 +36,36 @@ export type DiagnosticEntry = {
   teacherName: string | null
   sounds: Record<string, string>
   speechAreas: Record<string, number>
+  /** Название из speech_conclusions (0059); родителю приходит только оно. */
+  conclusionName: string | null
+  /** Названия клинических форм; родителю — пусто (0059 Р4). */
+  clinicalForms: string[]
+  /** Направления «к кому + заметка»; родителю — пусто (0059 Р4). */
+  referrals: { target: string; note: string | null }[]
 }
 
 const initial: ClinicalState = { message: '' }
+
+// `date` — календарная дата центра, не момент: форматируем строку как
+// UTC-полдень в UTC, чтобы пояс браузера (западнее UTC) не сдвинул день.
+function dateLabel(date: string): string {
+  return formatInTimeZone(`${date}T12:00:00Z`, 'UTC', { day: 'numeric', month: 'long', year: 'numeric' })
+}
 
 export function DiagnosticsPanel({
   studentId,
   entries,
   canWrite,
+  conclusions,
+  forms,
+  referralTargets,
 }: {
   studentId: string
   entries: DiagnosticEntry[]
   canWrite: boolean
+  conclusions: Lookup[]
+  forms: Lookup[]
+  referralTargets: Lookup[]
 }) {
   const router = useRouter()
   const [formOpen, setFormOpen] = useState(false)
@@ -64,9 +85,24 @@ export function DiagnosticsPanel({
 
   return (
     <div className="space-y-4">
-      {/* Карта звуков последней записи — цветом, не только текстом. */}
       {latest ? (
         <div className="space-y-3">
+          {latest.conclusionName || latest.clinicalForms.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {latest.conclusionName ? (
+                <span className="rounded bg-primary/10 px-2 py-1 text-sm font-medium text-primary">
+                  {latest.conclusionName}
+                </span>
+              ) : null}
+              {latest.clinicalForms.map((name) => (
+                <span key={name} className="rounded bg-muted px-2 py-1 text-sm">
+                  {name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Карта звуков последней записи — цветом, не только текстом. */}
           <div className="flex flex-wrap gap-2">
             {SOUNDS.map((sound) => {
               const status = latest.sounds[sound] ?? ''
@@ -92,8 +128,14 @@ export function DiagnosticsPanel({
             </dl>
           ) : null}
           {latest.conclusion ? <p className="text-sm">{latest.conclusion}</p> : null}
+          {latest.referrals.length > 0 ? (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Направлен к: </span>
+              {latest.referrals.map((r) => (r.note ? `${r.target} (${r.note})` : r.target)).join(', ')}
+            </div>
+          ) : null}
           <p className="text-xs text-muted-foreground">
-            {new Date(latest.date).toLocaleDateString('ru-RU')}
+            {dateLabel(latest.date)}
             {latest.teacherName ? ` · ${latest.teacherName}` : ''}
           </p>
         </div>
@@ -109,9 +151,10 @@ export function DiagnosticsPanel({
               <li key={entry.id} className="flex items-start justify-between gap-2 border-t border-border pt-2">
                 <div>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(entry.date).toLocaleDateString('ru-RU')}
+                    {dateLabel(entry.date)}
                     {entry.teacherName ? ` · ${entry.teacherName}` : ''}
                   </p>
+                  {entry.conclusionName ? <p className="font-medium">{entry.conclusionName}</p> : null}
                   {entry.conclusion ? <p>{entry.conclusion}</p> : null}
                 </div>
                 {canWrite ? (
@@ -138,6 +181,31 @@ export function DiagnosticsPanel({
         formOpen ? (
           <form action={action} className="space-y-3 border-t border-border pt-4">
             <input type="hidden" name="studentId" value={studentId} />
+
+            <div className="space-y-1">
+              <Label htmlFor="conclusionCode">Заключение</Label>
+              <Select id="conclusionCode" name="conclusionCode" defaultValue="">
+                <option value="">— не указано —</option>
+                {conclusions.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Клиническая форма</Label>
+              <div className="grid grid-cols-2 gap-1 text-sm sm:grid-cols-3">
+                {forms.map((f) => (
+                  <label key={f.code} className="flex items-center gap-2">
+                    <input type="checkbox" name={`form_${f.code}`} />
+                    {f.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1">
               <Label>Карта звуков</Label>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -171,9 +239,32 @@ export function DiagnosticsPanel({
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="conclusion">Заключение</Label>
+              <Label htmlFor="conclusion">Уточнение к заключению</Label>
               <Textarea id="conclusion" name="conclusion" />
             </div>
+
+            <div className="space-y-1">
+              <Label>Направлен к специалисту</Label>
+              <p className="text-xs text-muted-foreground">
+                Не диагноз, а маршрут на дообследование — родителю не показывается, сообщите сами.
+              </p>
+              <div className="space-y-2 text-sm">
+                {referralTargets.map((r) => (
+                  <div key={r.code} className="flex flex-wrap items-center gap-2">
+                    <label className="flex w-36 items-center gap-2">
+                      <input type="checkbox" name={`referral_${r.code}`} />
+                      {r.name}
+                    </label>
+                    <Input
+                      name={`referral_note_${r.code}`}
+                      placeholder="заметка (до 500 символов)"
+                      className="h-8 max-w-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <FormError message={state.message} />
             <FormNotice message={state.notice} />
             <div className="flex gap-2">
