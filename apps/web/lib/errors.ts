@@ -78,6 +78,7 @@ const CHECK_MESSAGES: Record<string, string> = {
   installments_amount_positive: 'Сумма платежа рассрочки должна быть больше нуля',
   installment_plans_base_not_negative: 'Оплачено по абонементу не может быть отрицательным',
   installments_seq_positive: 'Номер платежа рассрочки начинается с единицы',
+  diagnostic_referrals_note_len: 'Заметка к направлению — не длиннее 500 символов',
 }
 
 /**

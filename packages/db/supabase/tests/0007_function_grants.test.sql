@@ -116,7 +116,8 @@ from unnest(array[
   'public.booking_center_info(text)',
   'public.booking_teacher_busy(text,uuid,date)',
   'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)',
-  'public.report_period_check(date,date)'
+  'public.report_period_check(date,date)',
+  'public.diagnostic_set_details(uuid,uuid,text[],jsonb)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -282,9 +283,12 @@ select set_eq(
     ('platform_centers()'),
     ('platform_summary()'),
     ('platform_create_center(text,text,text)'),
-    ('record_diagnostic(uuid,text,jsonb,jsonb,date,uuid)'),
-    ('update_diagnostic(uuid,text,jsonb,jsonb,date)'),
+    ('record_diagnostic(uuid,text,jsonb,jsonb,date,uuid,text,text[],jsonb)'),
+    ('update_diagnostic(uuid,text,jsonb,jsonb,date,text,text[],jsonb)'),
     ('archive_diagnostic(uuid)'),
+    ('clinical_diagnostic_visible(uuid)'),
+    ('student_conclusions()'),
+    ('export_center_lookups()'),
     ('create_goal(uuid,uuid,text,text,text,date)'),
     ('update_goal(uuid,text,text,text,uuid,date)'),
     ('set_goal_status(uuid,text)'),

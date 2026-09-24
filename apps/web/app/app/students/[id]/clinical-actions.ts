@@ -29,12 +29,35 @@ export async function recordDiagnostic(_prev: ClinicalState, formData: FormData)
     if (match && typeof value === 'string' && value) speechAreas[match[1]!] = Number(value)
   }
 
+  // 0059: заключение из справочника, клинические формы (чекбоксы),
+  // направления «к кому + заметка». Коды проверяет база (22023), здесь
+  // только сборка формы.
+  const conclusionCode = optional(formData, 'conclusionCode')
+  const clinicalForms: string[] = []
+  const referralTargets = new Set<string>()
+  for (const [key, value] of formData.entries()) {
+    const form = /^form_(.+)$/.exec(key)
+    if (form && value === 'on') clinicalForms.push(form[1]!)
+    const referral = /^referral_(?!note_)(.+)$/.exec(key)
+    if (referral && value === 'on') referralTargets.add(referral[1]!)
+    // Заметка без галочки — тоже направление: набранный текст не теряется.
+    const noteKey = /^referral_note_(.+)$/.exec(key)
+    if (noteKey && typeof value === 'string' && value.trim()) referralTargets.add(noteKey[1]!)
+  }
+  const referrals = [...referralTargets].map((target) => {
+    const note = optional(formData, `referral_note_${target}`)
+    return note ? { target, note } : { target }
+  })
+
   const supabase = await createClient()
   const { error } = await supabase.rpc('record_diagnostic', {
     p_student_id: studentId,
     p_conclusion: conclusion,
     p_sounds: sounds,
     p_speech_areas: speechAreas,
+    p_conclusion_code: conclusionCode,
+    p_clinical_forms: clinicalForms.length > 0 ? clinicalForms : undefined,
+    p_referrals: referrals.length > 0 ? referrals : undefined,
   })
 
   if (error) return toAppError(error, 'Не удалось записать диагностику')
