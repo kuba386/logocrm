@@ -3840,6 +3840,8 @@ export type Database = {
           expires_at: string | null
           full_name: string | null
           id: string | null
+          payer_id: string | null
+          payer_name: string | null
           phone: string | null
           role: string | null
           teacher_id: string | null
@@ -3852,6 +3854,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "invitations_teacher_fk"
@@ -3907,6 +3923,8 @@ export type Database = {
           full_name: string | null
           is_active: boolean | null
           joined_at: string | null
+          payer_id: string | null
+          payer_name: string | null
           role: string | null
           teacher_id: string | null
           user_id: string | null
@@ -3918,6 +3936,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "memberships_teacher_fk"
@@ -4286,12 +4318,15 @@ export type Database = {
         Args: {
           p_email?: string
           p_full_name?: string
+          p_payer_id?: string
           p_phone?: string
           p_role: string
           p_teacher_id?: string
         }
         Returns: {
           invitation_id: string
+          payer_created: boolean
+          payer_id: string
           teacher_id: string
           token: string
         }[]
@@ -4548,6 +4583,10 @@ export type Database = {
           p_teacher: string
         }
         Returns: Json
+      }
+      link_parent_payer: {
+        Args: { p_payer_id?: string; p_user_id: string }
+        Returns: undefined
       }
       link_telegram: {
         Args: { p_chat_id: number; p_code: string }

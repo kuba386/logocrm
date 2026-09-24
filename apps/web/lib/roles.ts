@@ -31,11 +31,13 @@ export function canPayments(role: string | null | undefined): boolean {
 /**
  * Роли, которые может выдавать текущий пользователь. Та же лестница, что в
  * change_member_role (0028): владелец — любую, администратор — только три
- * роли сотрудников. Здесь только подсказка меню; отказ приходит из базы.
+ * роли сотрудников. «Родитель» не назначается сменой роли ни у кого (0060):
+ * payer_id некому заполнить — родителя заводит приглашение с карточкой.
+ * Здесь только подсказка меню; отказ приходит из базы.
  */
 export function assignableRoles(actorRole: string): { value: string; label: string }[] {
   if (actorRole === 'owner') {
-    return ['owner', 'admin', 'teacher', 'registrar', 'finance', 'parent'].map((value) => ({
+    return ['owner', 'admin', 'teacher', 'registrar', 'finance'].map((value) => ({
       value,
       label: ROLE_LABELS[value]!,
     }))

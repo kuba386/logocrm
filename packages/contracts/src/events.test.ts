@@ -104,6 +104,47 @@ describe('события этапа 1', () => {
     if (event.type !== 'invitation.created') throw new Error('ожидался invitation.created')
     expect(event.payload.teacher_id).toBeNull()
   })
+
+  it('payer_id в invitation.created (0060): по умолчанию null, uuid проходит', () => {
+    const legacy = appEventSchema.parse({
+      type: 'invitation.created',
+      payload: {
+        center_id: '00000000-0000-0000-0000-0000000000c1',
+        invitation_id: '00000000-0000-0000-0000-0000000000e1',
+        role: 'teacher',
+      },
+    })
+    if (legacy.type !== 'invitation.created') throw new Error('ожидался invitation.created')
+    expect(legacy.payload.payer_id).toBeNull()
+
+    const parent = appEventSchema.parse({
+      type: 'invitation.created',
+      payload: {
+        center_id: '00000000-0000-0000-0000-0000000000c1',
+        invitation_id: '00000000-0000-0000-0000-0000000000e1',
+        role: 'parent',
+        teacher_id: null,
+        payer_id: '00000000-0000-0000-0000-0000000000d1',
+      },
+    })
+    if (parent.type !== 'invitation.created') throw new Error('ожидался invitation.created')
+    expect(parent.payload.payer_id).toBe('00000000-0000-0000-0000-0000000000d1')
+  })
+
+  it('разбирает membership.payer_linked (0060), включая отвязку с payer_id null', () => {
+    const event = appEventSchema.parse({
+      type: 'membership.payer_linked',
+      payload: {
+        center_id: '00000000-0000-0000-0000-0000000000c1',
+        user_id: '00000000-0000-0000-0000-0000000000a1',
+        payer_id: null,
+        previous_payer_id: '00000000-0000-0000-0000-0000000000d1',
+      },
+    })
+    if (event.type !== 'membership.payer_linked') throw new Error('ожидался membership.payer_linked')
+    expect(event.payload.payer_id).toBeNull()
+    expect(event.payload.previous_payer_id).toBe('00000000-0000-0000-0000-0000000000d1')
+  })
 })
 
 describe('контракт не расходится с миграциями', () => {

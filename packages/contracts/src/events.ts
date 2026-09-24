@@ -73,6 +73,18 @@ export const membershipRoleChangedSchema = z.object({
 })
 export type MembershipRoleChanged = z.infer<typeof membershipRoleChangedSchema>
 
+/** 0060: родителя привязали к карточке плательщика (или отвязали — payer_id null). */
+export const membershipPayerLinkedSchema = z.object({
+  type: z.literal('membership.payer_linked'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    user_id: z.string().uuid(),
+    payer_id: z.string().uuid().nullable(),
+    previous_payer_id: z.string().uuid().nullable(),
+  }),
+})
+export type MembershipPayerLinked = z.infer<typeof membershipPayerLinkedSchema>
+
 export const invitationCreatedSchema = z.object({
   type: z.literal('invitation.created'),
   payload: z.object({
@@ -80,6 +92,8 @@ export const invitationCreatedSchema = z.object({
     invitation_id: z.string().uuid(),
     role: invitableRoleSchema,
     teacher_id: z.string().uuid().nullable().default(null),
+    // 0060: карточка плательщика у приглашения родителя.
+    payer_id: z.string().uuid().nullable().default(null),
   }),
 })
 export type InvitationCreated = z.infer<typeof invitationCreatedSchema>
@@ -854,6 +868,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   membershipCreatedSchema,
   membershipRevokedSchema,
   membershipRoleChangedSchema,
+  membershipPayerLinkedSchema,
   invitationCreatedSchema,
   payerCreatedSchema,
   studentCreatedSchema,

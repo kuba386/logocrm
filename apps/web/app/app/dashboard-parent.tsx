@@ -32,13 +32,24 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
   const childIds = (children ?? []).map((c) => c.id).filter((v): v is string => Boolean(v))
 
   if (childIds.length === 0) {
+    // Три разных «пусто» (0060, Backlog 18.09.2026): аккаунт без карточки
+    // плательщика (администратор привязывает в «Сотрудниках»), карточка
+    // архивирована, карточка есть — детей к ней ещё не добавили. Раньше все
+    // три выглядели одинаково и неотличимо от «центр пока не завёл детей».
+    const { data: payerId } = await supabase.rpc('my_payer_id')
+    const { data: payer } = payerId
+      ? await supabase.from('payers').select('full_name').eq('id', payerId).maybeSingle()
+      : { data: null }
+    const text = !payerId
+      ? 'Ваш аккаунт ещё не привязан к карточке плательщика — попросите администратора центра привязать вас (Настройки → Сотрудники).'
+      : !payer
+        ? 'Карточка плательщика, к которой привязан ваш аккаунт, недоступна — обратитесь к администратору центра.'
+        : `К карточке «${payer.full_name}» пока не привязан ни один ребёнок — администратор добавит детей на карточке ученика.`
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Мои дети</h1>
         <Card>
-          <CardContent className="pt-6 text-sm text-muted-foreground">
-            Детей пока не привязано — обратитесь к администратору центра.
-          </CardContent>
+          <CardContent className="pt-6 text-sm text-muted-foreground">{text}</CardContent>
         </Card>
       </div>
     )

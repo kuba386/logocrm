@@ -140,9 +140,11 @@ select throws_ok(
   '23503', null, 'invitations_teacher_fk: специалист центра Б в приглашении центра А'
 );
 
+-- expires_at явно: с 0060 ссылка родителя живёт ≤ 3 дней (CHECK
+-- invitations_parent_ttl_check), дефолт таблицы — 7 — до FK не дошёл бы.
 select throws_ok(
-  $q$ insert into public.invitations (id, center_id, role, payer_id)
-      values ('30000000-0000-0000-0000-000000000007','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-00000000000b') $q$,
+  $q$ insert into public.invitations (id, center_id, role, payer_id, expires_at)
+      values ('30000000-0000-0000-0000-000000000007','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-00000000000b', now() + interval '3 days') $q$,
   '23503', null, 'invitations_payer_fk: плательщик центра Б в приглашении центра А (FK не существовал до 0021)'
 );
 
@@ -153,8 +155,8 @@ select lives_ok(
 );
 
 select lives_ok(
-  $q$ insert into public.invitations (id, center_id, role, payer_id)
-      values ('30000000-0000-0000-0000-000000000009','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-000000000001') $q$,
+  $q$ insert into public.invitations (id, center_id, role, payer_id, expires_at)
+      values ('30000000-0000-0000-0000-000000000009','cccccccc-0000-0000-0000-00000000000a','parent','dddddddd-0000-0000-0000-000000000001', now() + interval '3 days') $q$,
   'Приглашение со своим плательщиком проходит'
 );
 
