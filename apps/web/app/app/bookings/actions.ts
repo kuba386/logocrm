@@ -22,7 +22,7 @@ export async function confirmBooking(
   const supabase = await createClient()
   const { error } = await supabase.rpc('confirm_booking_request', {
     p_request_id: requestId,
-    p_payer_id: payerId,
+    p_payer_id: payerId ?? undefined,
   })
   if (error) return { message: toAppError(error, t('bookingQueue', 'actionFailed')).message }
 
@@ -35,7 +35,7 @@ export async function declineBooking(_prev: QueueState, formData: FormData): Pro
   const reason = String(formData.get('reason') ?? '') || null
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('decline_booking_request', { p_request_id: requestId, p_reason: reason })
+  const { error } = await supabase.rpc('decline_booking_request', { p_request_id: requestId, p_reason: reason ?? undefined })
   if (error) return { message: toAppError(error, t('bookingQueue', 'actionFailed')).message }
 
   revalidatePath('/app/bookings')
