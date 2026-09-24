@@ -3131,6 +3131,109 @@ export type Database = {
         }
         Relationships: []
       }
+      student_anamnesis: {
+        Row: {
+          apgar_note: string | null
+          babbling_age: string | null
+          birth_course: string | null
+          birth_number: number | null
+          center_id: string
+          collected_at: string | null
+          cooing_age: string | null
+          created_at: string
+          created_by: string | null
+          early_development: string | null
+          first_words_age: string | null
+          hearing_note: string | null
+          heredity: string | null
+          id: string
+          illnesses_injuries: string | null
+          notes: string | null
+          phrase_speech_age: string | null
+          pregnancy_course: string | null
+          pregnancy_number: number | null
+          student_id: string
+          upbringing_conditions: string | null
+          updated_at: string
+          updated_by: string | null
+          vision_note: string | null
+        }
+        Insert: {
+          apgar_note?: string | null
+          babbling_age?: string | null
+          birth_course?: string | null
+          birth_number?: number | null
+          center_id?: string
+          collected_at?: string | null
+          cooing_age?: string | null
+          created_at?: string
+          created_by?: string | null
+          early_development?: string | null
+          first_words_age?: string | null
+          hearing_note?: string | null
+          heredity?: string | null
+          id?: string
+          illnesses_injuries?: string | null
+          notes?: string | null
+          phrase_speech_age?: string | null
+          pregnancy_course?: string | null
+          pregnancy_number?: number | null
+          student_id: string
+          upbringing_conditions?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vision_note?: string | null
+        }
+        Update: {
+          apgar_note?: string | null
+          babbling_age?: string | null
+          birth_course?: string | null
+          birth_number?: number | null
+          center_id?: string
+          collected_at?: string | null
+          cooing_age?: string | null
+          created_at?: string
+          created_by?: string | null
+          early_development?: string | null
+          first_words_age?: string | null
+          hearing_note?: string | null
+          heredity?: string | null
+          id?: string
+          illnesses_injuries?: string | null
+          notes?: string | null
+          phrase_speech_age?: string | null
+          pregnancy_course?: string | null
+          pregnancy_number?: number | null
+          student_id?: string
+          upbringing_conditions?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vision_note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_anamnesis_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_anamnesis_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_anamnesis_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       student_payers: {
         Row: {
           center_id: string
@@ -4237,6 +4340,10 @@ export type Database = {
         Returns: boolean
       }
       clinical_role_allowed: { Args: { p_role: string }; Returns: boolean }
+      clinical_student_visible: {
+        Args: { p_student_id: string }
+        Returns: boolean
+      }
       clinical_teacher_sees: {
         Args: { p_student_id: string }
         Returns: boolean
@@ -5063,7 +5170,16 @@ export type Database = {
         Args: { p_id: string; p_status: string }
         Returns: undefined
       }
+      set_student_anamnesis: {
+        Args: {
+          p_expected_updated_at?: string
+          p_fields: Json
+          p_student_id: string
+        }
+        Returns: string
+      }
       slugify: { Args: { p_text: string }; Returns: string }
+      student_alive: { Args: { p_student_id: string }; Returns: boolean }
       student_attendance_brief: {
         Args: { p_from: string; p_student_id: string; p_to: string }
         Returns: {
