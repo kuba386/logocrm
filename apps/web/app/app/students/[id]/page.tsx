@@ -20,6 +20,7 @@ import {
   type SubscriptionView,
 } from './subscriptions-panel'
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
+import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
@@ -421,6 +422,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     notes: NoteEntry[]
   } | null = null
 
+  // Анамнез (0063) — рабочий материал специалиста, тот же класс, что
+  // sounds/speech_areas (ADR-005): родителю не видна ни в каком виде,
+  // поэтому отдельно от clinicalSection (тот делится с parent-веткой).
+  let anamnesis: AnamnesisEntry | null = null
+  const showAnamnesis = isAdmin || isTeacher
+
   // Дата заметки рендерится в поясе центра — та же дата, что уходит
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
@@ -718,6 +725,39 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  if (showAnamnesis) {
+    const { data: anamnesisRow } = await supabase
+      .from('student_anamnesis')
+      .select(
+        'updated_at, collected_at, pregnancy_number, birth_number, pregnancy_course, birth_course, apgar_note, early_development, cooing_age, babbling_age, first_words_age, phrase_speech_age, illnesses_injuries, heredity, upbringing_conditions, hearing_note, vision_note, notes',
+      )
+      .eq('student_id', id)
+      .maybeSingle()
+
+    if (anamnesisRow) {
+      anamnesis = {
+        updatedAt: anamnesisRow.updated_at,
+        collectedAt: anamnesisRow.collected_at,
+        pregnancyNumber: anamnesisRow.pregnancy_number,
+        birthNumber: anamnesisRow.birth_number,
+        pregnancyCourse: anamnesisRow.pregnancy_course,
+        birthCourse: anamnesisRow.birth_course,
+        apgarNote: anamnesisRow.apgar_note,
+        earlyDevelopment: anamnesisRow.early_development,
+        cooingAge: anamnesisRow.cooing_age,
+        babblingAge: anamnesisRow.babbling_age,
+        firstWordsAge: anamnesisRow.first_words_age,
+        phraseSpeechAge: anamnesisRow.phrase_speech_age,
+        illnessesInjuries: anamnesisRow.illnesses_injuries,
+        heredity: anamnesisRow.heredity,
+        upbringingConditions: anamnesisRow.upbringing_conditions,
+        hearingNote: anamnesisRow.hearing_note,
+        visionNote: anamnesisRow.vision_note,
+        notes: anamnesisRow.notes,
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -830,6 +870,18 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             >
               {subscriptionBadge}
             </span>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showAnamnesis ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Анамнез</CardTitle>
+            <CardDescription>История до первого приёма. Родителю не показывается.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AnamnesisPanel studentId={id} entry={anamnesis} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
       ) : null}
