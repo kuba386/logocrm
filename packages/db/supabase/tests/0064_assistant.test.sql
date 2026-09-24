@@ -189,8 +189,8 @@ reset role;
 
 select is(
   (select status || ':' || coalesce(intent, '-') || ':' || (usage_id is null)::text from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
-  'failed:-:true', 'r1 закрыта: failed, без намерения и без расхода');
-select like(
+  'failed:payments_summary:true', 'r1 закрыта: failed, намерение (что разобрала модель) записано, расхода нет');
+select alike(
   (select error from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
   'Неизвестная модель ассистента: gpt-5-turbo%', '…причина записана');
 select is(
