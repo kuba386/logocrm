@@ -90,6 +90,10 @@ const CHECK_MESSAGES: Record<string, string> = {
   student_articulation_tongue_mobility_check: 'Недопустимое значение подвижности языка',
   student_articulation_frenulum_check: 'Недопустимое значение подъязычной связки',
   student_articulation_notes_check: 'Заметка — не длиннее 2000 символов',
+  syllable_assessments_date_check: 'Дата обследования вне допустимого диапазона',
+  syllable_assessments_affected_classes_check: 'Недопустимый класс слоговой структуры или их слишком много',
+  syllable_assessments_error_types_check: 'Недопустимый тип ошибки или их слишком много',
+  syllable_assessments_conclusion_check: 'Заключение — не длиннее 2000 символов',
 }
 
 /**
