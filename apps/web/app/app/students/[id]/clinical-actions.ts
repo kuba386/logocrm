@@ -130,6 +130,53 @@ export async function setAnamnesis(_prev: ClinicalState, formData: FormData): Pr
   return { message: '', notice: 'Анамнез сохранён' }
 }
 
+// --- Артикуляционный аппарат (0065) ---------------------------------------------
+
+const ARTICULATION_ARRAY_FIELDS = ['lips_structure', 'teeth', 'soft_palate', 'tongue_structure']
+
+export async function setArticulation(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const expectedUpdatedAt = optional(formData, 'expectedUpdatedAt')
+
+  // Чекбоксы `lips_structure_<code>` и т.п. — тот же приём, что form_<code>
+  // в recordDiagnostic: список допустимых кодов не дублируется здесь,
+  // его держит только CHECK на колонке (0065 Р2).
+  const arrays: Record<string, string[]> = Object.fromEntries(ARTICULATION_ARRAY_FIELDS.map((f) => [f, []]))
+  for (const [key, value] of formData.entries()) {
+    if (value !== 'on') continue
+    for (const field of ARTICULATION_ARRAY_FIELDS) {
+      const prefix = `${field}_`
+      if (key.startsWith(prefix)) arrays[field]!.push(key.slice(prefix.length))
+    }
+  }
+
+  const fields = {
+    collected_at: strOrNull(formData, 'collectedAt'),
+    lips_structure: arrays.lips_structure,
+    lips_mobility: strOrNull(formData, 'lips_mobility'),
+    teeth: arrays.teeth,
+    bite: strOrNull(formData, 'bite'),
+    hard_palate: strOrNull(formData, 'hard_palate'),
+    soft_palate: arrays.soft_palate,
+    tongue_structure: arrays.tongue_structure,
+    tongue_mobility: strOrNull(formData, 'tongue_mobility'),
+    frenulum: strOrNull(formData, 'frenulum'),
+    notes: strOrNull(formData, 'notes'),
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('set_student_articulation', {
+    p_student_id: studentId,
+    p_fields: fields,
+    p_expected_updated_at: expectedUpdatedAt,
+  })
+
+  if (error) return toAppError(error, 'Не удалось сохранить осмотр')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Осмотр сохранён' }
+}
+
 // --- Цели ------------------------------------------------------------------------
 
 export async function createGoal(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
