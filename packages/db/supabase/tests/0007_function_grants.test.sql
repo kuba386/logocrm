@@ -290,6 +290,7 @@ select set_eq(
     ('clinical_diagnostic_visible(uuid)'),
     ('student_conclusions()'),
     ('export_center_lookups()'),
+    ('suggest_speech_conclusion(jsonb)'),
     ('create_goal(uuid,uuid,text,text,text,date)'),
     ('update_goal(uuid,text,text,text,uuid,date)'),
     ('set_goal_status(uuid,text)'),

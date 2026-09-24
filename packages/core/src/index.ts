@@ -52,3 +52,9 @@ export {
 } from './finance'
 export { FUNNEL_STAGES, allowedFunnelTransitions, type FunnelStage } from './funnel'
 export { toCsv, csvEscape, csvMoney, csvDate, type CsvCell } from './csv'
+export {
+  SPEECH_AREA_KEYS,
+  suggestSpeechConclusion,
+  type SpeechAreaKey,
+  type SpeechConclusionSuggestion,
+} from './nosology'
