@@ -117,6 +117,10 @@ from unnest(array[
   'public.booking_teacher_busy(text,uuid,date)',
   'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)',
   'public.report_period_check(date,date)',
+  'public.ai_model_rates()',
+  'public.assistant_intents_for(text)',
+  'public.center_ai_questions_used(uuid)',
+  'public.assistant_questions_reserved(uuid)',
   'public.diagnostic_set_details(uuid,uuid,text[],jsonb)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
@@ -157,6 +161,9 @@ select set_eq(
   $$ values
     ('accept_invitation(text)'),
     ('age_years(date)'),
+    ('assistant_begin()'),
+    ('assistant_finish(uuid,text,text,text,integer,integer,text)'),
+    ('assistant_quota()'),
     ('archive_attendance_status(uuid)'),
     ('archive_expense_category(uuid)'),
     ('archive_payment_source(uuid)'),
