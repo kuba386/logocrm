@@ -187,11 +187,14 @@ set local role authenticated;
 select throws_ok(
   $q$ select public.export_center_audit(current_date + 1, current_date) $q$,
   '22023', null, 'from > to отбивается');
+-- Верхняя граница — вчера, не today: весь фикстур-сетап файла тоже пишет
+-- audit_log (apply_audit) с at = now(), и current_date как верхняя граница
+-- захватывал бы этот шум наравне с намеренно вставленными строками.
 create temporary table t0056_audit as
-  select public.export_center_audit(current_date - 30, current_date) as a;
+  select public.export_center_audit(current_date - 10, current_date - 1) as a;
 select is(
   jsonb_array_length((select a from t0056_audit)), 1,
-  'export_center_audit за 30 дней: одна строка (students), invitations вычеркнута (Р2), 40-дневная — вне периода');
+  'export_center_audit за период: одна строка (students), invitations вычеркнута (Р2), 40-дневная — вне периода, сегодняшний фикстур-шум — тоже');
 select is(
   (select a from t0056_audit) -> 0 ->> 'table_name', 'students',
   'Оставшаяся строка — именно students, не invitations');
