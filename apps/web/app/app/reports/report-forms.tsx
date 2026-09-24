@@ -34,14 +34,18 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Скачивание — по смене nonce, не содержимого: повторная выгрузка того же
+ * периода даёт байт в байт тот же CSV, а файл пользователю нужен снова.
+ */
 function useDownload(state: ExportState) {
   const downloaded = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (state.csv && state.csv !== downloaded.current) {
-      downloaded.current = state.csv
+    if (state.csv && state.nonce && state.nonce !== downloaded.current) {
+      downloaded.current = state.nonce
       downloadCsv(state.csv, state.filename ?? 'logocrm-report.csv')
     }
-  }, [state.csv, state.filename])
+  }, [state.csv, state.filename, state.nonce])
 }
 
 /** Платежи и посещаемость — период «с … по». */

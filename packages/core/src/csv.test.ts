@@ -22,13 +22,17 @@ describe('csvEscape', () => {
   it('формула получает префикс — Excel не выполнит её (0058 Р8)', () => {
     expect(csvEscape('=HYPERLINK("http://evil")')).toBe(`"'=HYPERLINK(""http://evil"")"`)
     expect(csvEscape('+996700000001')).toBe("'+996700000001")
-    expect(csvEscape('-500')).toBe("'-500")
+    expect(csvEscape('-=cmd|calc')).toBe("'-=cmd|calc")
+    expect(csvEscape('-500 сом')).toBe("'-500 сом")
     expect(csvEscape('@mention')).toBe("'@mention")
     expect(csvEscape('\tтаб')).toBe("'\tтаб")
   })
 
-  it('числа — как есть', () => {
+  it('числа — как есть, отрицательные деньги остаются числом для СУММ', () => {
     expect(csvEscape(42)).toBe('42')
+    expect(csvEscape(-42)).toBe('-42')
+    expect(csvEscape('-500')).toBe('-500')
+    expect(csvEscape(csvMoney(-50000))).toBe('-500,00')
   })
 })
 

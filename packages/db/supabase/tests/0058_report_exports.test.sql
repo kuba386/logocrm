@@ -162,8 +162,10 @@ select is((select paid_time from t_pay where amount_tiyin = 5000), '23:30',
   'Время в строке — по поясу центра, не UTC');
 select is((select subscription_type from t_pay where amount_tiyin = 100000), '8 занятий',
   'Тип абонемента подставлен по платежу с subscription_id');
+-- SRF — в FROM, не в списке выборки: `select jsonb_object_keys(...) limit 1`
+-- отдал бы один ключ, а не все ключи одной строки (как в 0048).
 select is(
-  (select array_agg(k order by k) from (select jsonb_object_keys(to_jsonb(r)) k from t_pay r limit 1) x),
+  (select array_agg(k order by k) from (select to_jsonb(r) j from t_pay r limit 1) s, jsonb_object_keys(s.j) k),
   array['amount_tiyin','comment','kind','paid_on','paid_time','payer_name','payer_phone','source_name','student_name','subscription_type'],
   'Забор по колонкам платежей: ровно этот набор, notes/custom_fields нет (Р4)');
 select is(
@@ -222,6 +224,10 @@ select is(
 select is(
   (select lessons_debt_tiyin from t_debts where student_name = 'Ребёнок Два'), 30000,
   '…и это 300 сом из цены услуги: отметка без абонемента');
+select is(
+  (select array_agg(k order by k) from (select to_jsonb(r) j from t_debts r limit 1) s, jsonb_object_keys(s.j) k),
+  array['lessons_debt_tiyin','payer_name','payer_phone','student_name','student_status','subscriptions_unpaid_tiyin'],
+  'Забор по колонкам долгов: ровно этот набор');
 reset role;
 
 
@@ -239,6 +245,14 @@ select is((select total_tiyin from t_sum_before where teacher_name = 'Специ
 select is((select sum(amount_tiyin)::int from t_det_before where teacher_name = 'Специалист А'), 60000,
   'Детализация сходится со сводкой (неутверждённый месяц — calc_salary)');
 select is((select bool_or(approved) from t_det_before), false, 'Детализация помечена как предварительная');
+select is(
+  (select array_agg(k order by k) from (select to_jsonb(r) j from t_sum_before r limit 1) s, jsonb_object_keys(s.j) k),
+  array['adjustments_tiyin','approved','approved_on','calc_tiyin','teacher_name','total_tiyin'],
+  'Забор по колонкам сводки зарплаты: ровно этот набор');
+select is(
+  (select array_agg(k order by k) from (select to_jsonb(r) j from t_det_before r limit 1) s, jsonb_object_keys(s.j) k),
+  array['amount_tiyin','approved','lesson_date','lesson_price_tiyin','model','note','teacher_name'],
+  'Забор по колонкам детализации: имени ребёнка нет — finance не видит посещений (0031, В2)');
 
 insert into t_ins values ('run1', public.approve_salary('aaaaaaaa-0000-0000-0000-000000000581', (select m1 from t_month)));
 reset role;
@@ -260,7 +274,24 @@ select is((select bool_and(approved) from t_det_after where teacher_name = 'Сп
   '…и помечена как утверждённая');
 select is((select approved from t_sum_after where teacher_name = 'Специалист Б'), false,
   'Специалист Б без снимка — предварительный ноль');
+select is(
+  (select approved_on from t_sum_after where teacher_name = 'Специалист А'),
+  (select (approved_at at time zone 'Asia/Bishkek')::date from public.salary_runs where id = (select id from t_ins where name = 'run1')),
+  'approved_on — день утверждения по поясу центра');
 reset role;
+
+-- Пояс с большим сдвигом: дата утверждения следует за поясом центра, не за UTC.
+update public.centers set settings = settings || '{"timezone":"Pacific/Kiritimati"}'::jsonb
+ where id = 'cccccccc-0000-0000-0000-000000000058';
+select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-000000000058');
+set local role authenticated;
+select is(
+  (select approved_on from public.export_salary_summary((select m1 from t_month)) where teacher_name = 'Специалист А'),
+  (select (approved_at at time zone 'Pacific/Kiritimati')::date from public.salary_runs where id = (select id from t_ins where name = 'run1')),
+  'approved_on пересчитывается по текущему поясу центра (UTC+14), не по UTC');
+reset role;
+update public.centers set settings = settings || '{"timezone":"Asia/Bishkek"}'::jsonb
+ where id = 'cccccccc-0000-0000-0000-000000000058';
 
 
 -- 22-26. Посещаемость: только owner/admin, два специалиста, статус занятия (Р6) --------
@@ -277,7 +308,7 @@ select is((select paid_teacher_name from t_att where student_name = 'Ребён�
   'Кому оплачено — заморожено при отметке, замена не переписала (сверка с зарплатой, Р6)');
 select is((select lesson_status from t_att where student_name = 'Ребёнок Один'), 'done', 'Статус занятия — колонкой');
 select is(
-  (select array_agg(k order by k) from (select jsonb_object_keys(to_jsonb(r)) k from t_att r limit 1) x),
+  (select array_agg(k order by k) from (select to_jsonb(r) j from t_att r limit 1) s, jsonb_object_keys(s.j) k),
   array['deducted','group_name','is_present','lesson_date','lesson_status','lesson_time','paid_teacher_name',
         'pays_teacher','price_tiyin','service_name','status_name','student_name','teacher_name'],
   'Забор по колонкам посещаемости: attendance.comment отсутствует (0031/0044)');
@@ -326,7 +357,7 @@ reset role;
 select is(
   (select count(*)::int from public.events
     where center_id = 'cccccccc-0000-0000-0000-000000000058' and type = 'report.exported'),
-  8, 'Центр А: 8 успешных выгрузок = 8 событий (платежи ×2, долги ×1, сводка ×2, детализация ×2, посещаемость ×1); отказы событий не пишут');
+  9, 'Центр А: 9 успешных выгрузок = 9 событий (платежи ×2, долги ×1, сводка ×3, детализация ×2, посещаемость ×1); отказы событий не пишут');
 select is(
   (select count(*)::int from public.events
     where center_id = 'cccccccc-0000-0000-0000-000000000059' and type = 'report.exported'),

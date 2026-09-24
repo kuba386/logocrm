@@ -4260,7 +4260,6 @@ export type Database = {
           lesson_price_tiyin: number
           model: string
           note: string
-          student_name: string
           teacher_name: string
         }[]
       }
@@ -4269,7 +4268,7 @@ export type Database = {
         Returns: {
           adjustments_tiyin: number
           approved: boolean
-          approved_at: string
+          approved_on: string
           calc_tiyin: number
           teacher_name: string
           total_tiyin: number

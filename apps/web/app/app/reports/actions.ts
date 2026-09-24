@@ -7,7 +7,16 @@ import { toAppError } from '@/lib/errors'
 import { label, t } from '@/lib/messages'
 import { statusLabel } from '@/lib/students'
 
-export type ExportState = { message?: string; csv?: string; filename?: string }
+/**
+ * nonce — одноразовая метка успешной выгрузки: клиент скачивает файл по
+ * её смене, не по смене содержимого. Иначе повторная выгрузка того же
+ * периода (тот же CSV) не скачивалась бы, хотя событие в базе уже записано.
+ */
+export type ExportState = { message?: string; csv?: string; filename?: string; nonce?: string }
+
+function ok(csv: string, filename: string): ExportState {
+  return { csv, filename, nonce: crypto.randomUUID() }
+}
 
 /**
  * Выгрузка отчёта в CSV (0058). Строки и след (report.exported) — в SQL,
@@ -50,7 +59,7 @@ export async function exportReport(_prev: ExportState, formData: FormData): Prom
         csvDate(r.paid_on), r.paid_time, label('paymentKind', r.kind), csvMoney(r.amount_tiyin),
         r.payer_name, r.payer_phone, r.student_name, r.subscription_type, r.source_name, r.comment,
       ])
-      return { csv: toCsv(headers, rows), filename: `logocrm-payments-${req.from}_${req.to}.csv` }
+      return ok(toCsv(headers, rows), `logocrm-payments-${req.from}_${req.to}.csv`)
     }
     case 'salary_summary': {
       const { data, error } = await supabase.rpc('export_salary_summary', { p_month: req.month })
@@ -61,23 +70,25 @@ export async function exportReport(_prev: ExportState, formData: FormData): Prom
       ]
       const rows: CsvCell[][] = (data ?? []).map((r) => [
         r.teacher_name, csvMoney(r.calc_tiyin), csvMoney(r.adjustments_tiyin), csvMoney(r.total_tiyin),
-        r.approved, csvDate(r.approved_at),
+        r.approved, csvDate(r.approved_on),
       ])
-      return { csv: toCsv(headers, rows), filename: `logocrm-salary-summary-${req.month.slice(0, 7)}.csv` }
+      return ok(toCsv(headers, rows), `logocrm-salary-summary-${req.month.slice(0, 7)}.csv`)
     }
     case 'salary_details': {
       const { data, error } = await supabase.rpc('export_salary_details', { p_month: req.month })
       if (error) return { message: toAppError(error, t('reports', 'failed')).message }
       const headers = [
-        t('reports', 'colTeacher'), t('reports', 'colDate'), t('reports', 'colStudent'), t('reports', 'colModel'),
+        t('reports', 'colTeacher'), t('reports', 'colDate'), t('reports', 'colModel'),
         t('reports', 'colLessonPriceSom'), t('reports', 'colAccruedSom'), t('reports', 'colNote'), t('reports', 'colApproved'),
       ]
+      // Без имени ребёнка — как DetailsTable на /app/salary: finance не
+      // видит посещений (0031), а детализация по детям и есть посещения.
       const rows: CsvCell[][] = (data ?? []).map((r) => [
-        r.teacher_name, csvDate(r.lesson_date), r.student_name,
+        r.teacher_name, csvDate(r.lesson_date),
         r.model ? label('salary', `model_${r.model}`) : '',
         csvMoney(r.lesson_price_tiyin), csvMoney(r.amount_tiyin), r.note, r.approved,
       ])
-      return { csv: toCsv(headers, rows), filename: `logocrm-salary-details-${req.month.slice(0, 7)}.csv` }
+      return ok(toCsv(headers, rows), `logocrm-salary-details-${req.month.slice(0, 7)}.csv`)
     }
     case 'attendance': {
       const { data, error } = await supabase.rpc('export_attendance', { p_from: req.from, p_to: req.to })
@@ -93,7 +104,7 @@ export async function exportReport(_prev: ExportState, formData: FormData): Prom
         r.paid_teacher_name, r.student_name, r.service_name, r.group_name, r.status_name,
         r.is_present, r.deducted, r.pays_teacher, csvMoney(r.price_tiyin),
       ])
-      return { csv: toCsv(headers, rows), filename: `logocrm-attendance-${req.from}_${req.to}.csv` }
+      return ok(toCsv(headers, rows), `logocrm-attendance-${req.from}_${req.to}.csv`)
     }
     case 'debts': {
       const { data, error } = await supabase.rpc('export_debts')
@@ -106,7 +117,7 @@ export async function exportReport(_prev: ExportState, formData: FormData): Prom
         r.student_name, statusLabel(r.student_status), r.payer_name, r.payer_phone,
         csvMoney(r.lessons_debt_tiyin), csvMoney(r.subscriptions_unpaid_tiyin),
       ])
-      return { csv: toCsv(headers, rows), filename: `logocrm-debts-${stamp}.csv` }
+      return ok(toCsv(headers, rows), `logocrm-debts-${stamp}.csv`)
     }
   }
 }

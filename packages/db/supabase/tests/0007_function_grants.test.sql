@@ -115,7 +115,8 @@ from unnest(array[
   'public.notification_front_desk_targets(uuid,text)',
   'public.booking_center_info(text)',
   'public.booking_teacher_busy(text,uuid,date)',
-  'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)'
+  'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)',
+  'public.report_period_check(date,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 

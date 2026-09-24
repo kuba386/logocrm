@@ -180,7 +180,7 @@ create or replace function public.export_salary_summary(p_month date)
     adjustments_tiyin integer,
     total_tiyin       integer,
     approved          boolean,
-    approved_at       timestamptz
+    approved_on       date
   )
   language plpgsql
   security definer
@@ -188,6 +188,7 @@ create or replace function public.export_salary_summary(p_month date)
 as $$
 declare
   v_center uuid := public.current_center();
+  v_tz     text;
   v_month  date;
   v_rows   integer;
 begin
@@ -201,16 +202,19 @@ begin
     raise exception 'Укажите месяц' using errcode = '22023';
   end if;
   v_month := date_trunc('month', p_month)::date;
+  v_tz    := public.center_timezone(v_center);
 
   -- Тот же salary_summary, что на /app/salary: утверждённый месяц отдаёт
   -- замороженный total_tiyin снимка, неутверждённый — расчёт (Р5).
+  -- approved_on — день по поясу центра (Р10): утверждение в 02:00 по
+  -- Бишкеку в UTC ещё вчера, а в споре с сотрудником смотрят на эту дату.
   return query
     select t.full_name,
            ss.calc_tiyin,
            ss.adjustments_tiyin,
            ss.total_tiyin,
            ss.approved_run_id is not null,
-           ss.approved_at
+           (ss.approved_at at time zone v_tz)::date
       from public.salary_summary(v_month) ss
       join public.teachers t on t.id = ss.teacher_id
      order by t.full_name, t.id;
@@ -231,7 +235,6 @@ create or replace function public.export_salary_details(p_month date)
   returns table (
     teacher_name       text,
     lesson_date        date,
-    student_name       text,
     model              text,
     lesson_price_tiyin integer,
     amount_tiyin       integer,
@@ -262,11 +265,13 @@ begin
   -- Р5). Утверждённый месяц — снимок lines (то, что видел утверждавший),
   -- неутверждённый — calc_salary сейчас; иначе детализация могла бы
   -- разойтись со сводкой после правки отметки задним числом.
+  -- Имени ребёнка здесь нет намеренно: finance не видит посещений (0031,
+  -- В2), а «дата — ребёнок — сумма» за месяц и есть журнал посещений.
+  -- Экран /app/salary (DetailsTable) его тоже не показывает.
   begin
     return query
       select t.full_name,
              d.lesson_date,
-             st.full_name,
              d.model,
              d.lesson_price_tiyin,
              d.amount_tiyin,
@@ -286,15 +291,16 @@ begin
             from public.calc_salary(ss.teacher_id, v_month) c
            where ss.approved_run_id is null
         ) d
-        left join public.students st on st.id = d.student_id
-       order by t.full_name, d.lesson_date, st.full_name, d.student_id;
+       order by t.full_name, d.lesson_date, d.student_id;
+    -- Внутри блока, сразу за return query: за границей блока счёт строк
+    -- держится только на том, что release субтранзакции его не трогает.
+    get diagnostics v_rows = row_count;
   exception
     when sqlstate '22023' then
       -- calc_salary отбивает ставку с неизвестной моделью — в выгрузке «за
       -- всех» одна кривая ставка не должна ронять файл без объяснения.
       raise exception 'Не удалось собрать детализацию: %', sqlerrm using errcode = '22023';
   end;
-  get diagnostics v_rows = row_count;
 
   perform public.emit_event('report.exported',
     jsonb_build_object('report', 'salary_details',

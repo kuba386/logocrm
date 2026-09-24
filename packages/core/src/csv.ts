@@ -9,16 +9,22 @@ import { toSom } from './money'
  * Excel/LibreOffice: плательщик, записанный как «=HYPERLINK(...)», уведёт
  * контакты семей с машины бухгалтера мимо всей RLS. Такие ячейки получают
  * префикс «'» (0058 Р8) — читаемо и безопасно.
+ *
+ * Исключение — ячейка, которая целиком число («-500,00»: возврат, штраф):
+ * минус сам по себе формулу не образует, а с префиксом возвраты стали бы
+ * текстом и выпали из СУММ у бухгалтера — итог не сошёлся бы с
+ * cash_by_source ровно на сумму возвратов.
  */
 export type CsvCell = string | number | boolean | null | undefined
 
 const FORMULA_PREFIX = /^[=+\-@\t\r]/
+const PLAIN_NUMBER = /^-?\d+([.,]\d+)?$/
 
 export function csvEscape(value: CsvCell): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'boolean') return value ? 'да' : 'нет'
   let text = typeof value === 'number' ? String(value) : value
-  if (FORMULA_PREFIX.test(text)) text = `'${text}`
+  if (FORMULA_PREFIX.test(text) && !PLAIN_NUMBER.test(text)) text = `'${text}`
   if (/[";\r\n]/.test(text)) text = `"${text.replace(/"/g, '""')}"`
   return text
 }
