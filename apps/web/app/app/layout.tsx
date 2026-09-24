@@ -81,6 +81,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/app/debts', label: 'Долги', show: payments },
     { href: '/app/finance', label: 'Финансы', show: payments },
     { href: '/app/salary', label: 'Зарплата', show: finance },
+    // Выгрузки — тем же, кому положены деньги (can_finance, 0058); регистратор
+    // видит /app/finance, но файлы не выносит — решение владельца 24.09.2026.
+    { href: '/app/reports', label: 'Отчёты', show: finance },
     { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
     { href: '/app/notifications', label: 'Уведомления', show: isAdmin },
     { href: '/app/funnel', label: 'Воронка', show: isAdmin },

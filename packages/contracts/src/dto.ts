@@ -80,6 +80,24 @@ export type PayerRelation = z.infer<typeof payerRelationSchema>
 export const studentStatusSchema = z.enum(['active', 'paused', 'archived'])
 export type StudentStatus = z.infer<typeof studentStatusSchema>
 
+/** Отчёты для выгрузки в CSV (0058) — allow-list на вебе до любого обращения к базе. */
+export const exportReportSchema = z.enum(['payments', 'salary_summary', 'salary_details', 'attendance', 'debts'])
+export type ExportReport = z.infer<typeof exportReportSchema>
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Дата в формате ГГГГ-ММ-ДД')
+
+/**
+ * Запрос выгрузки: период — для платежей и посещаемости, месяц — для
+ * зарплаты, ничего — для долгов. Границы (не позже конца, не дольше года)
+ * проверяет SQL — здесь только форма, чтобы не ходить в базу с мусором.
+ */
+export const exportReportRequestSchema = z.discriminatedUnion('report', [
+  z.object({ report: z.enum(['payments', 'attendance']), from: isoDate, to: isoDate }),
+  z.object({ report: z.enum(['salary_summary', 'salary_details']), month: isoDate }),
+  z.object({ report: z.literal('debts') }),
+])
+export type ExportReportRequest = z.infer<typeof exportReportRequestSchema>
+
 /** Семь шагов воронки (0055) — совпадает с funnel_stages.code в базе. */
 export const funnelStageSchema = z.enum([
   'lead', 'contacted', 'consultation', 'assessment', 'trial', 'active', 'completed',

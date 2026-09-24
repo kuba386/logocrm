@@ -103,6 +103,12 @@ export default async function FinancePage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{t('finance', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('finance', 'subtitle')}</p>
+        {/* Выгрузка — только can_finance (0058): регистратор экран видит, файлы не выносит. */}
+        {isFinance(role) ? (
+          <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">
+            {t('reports', 'title')} →
+          </Link>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

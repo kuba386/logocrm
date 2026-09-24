@@ -4194,6 +4194,24 @@ export type Database = {
           subject_id: string
         }[]
       }
+      export_attendance: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          deducted: boolean
+          group_name: string
+          is_present: boolean
+          lesson_date: string
+          lesson_status: string
+          lesson_time: string
+          paid_teacher_name: string
+          pays_teacher: boolean
+          price_tiyin: number
+          service_name: string
+          status_name: string
+          student_name: string
+          teacher_name: string
+        }[]
+      }
       export_center_audit: {
         Args: { p_from: string; p_to: string }
         Returns: Json
@@ -4207,6 +4225,56 @@ export type Database = {
       }
       export_center_info: { Args: never; Returns: Json }
       export_center_table: { Args: { p_table: string }; Returns: Json }
+      export_debts: {
+        Args: never
+        Returns: {
+          lessons_debt_tiyin: number
+          payer_name: string
+          payer_phone: string
+          student_name: string
+          student_status: string
+          subscriptions_unpaid_tiyin: number
+        }[]
+      }
+      export_payments: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          amount_tiyin: number
+          comment: string
+          kind: string
+          paid_on: string
+          paid_time: string
+          payer_name: string
+          payer_phone: string
+          source_name: string
+          student_name: string
+          subscription_type: string
+        }[]
+      }
+      export_salary_details: {
+        Args: { p_month: string }
+        Returns: {
+          amount_tiyin: number
+          approved: boolean
+          lesson_date: string
+          lesson_price_tiyin: number
+          model: string
+          note: string
+          student_name: string
+          teacher_name: string
+        }[]
+      }
+      export_salary_summary: {
+        Args: { p_month: string }
+        Returns: {
+          adjustments_tiyin: number
+          approved: boolean
+          approved_at: string
+          calc_tiyin: number
+          teacher_name: string
+          total_tiyin: number
+        }[]
+      }
       export_center_tables: {
         Args: never
         Returns: {
