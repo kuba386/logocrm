@@ -66,12 +66,14 @@ select is(
        case when tg.tgtype & 2 > 0 and tg.tgtype & 1 > 0 then 'before-row:' else 'wrong:' end
        || case when tg.tgtype & 4 > 0 then 'i' else '' end || case when tg.tgtype & 16 > 0 then 'u' else '' end || case when tg.tgtype & 8 > 0 then 'd' else '' end,
        ',' order by tg.tgrelid::regclass::text)
-     from pg_trigger tg where tg.tgname = 'a00_readonly_guard' and tg.tgrelid in ('public.memberships'::regclass, 'public.invitations'::regclass)),
-  'before-row:i,before-row:i', 'memberships и invitations — BEFORE ROW guard только на insert (Р4)');
+     from pg_trigger tg where tg.tgname = 'a00_readonly_guard'
+      and tg.tgrelid in ('public.memberships'::regclass, 'public.invitations'::regclass, 'public.assistant_requests'::regclass)),
+  'before-row:i,before-row:i,before-row:i',
+  'memberships, invitations и assistant_requests (0064: закрытие начатой попытки идёт всегда) — BEFORE ROW guard только на insert (Р4)');
 
 select is(
   (select count(*)::int from pg_trigger tg where tg.tgname = 'a00_readonly_guard'
-     and tg.tgrelid not in ('public.memberships'::regclass, 'public.invitations'::regclass)
+     and tg.tgrelid not in ('public.memberships'::regclass, 'public.invitations'::regclass, 'public.assistant_requests'::regclass)
      and not (tg.tgtype & 2 > 0 and tg.tgtype & 1 > 0 and tg.tgtype & 4 > 0 and tg.tgtype & 16 > 0 and tg.tgtype & 8 > 0)),
   0, 'На остальных таблицах guard — BEFORE ROW на insert, update и delete (Р8/Р13)');
 
