@@ -174,6 +174,7 @@ select set_eq(
     ('create_student_with_payer(text,uuid,text,text,text,date,text,uuid,text,text,text)'),
     ('set_funnel_stage(uuid,text,text,boolean)'),
     ('funnel_summary(date,date)'),
+    ('global_search(text,integer)'),
     ('funnel_stuck(integer)'),
     ('current_center()'),
     ('emit_event(text,jsonb,uuid)'),

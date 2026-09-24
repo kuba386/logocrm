@@ -4543,6 +4543,20 @@ export type Database = {
         }[]
       }
       funnel_summary: { Args: { p_from: string; p_to: string }; Returns: Json }
+      global_search: {
+        Args: { p_limit?: number; p_query?: string }
+        Returns: {
+          extra: string
+          id: string
+          kind: string
+          rank: number
+          starts_at: string
+          status: string
+          subtitle: string
+          title: string
+          week_start: string
+        }[]
+      }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       installment_plans_cancel_live: {
         Args: { p_subscription_id: string }
