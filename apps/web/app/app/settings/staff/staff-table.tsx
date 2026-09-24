@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { changeMemberRole, linkParentPayer, revokeMembership, type StaffState } from './actions'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { assignableRoles, roleLabel } from '@/lib/roles'
 import { VacationDialog } from './vacation-dialog'
-import { PayerPicker, type PayerOption } from './invite-dialog'
+import type { PayerOption } from './invite-dialog'
 
 const initialState: StaffState = {}
 
@@ -36,6 +36,15 @@ function LinkPayerDialog({ member, payers }: { member: StaffMember; payers: Paye
   const [state, formAction] = useActionState(linkParentPayer, initialState)
   const orphan = !member.payerId
 
+  // После revalidatePath строка приходит с новой привязкой — селект следует
+  // за ней, а диалог закрывается по успеху, не висит со старым выбором.
+  useEffect(() => {
+    setPayerId(member.payerId ?? '')
+  }, [member.payerId])
+  useEffect(() => {
+    if (state.notice) setOpen(false)
+  }, [state])
+
   return (
     <>
       <Button variant={orphan ? 'default' : 'outline'} size="sm" onClick={() => setOpen(true)}>
@@ -48,7 +57,6 @@ function LinkPayerDialog({ member, payers }: { member: StaffMember; payers: Paye
         title={orphan ? 'Привязать плательщика' : 'Сменить плательщика'}
         description={`${member.email ?? 'Родитель'} увидит детей выбранной карточки и перестанет видеть остальных.`}
       >
-        {state.notice ? <FormNotice message={state.notice} /> : null}
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="userId" value={member.userId} />
           <div className="space-y-2">

@@ -76,9 +76,11 @@ export async function linkParentPayer(_prev: StaffState, formData: FormData): Pr
   }
 
   const supabase = await createClient()
+  // Отвязка — без ключа p_payer_id: у функции default null, PostgREST
+  // резолвит одноаргументный вызов (0060, ревью Б2).
   const { error } = await supabase.rpc('link_parent_payer', {
     p_user_id: parsed.data.userId,
-    p_payer_id: parsed.data.payerId ?? undefined,
+    ...(parsed.data.payerId ? { p_payer_id: parsed.data.payerId } : {}),
   })
 
   if (error) {

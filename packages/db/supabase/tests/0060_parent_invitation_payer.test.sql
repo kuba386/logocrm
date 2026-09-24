@@ -22,7 +22,8 @@ values
   ('00000000-0000-0000-0000-000000000000','55555555-5555-5555-5555-555555555555','authenticated','authenticated','newparent-0060@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','66666666-6666-6666-6666-666666666666','authenticated','authenticated','teacher-a-0060@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','77777777-7777-7777-7777-777777777777','authenticated','authenticated','parent2-0060@test.kg','','','','','','','',''),
-  ('00000000-0000-0000-0000-000000000000','88888888-8888-8888-8888-888888888888','authenticated','authenticated','orphan-0060@test.kg','','','','','','','','');
+  ('00000000-0000-0000-0000-000000000000','88888888-8888-8888-8888-888888888888','authenticated','authenticated','orphan-0060@test.kg','','','','','','','',''),
+  ('00000000-0000-0000-0000-000000000000','99999999-9999-9999-9999-999999999999','authenticated','authenticated','parent3-0060@test.kg','','','','','','','','');
 
 insert into public.centers (id, name, slug) values
   ('cccccccc-0000-0000-0000-000000000060','Центр А 0060','centr-a-0060'),
@@ -49,7 +50,9 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
   ('44444444-4444-4444-4444-444444444444','cccccccc-0000-0000-0000-000000000061','owner',   null, null),
   ('66666666-6666-6666-6666-666666666666','cccccccc-0000-0000-0000-000000000060','teacher', 'aaaaaaaa-0000-0000-0000-000000000601', null),
   -- «Ничей» родитель из прошлого — то, что чинит link_parent_payer.
-  ('88888888-8888-8888-8888-888888888888','cccccccc-0000-0000-0000-000000000060','parent',  null, null);
+  ('88888888-8888-8888-8888-888888888888','cccccccc-0000-0000-0000-000000000060','parent',  null, null),
+  -- Родитель, уже привязанный к P4, — для повторной ссылки к другой карточке (Р7).
+  ('99999999-9999-9999-9999-999999999999','cccccccc-0000-0000-0000-000000000060','parent',  null, 'dddddddd-0000-0000-0000-000000000604');
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -91,7 +94,7 @@ select throws_ok(
   'Номер живой карточки в любом формате — явный выбор, не молчаливая привязка (стандарт 0057)');
 select is(
   (select count(*)::int from public.payers where center_id = 'cccccccc-0000-0000-0000-000000000060'),
-  4, 'Ни один отказ карточку не завёл');
+  3, 'Ни один отказ карточку не завёл (видимых владельцу 3 — архивную tenant_admin не отдаёт; полный счёт — ниже, под postgres)');
 
 insert into t_ins
   select 'new', invitation_id, token, payer_id, payer_created
@@ -136,7 +139,34 @@ select is((select payer from t_ins where name = 'teacher'), null::uuid,
 insert into t_ins
   select 'p3', invitation_id, token, payer_id, payer_created
     from public.create_invitation('parent', null, null, null, null, 'dddddddd-0000-0000-0000-000000000603');
+-- Ссылка к P1 для родителя, уже привязанного к P4 (Р7).
+insert into t_ins
+  select 'p1_again', invitation_id, token, payer_id, payer_created
+    from public.create_invitation('parent', null, null, null, null, 'dddddddd-0000-0000-0000-000000000601');
+
+select throws_ok(
+  $q$ update public.invitations set expires_at = now() + interval '30 days'
+       where id = (select id from t_ins where name = 'p1') $q$,
+  '23514', null, 'Продлить ссылку родителя прямым PATCH expires_at (грант 0024) — 23514, срок держит CHECK, не if в функции');
+select lives_ok(
+  $q$ update public.invitations set expires_at = now()
+       where id = (select id from t_ins where name = 'p1_again') $q$,
+  '…а отменить (expires_at = now()) — можно');
+update public.invitations set expires_at = now() + interval '1 day'
+ where id = (select id from t_ins where name = 'p1_again');
 reset role;
+
+-- Администратор приглашает родителя так же, как владелец (симметрия).
+select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-000000000060');
+set local role authenticated;
+select lives_ok(
+  $q$ select * from public.create_invitation('parent', null, null, null, null, 'dddddddd-0000-0000-0000-000000000604') $q$,
+  'admin приглашает родителя к существующей карточке');
+reset role;
+
+select is(
+  (select count(*)::int from public.payers where center_id = 'cccccccc-0000-0000-0000-000000000060'),
+  5, 'Под postgres: 4 карточки фикстуры + 1 новая из приглашения — отказы карточек не завели');
 
 -- События — как postgres: RLS events не отдаёт строки участникам.
 select is(
@@ -192,6 +222,21 @@ reset role;
 select is(
   (select count(*)::int from public.memberships where user_id = '77777777-7777-7777-7777-777777777777'),
   0, '…и членство не создано');
+
+-- Р7: родитель, привязанный к P4, идёт по новой ссылке к P1.
+select public.tests_claims('99999999-9999-9999-9999-999999999999', null);
+set local role authenticated;
+select throws_ok(
+  $q$ select public.accept_invitation((select token from t_ins where name = 'p1_again')) $q$,
+  '22023', 'Вы уже привязаны к другой карточке плательщика — привязку меняет администратор в «Сотрудниках»',
+  'Ссылка к другой карточке для уже привязанного родителя — отказ, не молчаливый coalesce');
+reset role;
+select is(
+  (select payer_id from public.memberships where user_id = '99999999-9999-9999-9999-999999999999'),
+  'dddddddd-0000-0000-0000-000000000604', '…привязка не изменилась');
+select is(
+  (select accepted_at from public.invitations where id = (select id from t_ins where name = 'p1_again')),
+  null::timestamptz, '…и приглашение не помечено принятым');
 
 
 -- 15-17. change_member_role: в parent нельзя, из parent — без payer_id -------------------------
@@ -273,8 +318,8 @@ reset role;
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-000000000060');
 set local role authenticated;
 select lives_ok(
-  $q$ select public.link_parent_payer('88888888-8888-8888-8888-888888888888', null) $q$,
-  'owner: отвязать (null)');
+  $q$ select public.link_parent_payer('88888888-8888-8888-8888-888888888888') $q$,
+  'owner: отвязать — вызов без второго аргумента, как шлёт клиент без ключа (default null)');
 reset role;
 select is(
   (select payer_id from public.memberships where user_id = '88888888-8888-8888-8888-888888888888'),
@@ -304,6 +349,10 @@ select is(
   (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'create_invitation'),
   1, 'Старой 5-аргументной сигнатуры нет — одна create_invitation');
+select is(
+  (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'link_parent_payer'),
+  1, 'link_parent_payer — одна сигнатура с default, а не перегрузка');
 select ok(
   not has_table_privilege('anon', 'public.staff_view', 'SELECT')
   and not has_table_privilege('anon', 'public.pending_invitations_view', 'SELECT'),

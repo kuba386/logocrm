@@ -47,13 +47,20 @@
 --   Р1. Срок parent-приглашения — 3 дня, не 7: с этой миграции ссылка
 --       открывает клинические записи конкретной семьи. Сверки email/телефона
 --       принявшего нет — у родителей на момент приглашения email часто нет;
---       короче срок + текст «ссылка личная» в форме.
+--       короче срок + текст «ссылка личная» в форме. Срок держит CHECK
+--       invitations_parent_ttl_check, не if в функции: прямой PATCH expires_at
+--       (грант 0024) иначе продлил бы ссылку.
+--   Р7. accept_invitation для участника, уже привязанного к ДРУГОЙ карточке,
+--       — отказ 22023, не coalesce: новая ссылка «к правильному плательщику»
+--       иначе отвечала бы успехом, ничего не меняя.
 --   Р2. Телефон в invitations.phone у родителя — нормализованный телефон
 --       карточки плательщика (и при выборе существующей, и при создании):
 --       контакт в «Ожидающих приглашениях» и в карточке — один.
---   Р3. Отказ «телефон уже есть» — 22023, не 23505: общий разбор ошибок
---       (lib/errors.ts) для 23505 ищет имя констрейнта в тексте, у
---       собственного raise его нет — русский текст потерялся бы.
+--   Р3. Отказ «телефон уже есть» — 22023, не 23505: 23505 в общем разборе
+--       ошибок (lib/errors.ts) зарезервирован под нативные уникальные
+--       индексы и разбирается по имени констрейнта; собственный raise с этим
+--       кодом читался бы как «такая запись уже есть» и терял бы подсказку
+--       «выберите из списка».
 --   Р4. Гонка «предпроверка → insert» ловится exception unique_violation
 --       с тем же текстом — иначе наружу уйдёт голый текст индекса.
 --   Р5. В замороженном центре (0050) insert в payers под readonly-guard:
@@ -65,7 +72,19 @@
 --
 -- Ревью плана (architect, 24.09.2026): 15 находок, все учтены выше.
 
--- 1. Инвариант --------------------------------------------------------------------------
+-- 1. Висящие приглашения без карточки — протухают -------------------------------------------
+
+-- ДО констрейнта: NOT VALID отключает только сканирование истории, а любой
+-- update исторической строки проверяется в полную силу — этот update и есть
+-- такие строки (ревью написанного SQL, Б1: в CI база пустая и не заметила бы).
+update public.invitations
+   set expires_at = now()
+ where role = 'parent'
+   and payer_id is null
+   and accepted_at is null
+   and expires_at > now();
+
+-- 2. Инварианты --------------------------------------------------------------------------
 
 alter table public.invitations
   drop constraint if exists invitations_parent_payer_check;
@@ -76,14 +95,16 @@ alter table public.invitations
 comment on constraint invitations_parent_payer_check on public.invitations is
   'Родитель приглашается только к карточке плательщика (0060). NOT VALID: исторические строки без payer_id остаются, новые не проходят.';
 
--- 2. Висящие приглашения без карточки — протухают ------------------------------------------
+-- Р1 держится не на if в функции: у owner/admin есть update (expires_at) на
+-- invitations (0024), прямой PATCH продлил бы ссылку на семью на год.
+alter table public.invitations
+  drop constraint if exists invitations_parent_ttl_check;
+alter table public.invitations
+  add constraint invitations_parent_ttl_check
+  check (role <> 'parent' or expires_at <= created_at + interval '3 days') not valid;
 
-update public.invitations
-   set expires_at = now()
- where role = 'parent'
-   and payer_id is null
-   and accepted_at is null
-   and expires_at > now();
+comment on constraint invitations_parent_ttl_check on public.invitations is
+  'Ссылка родителя живёт не дольше 3 дней от выдачи (0060, Р1) — отмена (expires_at = now()) проходит, продление нет.';
 
 
 -- 3. create_invitation — плательщик для родителя ---------------------------------------------
@@ -156,7 +177,10 @@ begin
     v_expires := now() + interval '3 days';
 
     if p_payer_id is not null then
-      select p.id, p.phone into v_payer, v_phone
+      -- Карточки, заведённые прямым insert, хранят номер как ввели —
+      -- в приглашение кладём нормализованный (Р2), сырой только если
+      -- нормализовать нечего.
+      select p.id, coalesce(public.normalize_kg_phone(p.phone), p.phone) into v_payer, v_phone
         from public.payers p
        where p.id = p_payer_id and p.center_id = v_center and p.deleted_at is null;
       if not found then
@@ -274,6 +298,15 @@ begin
       using errcode = '23505';
   end if;
 
+  -- 0060: coalesce ниже молча оставил бы прежнюю карточку — новая ссылка «к
+  -- правильному плательщику» отвечала бы успехом, а родитель продолжал бы
+  -- видеть чужих детей. Явный отказ, как для роли выше.
+  if found and v_existing.payer_id is not null and v_inv.payer_id is not null
+     and v_existing.payer_id <> v_inv.payer_id then
+    raise exception 'Вы уже привязаны к другой карточке плательщика — привязку меняет администратор в «Сотрудниках»'
+      using errcode = '22023';
+  end if;
+
   if found then
     update public.memberships
        set teacher_id = coalesce(teacher_id, v_inv.teacher_id),
@@ -384,7 +417,9 @@ grant  execute on function public.change_member_role(uuid, text) to authenticate
 
 -- 6. link_parent_payer — привязать / перепривязать / отвязать --------------------------------
 
-create or replace function public.link_parent_payer(p_user_id uuid, p_payer_id uuid)
+-- default null: отвязка не должна зависеть от того, как клиент сериализует
+-- пустое значение (PostgREST без ключа ищет одноаргументную сигнатуру).
+create or replace function public.link_parent_payer(p_user_id uuid, p_payer_id uuid default null)
   returns void
   language plpgsql
   security definer

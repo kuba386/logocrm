@@ -99,7 +99,7 @@ export default async function StaffPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Сотрудники</h1>
           <p className="text-sm text-muted-foreground">
-            Доступ выдаётся по ссылке-приглашению. Ссылка действует 7 дней.
+            Доступ выдаётся по ссылке-приглашению. Ссылка сотрудника действует 7 дней, родителя — 3 дня.
           </p>
         </div>
         <InviteDialog actorRole={role} teachers={teacherOptions} payers={payerOptions} />
