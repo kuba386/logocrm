@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { formatKgPhone, formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { centerTimeZone, dayInZone } from '@/lib/timezone'
+import { isFinance } from '@/lib/roles'
 import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -168,6 +169,12 @@ export default async function DebtsPage({
           {rows.length} {rows.length === 1 ? 'ученик' : 'учеников'}
           {totalDebt > 0 ? ` · на сумму ${formatSom(totalDebt)}` : ''}
         </p>
+        {/* Выгрузка — только can_finance (0058), регистратору не показываем. */}
+        {isFinance(role) ? (
+          <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">
+            Отчёты →
+          </Link>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

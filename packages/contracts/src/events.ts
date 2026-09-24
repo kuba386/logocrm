@@ -801,6 +801,24 @@ export const centerExportedSchema = z.object({
   }),
 })
 
+/**
+ * Выгрузка отчёта в CSV (0058) — след «данные покинули базу»: какой отчёт,
+ * период, сколько строк, кто и в какой роли. Число строк считает SQL той же
+ * функцией, что отдаёт данные. Адресата нет (как center.exported): n8n
+ * пропустит. Для долгов from = to = сегодня по центру.
+ */
+export const reportExportedSchema = z.object({
+  type: z.literal('report.exported'),
+  payload: z.object({
+    report: z.enum(['payments', 'salary_summary', 'salary_details', 'attendance', 'debts']),
+    from: z.string(),
+    to: z.string(),
+    rows: z.number().int().nonnegative(),
+    by: z.string().uuid(),
+    role: z.string().nullable(),
+  }),
+})
+
 /** Заявка на удаление центра (0056 Р8) — owner, mandatory (не выключить). */
 export const centerDeletionRequestedSchema = z.object({
   type: z.literal('center.deletion_requested'),
@@ -901,6 +919,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionExpiredSchema,
   aiQuotaExceededSchema,
   centerExportedSchema,
+  reportExportedSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,

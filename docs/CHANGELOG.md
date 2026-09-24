@@ -7,6 +7,24 @@
 
 ### Добавлено
 
+- **Выгрузка отчётов в CSV `/app/reports`** — `0058_report_exports.sql`.
+  Четыре отчёта пятью функциями: `export_payments(from, to)`,
+  `export_salary_summary(month)`, `export_salary_details(month)`,
+  `export_attendance(from, to)`, `export_debts()`. Деньги — `can_finance()`
+  (owner/admin/finance), посещаемость — только owner/admin (0031: finance
+  не видит отметок); отказ — `42501`, не пустой файл. Период — по поясу
+  центра, полуоткрытые границы, не больше года (`22023`). Зарплата —
+  из одного источника: утверждённый месяц отдаёт снимок `salary_runs.lines`
+  (сводка и детализация не расходятся после смены ставки задним числом),
+  неутверждённый — `calc_salary`, колонка `approved` говорит, что именно
+  выгружено. Долги — двумя колонками (`lessons_debt_tiyin` из
+  `student_debts()` и `subscriptions_unpaid_tiyin` = `price − paid` по
+  живым абонементам), без сложения. Каждая выгрузка — событие
+  `report.exported` с актором, ролью и числом строк (решение владельца:
+  след в журнале, без Telegram). CSV собирает сервер (`packages/core/csv.ts`:
+  `;`, CRLF, BOM для Excel, формульные значения экранируются `'`), браузер
+  скачивает Blob (приём 0056). Только CSV — XLSX не нужен ни бухгалтеру,
+  ни 1С (решение владельца от 24.09.2026).
 - **Этап 8b, старт: чек-лист prod-контура** — [ADR-010](Decisions/ADR-010-production-checklist.md)
   и `.github/workflows/deploy-prod.yml`. Только `workflow_dispatch` +
   текстовое подтверждение + `environment: production` (required reviewer

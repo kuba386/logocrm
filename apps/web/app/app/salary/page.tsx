@@ -79,6 +79,9 @@ export default async function SalaryPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{t('salary', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('salary', 'subtitle')}</p>
+        <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">
+          {t('reports', 'title')} →
+        </Link>
       </div>
 
       <div className="flex items-center gap-2 text-sm">

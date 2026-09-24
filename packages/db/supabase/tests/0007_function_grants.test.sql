@@ -115,7 +115,8 @@ from unnest(array[
   'public.notification_front_desk_targets(uuid,text)',
   'public.booking_center_info(text)',
   'public.booking_teacher_busy(text,uuid,date)',
-  'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)'
+  'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)',
+  'public.report_period_check(date,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -212,6 +213,11 @@ select set_eq(
     ('was_access_revoked()'),
     ('calc_lesson_price(integer,integer)'),
     ('center_today(uuid)'),
+    ('export_payments(date,date)'),
+    ('export_salary_summary(date)'),
+    ('export_salary_details(date)'),
+    ('export_attendance(date,date)'),
+    ('export_debts()'),
     ('freeze_subscription(uuid,date,date)'),
     ('mark_attendance(uuid,uuid,text,text)'),
     ('mark_attendance_bulk(uuid,jsonb)'),
