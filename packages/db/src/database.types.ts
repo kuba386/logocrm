@@ -108,6 +108,57 @@ export type Database = {
           },
         ]
       }
+      assistant_requests: {
+        Row: {
+          center_id: string
+          created_by: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          intent: string | null
+          started_at: string
+          status: string
+          usage_id: string | null
+        }
+        Insert: {
+          center_id: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          intent?: string | null
+          started_at?: string
+          status?: string
+          usage_id?: string | null
+        }
+        Update: {
+          center_id?: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          intent?: string | null
+          started_at?: string
+          status?: string
+          usage_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_requests_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_requests_usage_id_fkey"
+            columns: ["usage_id"]
+            isOneToOne: false
+            referencedRelation: "ai_usage"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           center_id: string
@@ -4038,6 +4089,14 @@ export type Database = {
         Returns: undefined
       }
       ai_job_finish: { Args: { p_event_id: number }; Returns: undefined }
+      ai_model_rates: {
+        Args: never
+        Returns: {
+          in_tiyin_per_m: number
+          model: string
+          out_tiyin_per_m: number
+        }[]
+      }
       ai_notes_reserved: {
         Args: { p_center_id: string; p_exclude_event_id?: number }
         Returns: number
@@ -4113,6 +4172,25 @@ export type Database = {
         }
         Returns: string
       }
+      assistant_begin: { Args: never; Returns: Json }
+      assistant_finish: {
+        Args: {
+          p_error?: string
+          p_intent?: string
+          p_model?: string
+          p_request_id: string
+          p_status: string
+          p_tokens_in?: number
+          p_tokens_out?: number
+        }
+        Returns: Json
+      }
+      assistant_intents_for: { Args: { p_role: string }; Returns: string[] }
+      assistant_questions_reserved: {
+        Args: { p_center_id: string }
+        Returns: number
+      }
+      assistant_quota: { Args: never; Returns: Json }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
       booking_center_info: {
@@ -4200,6 +4278,10 @@ export type Database = {
         Returns: number
       }
       center_ai_notes_used: { Args: { p_center_id: string }; Returns: number }
+      center_ai_questions_used: {
+        Args: { p_center_id: string }
+        Returns: number
+      }
       center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
@@ -4414,20 +4496,6 @@ export type Database = {
           subject_id: string
         }[]
       }
-      assistant_begin: { Args: never; Returns: Json }
-      assistant_finish: {
-        Args: {
-          p_error?: string
-          p_intent?: string
-          p_model?: string
-          p_request_id: string
-          p_status: string
-          p_tokens_in?: number
-          p_tokens_out?: number
-        }
-        Returns: Json
-      }
-      assistant_quota: { Args: never; Returns: Json }
       export_attendance: {
         Args: { p_from: string; p_to: string }
         Returns: {
