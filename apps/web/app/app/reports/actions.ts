@@ -5,6 +5,7 @@ import { csvDate, csvMoney, toCsv, type CsvCell } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 import { label, t } from '@/lib/messages'
+import { statusLabel } from '@/lib/students'
 
 export type ExportState = { message?: string; csv?: string; filename?: string }
 
@@ -102,7 +103,7 @@ export async function exportReport(_prev: ExportState, formData: FormData): Prom
         t('reports', 'colLessonsDebtSom'), t('reports', 'colUnpaidSom'),
       ]
       const rows: CsvCell[][] = (data ?? []).map((r) => [
-        r.student_name, r.student_status, r.payer_name, r.payer_phone,
+        r.student_name, statusLabel(r.student_status), r.payer_name, r.payer_phone,
         csvMoney(r.lessons_debt_tiyin), csvMoney(r.subscriptions_unpaid_tiyin),
       ])
       return { csv: toCsv(headers, rows), filename: `logocrm-debts-${stamp}.csv` }
