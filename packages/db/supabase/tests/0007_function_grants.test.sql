@@ -291,6 +291,8 @@ select set_eq(
     ('student_conclusions()'),
     ('export_center_lookups()'),
     ('suggest_speech_conclusion(jsonb)'),
+    ('clinical_student_visible(uuid)'),
+    ('set_student_anamnesis(uuid,jsonb,timestamp with time zone)'),
     ('create_goal(uuid,uuid,text,text,text,date)'),
     ('update_goal(uuid,text,text,text,uuid,date)'),
     ('set_goal_status(uuid,text)'),
