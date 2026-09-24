@@ -6,6 +6,13 @@ import { BookingForm } from './booking-form'
 
 export const metadata = { title: 'Запись на занятие — LogoCRM' }
 
+// Доступность записи (is_open, услуги, специалисты) — живые данные из RPC;
+// Next.js кэширует fetch внутри Server Component по умолчанию, и без этого
+// первый успешный рендер обслуживал бы всех следующих посетителей вечно
+// (проявилось на проде: включили запись у центра, /book всё равно
+// показывал «недоступна», пока не отключили кэш этой страницы).
+export const dynamic = 'force-dynamic'
+
 type BookingService = { id: string; name: string; duration_min: number }
 type BookingTeacher = { id: string; full_name: string }
 
