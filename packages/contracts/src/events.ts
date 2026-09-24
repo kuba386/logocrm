@@ -788,6 +788,32 @@ export const aiQuotaExceededSchema = z.object({
   }),
 })
 
+/** Владелец экспортировал данные центра (0056): счётчики строк по таблицам. */
+export const centerExportedSchema = z.object({
+  type: z.literal('center.exported'),
+  payload: z.object({
+    tables: z.record(z.number().int()),
+  }),
+})
+
+/** Владелец подал заявку на удаление центра (0056). */
+export const centerDeletionRequestedSchema = z.object({
+  type: z.literal('center.deletion_requested'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    by: z.string().uuid(),
+  }),
+})
+
+/** Владелец отменил заявку на удаление центра (0056). */
+export const centerDeletionCancelledSchema = z.object({
+  type: z.literal('center.deletion_cancelled'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    by: z.string().uuid(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -858,6 +884,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionEndingSchema,
   subscriptionExpiredSchema,
   aiQuotaExceededSchema,
+  centerExportedSchema,
+  centerDeletionRequestedSchema,
+  centerDeletionCancelledSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
