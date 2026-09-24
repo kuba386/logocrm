@@ -124,6 +124,10 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
 - [ ] `SUPABASE_BOOKING_JWT` (0057, `public_booking`) и любые другие
       серверные секреты — заводятся заново для прод-проекта: JWT
       подписан секретом staging-проекта и на проде не действует.
+      Выпуск — локально у владельца, без зависимостей и без передачи
+      секрета кому-либо: `SUPABASE_JWT_SECRET='…' node
+      packages/db/scripts/mint-role-jwt.mjs public_booking` (то же для
+      `bot_worker` в пункте 5).
 
 ### 5. Sentry, n8n, бот — на прод-данных
 
