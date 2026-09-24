@@ -13,6 +13,8 @@ export type PendingInvitation = {
   id: string
   role: string
   fullName: string | null
+  /** Карточка плательщика у приглашения родителя (0060). */
+  payerName: string | null
   phone: string | null
   email: string | null
   url: string
@@ -78,7 +80,7 @@ export function PendingInvitations({ invitations }: { invitations: PendingInvita
       <TableBody>
         {invitations.map((invitation) => (
           <TableRow key={invitation.id}>
-            <TableCell className="font-medium">{invitation.fullName ?? '—'}</TableCell>
+            <TableCell className="font-medium">{invitation.fullName ?? invitation.payerName ?? '—'}</TableCell>
             <TableCell>{roleLabel(invitation.role)}</TableCell>
             <TableCell className="text-muted-foreground">
               {invitation.phone ?? invitation.email ?? '—'}

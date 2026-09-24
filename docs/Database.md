@@ -211,10 +211,29 @@ mergeable. Поэтому есть проверка `pnpm --filter @logocrm/db c
 |---|---|---|
 | `invitation_preview(token)` | **anon** | название центра, роль, признак валидности — и ничего больше |
 | `accept_invitation(token)` | authenticated | membership + активация карточки + событие + `switch_center` |
-| `create_invitation(...)` | owner/admin | карточка и приглашение одной транзакцией |
+| `create_invitation(..., p_payer_id)` | owner/admin | карточка и приглашение одной транзакцией; родитель — только к живой карточке плательщика или к новой по ФИО + телефону (0060), возвращает `payer_id`/`payer_created` |
 | `revoke_membership(user)` | owner/admin | снимает доступ, гасит карточку |
-| `change_member_role(user, role)` | owner/admin | смена роли |
+| `change_member_role(user, role)` | owner/admin | смена роли; в `parent` — нельзя (0060), из `parent` — снимает `payer_id` |
+| `link_parent_payer(user, payer)` | owner/admin | привязать / перепривязать / отвязать (`null`) родителя к карточке плательщика; событие `membership.payer_linked` (0060) |
 | `user_email(user)` | authenticated | email участника своего центра — для витрин |
+
+Родитель без карточки (0060). До 0060 `create_invitation` вообще не
+заполняла `invitations.payer_id` — каждый приглашённый родитель приходил в
+центр «ничьим» и видел пустой кабинет, а чинилось это запросом в базу.
+Теперь инвариант держит CHECK `invitations_parent_payer_check`
+(`role <> 'parent' or payer_id is not null`, объявлен `NOT VALID`:
+исторические строки нарушают его и править их нельзя, но новые insert/update
+проверяются в полную силу — `NOT VALID` отключает только разовое
+сканирование истории). Прямого `insert` в `invitations` у `authenticated`
+нет с 0024; констрейнт держит `service_role`, миграции и любой будущий
+грант. Висящие parent-приглашения без карточки миграция протушила —
+владелец перевыпускает ссылку уже с плательщиком. Новая карточка из
+приглашения — тот же нормализованный номер и то же событие `payer.created`,
+что у `create_student_with_payer`; телефон, который уже есть у живой
+карточки, — отказ `22023` «выберите из списка» (не `23505`: общий разбор
+ошибок для `23505` ищет имя констрейнта в тексте, у собственного `raise` его
+нет), гонка на `payers_center_phone_uniq` ловится `exception
+when unique_violation` с тем же текстом.
 
 `invitation_preview` — единственная функция проекта, доступная анониму. По
 неизвестному токену она возвращает NULL-ы, чтобы перебором нельзя было узнать
@@ -228,7 +247,12 @@ mergeable. Поэтому есть проверка `pnpm --filter @logocrm/db c
 
 `staff_view` и `pending_invitations_view` объявлены с
 `security_invoker = true`. Без этого вью выполнялась бы от владельца и обходила
-RLS нижележащих таблиц — то есть стала бы дырой в изоляции тенантов.
+RLS нижележащих таблиц — то есть стала бы дырой в изоляции тенантов. С 0060 у
+обеих есть `payer_id`/`payer_name` (карточка родителя); `full_name` остаётся
+«ФИО специалиста». Пересоздание через `drop view` теряет `revoke` из 0024 —
+после каждого `create view` блок `revoke all … from public, anon,
+authenticated` + `grant select … to authenticated` обязателен: на витрине
+лежит `invitations.token`.
 
 `auth.users` роли `authenticated` целиком не выдаётся (там хеши паролей всех
 пользователей сервиса), поэтому email приходит через `user_email()` со своей

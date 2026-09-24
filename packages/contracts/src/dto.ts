@@ -48,12 +48,22 @@ export const createInvitationSchema = z
       .or(z.literal('')),
     email: z.string().trim().email('Некорректный email').optional().or(z.literal('')),
     teacherId: z.string().uuid('Некорректная карточка специалиста').optional(),
+    // 0060: родитель — к существующей карточке плательщика; без неё —
+    // ФИО + телефон, и база заводит карточку сама.
+    payerId: z.string().uuid('Некорректная карточка плательщика').optional(),
   })
   .refine(
     (input) => input.role !== 'teacher' || Boolean(input.teacherId) || Boolean(input.fullName),
     { message: 'Для специалиста укажите ФИО или выберите существующую карточку', path: ['fullName'] },
   )
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>
+
+/** 0060: привязать родителя к карточке плательщика; payerId null — отвязать. */
+export const linkParentPayerSchema = z.object({
+  userId: z.string().uuid('Некорректный пользователь'),
+  payerId: z.string().uuid('Некорректная карточка плательщика').nullable(),
+})
+export type LinkParentPayerInput = z.infer<typeof linkParentPayerSchema>
 
 export const revokeMembershipSchema = z.object({
   userId: z.string().uuid('Некорректный пользователь'),

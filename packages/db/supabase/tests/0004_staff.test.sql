@@ -41,8 +41,10 @@ values ('33333333-3333-3333-3333-333333333333','cccccccc-cccc-cccc-cccc-cccccccc
 
 insert into public.invitations (id, center_id, role, token, expires_at)
 values
-  ('11111111-bbbb-bbbb-bbbb-bbbbbbbbbbbb','cccccccc-cccc-cccc-cccc-cccccccccccc','parent','valid-token-0001',   now() + interval '7 days'),
-  ('22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb','cccccccc-cccc-cccc-cccc-cccccccccccc','parent','expired-token-0002', now() - interval '1 day');
+  -- registrar, не parent: с 0060 приглашение родителя без payer_id не
+  -- проходит CHECK, а роль здесь несущественна — проверяется сам токен.
+  ('11111111-bbbb-bbbb-bbbb-bbbbbbbbbbbb','cccccccc-cccc-cccc-cccc-cccccccccccc','registrar','valid-token-0001',   now() + interval '7 days'),
+  ('22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb','cccccccc-cccc-cccc-cccc-cccccccccccc','registrar','expired-token-0002', now() - interval '1 day');
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$

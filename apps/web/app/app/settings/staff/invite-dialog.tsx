@@ -14,6 +14,8 @@ import { invitableRoles } from '@/lib/roles'
 const initialState: StaffState = {}
 
 export type TeacherOption = { id: string; fullName: string }
+/** Карточка плательщика для выбора при приглашении родителя (0060). */
+export type PayerOption = { id: string; fullName: string; phone: string | null; children: string[] }
 
 function SubmitButton() {
   const { pending } = useFormStatus()
@@ -24,16 +26,63 @@ function SubmitButton() {
   )
 }
 
+/**
+ * Выбор плательщика при приглашении родителя. Роль «Родитель» без карточки
+ * база не выпускает (0060): либо существующая карточка, либо новая по ФИО и
+ * телефону — и тогда форма говорит об этом прямо, а не после входа родителя
+ * в пустой кабинет.
+ */
+export function PayerPicker({
+  payers,
+  payerId,
+  onChange,
+}: {
+  payers: PayerOption[]
+  payerId: string
+  onChange: (value: string) => void
+}) {
+  const selected = payers.find((payer) => payer.id === payerId)
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="payerId">Плательщик</Label>
+        <Select id="payerId" name="payerId" value={payerId} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Новая карточка плательщика</option>
+          {payers.map((payer) => (
+            <option key={payer.id} value={payer.id}>
+              {payer.fullName}
+              {payer.phone ? ` · ${payer.phone}` : ''}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {selected ? (
+        <p className="text-sm text-muted-foreground" data-testid="payer-children">
+          {selected.children.length > 0
+            ? `Дети: ${selected.children.join(', ')}`
+            : 'К этой карточке пока не привязан ни один ребёнок — родитель ничего не увидит, пока ребёнка не добавят на карточке ученика.'}
+        </p>
+      ) : (
+        <FormNotice message="Будет создана новая карточка плательщика без детей. Если родитель уже есть в базе — выберите его из списка, иначе появится дубль. Ребёнка к новой карточке привяжите на карточке ученика." />
+      )}
+    </>
+  )
+}
+
 export function InviteDialog({
   actorRole,
   teachers,
+  payers,
 }: {
   actorRole: string
   teachers: TeacherOption[]
+  payers: PayerOption[]
 }) {
   const [open, setOpen] = useState(false)
   const [role, setRole] = useState('teacher')
   const [teacherId, setTeacherId] = useState('')
+  const [payerId, setPayerId] = useState('')
   const [state, formAction] = useActionState(createInvitation, initialState)
   const [copied, setCopied] = useState(false)
 
@@ -42,6 +91,8 @@ export function InviteDialog({
   }, [state.inviteUrl])
 
   const roles = invitableRoles(actorRole)
+  const isParent = role === 'parent'
+  const newPayer = isParent && payerId === ''
 
   async function copyLink() {
     if (!state.inviteUrl) return
@@ -56,12 +107,12 @@ export function InviteDialog({
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Приглашение сотрудника"
-        description="Создайте ссылку и отправьте её человеку. Ссылка действует 7 дней."
+        title="Приглашение"
+        description="Создайте ссылку и отправьте её человеку. Ссылка сотрудника действует 7 дней, родителя — 3 дня: она открывает данные его семьи, отправляйте лично."
       >
         {state.inviteUrl ? (
           <div className="space-y-4">
-            <FormNotice message="Ссылка готова. Отправьте её сотруднику." />
+            <FormNotice message={state.notice ?? 'Ссылка готова. Отправьте её человеку.'} />
 
             <div className="rounded-md border border-border bg-muted p-3 text-xs break-all">
               {state.inviteUrl}
@@ -118,17 +169,22 @@ export function InviteDialog({
               </div>
             ) : null}
 
-            {role === 'teacher' && teacherId === '' ? (
+            {isParent ? <PayerPicker payers={payers} payerId={payerId} onChange={setPayerId} /> : null}
+
+            {(role === 'teacher' && teacherId === '') || newPayer ? (
               <div className="space-y-2">
-                <Label htmlFor="fullName">ФИО</Label>
-                <Input id="fullName" name="fullName" placeholder="Айгуль Кадырова" />
+                <Label htmlFor="fullName">{newPayer ? 'ФИО плательщика' : 'ФИО'}</Label>
+                <Input id="fullName" name="fullName" placeholder="Айгуль Кадырова" required={newPayer} />
               </div>
             ) : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Телефон</Label>
-              <Input id="phone" name="phone" placeholder="+996 700 123 456" />
-            </div>
+            {/* У выбранной карточки телефон уже есть — база кладёт его в приглашение сама. */}
+            {isParent && !newPayer ? null : (
+              <div className="space-y-2">
+                <Label htmlFor="phone">{newPayer ? 'Телефон плательщика' : 'Телефон'}</Label>
+                <Input id="phone" name="phone" placeholder="+996 700 123 456" required={newPayer} />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="email">Email (необязательно)</Label>

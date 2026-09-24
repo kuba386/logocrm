@@ -218,7 +218,9 @@ select throws_ok(
 reset role;
 
 insert into public.invitations (id, center_id, role, token) values
-  ('99990000-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-000000000024','parent','tok-0024-existing-member'),
+  -- registrar, не parent: с 0060 parent без payer_id не проходит CHECK,
+  -- а тесту нужна лишь роль, отличная от owner.
+  ('99990000-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-000000000024','registrar','tok-0024-existing-member'),
   ('99990000-0000-0000-0000-000000000002','cccccccc-0000-0000-0000-000000000024','teacher','tok-0024-newcomer'),
   ('99990000-0000-0000-0000-000000000003','cccccccc-0000-0000-0000-000000000024','teacher','tok-0024-link');
 update public.invitations set teacher_id = 'aaaaaaaa-0000-0000-0000-000000000024'
@@ -238,7 +240,7 @@ select throws_ok(
 select throws_ok(
   $q$ select public.accept_invitation('tok-0024-existing-member') $q$,
   '23505', null,
-  'Владелец по ссылке с ролью parent — отказ, а не понижение (было: on conflict do update set role)'
+  'Владелец по ссылке с другой ролью — отказ, а не понижение (было: on conflict do update set role)'
 );
 
 reset role;

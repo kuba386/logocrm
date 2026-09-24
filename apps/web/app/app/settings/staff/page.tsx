@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { centerTimeZone } from '@/lib/timezone'
 import { siteUrl } from '@/lib/env'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { InviteDialog, type TeacherOption } from './invite-dialog'
+import { InviteDialog, type PayerOption, type TeacherOption } from './invite-dialog'
 import { PendingInvitations, type PendingInvitation } from './pending-invitations'
 import { StaffTable, type StaffMember } from './staff-table'
 
@@ -28,16 +28,21 @@ export default async function StaffPage() {
     redirect('/app')
   }
 
-  const [{ data: staff }, { data: pending }, { data: teachers }] = await Promise.all([
-    supabase.from('staff_view').select('*').order('joined_at', { ascending: true }),
-    supabase.from('pending_invitations_view').select('*').order('created_at', { ascending: false }),
-    supabase
-      .from('teachers')
-      .select('id, full_name, profile_id')
-      .is('deleted_at', null)
-      .is('profile_id', null)
-      .order('full_name'),
-  ])
+  // Плательщики и их дети — для приглашения родителя и кнопки «Привязать»
+  // (0060): те же payers_brief/students_brief, что на экранах стойки.
+  const [{ data: staff }, { data: pending }, { data: teachers }, { data: payerRows }, { data: studentRows }] =
+    await Promise.all([
+      supabase.from('staff_view').select('*').order('joined_at', { ascending: true }),
+      supabase.from('pending_invitations_view').select('*').order('created_at', { ascending: false }),
+      supabase
+        .from('teachers')
+        .select('id, full_name, profile_id')
+        .is('deleted_at', null)
+        .is('profile_id', null)
+        .order('full_name'),
+      supabase.rpc('payers_brief'),
+      supabase.rpc('students_brief'),
+    ])
 
   const members: StaffMember[] = (staff ?? [])
     .filter((row) => row.user_id !== null)
@@ -49,6 +54,8 @@ export default async function StaffPage() {
       isActive: row.is_active ?? true,
       joinedAt: row.joined_at,
       teacherId: row.teacher_id,
+      payerId: row.payer_id,
+      payerName: row.payer_name,
     }))
 
   const invitations: PendingInvitation[] = (pending ?? [])
@@ -57,11 +64,21 @@ export default async function StaffPage() {
       id: row.id as string,
       role: row.role ?? 'teacher',
       fullName: row.full_name,
+      payerName: row.payer_name,
       phone: row.phone,
       email: row.email,
       url: `${siteUrl()}/invite/${row.token}`,
       expiresAt: row.expires_at as string,
     }))
+
+  const childrenByPayer = new Map<string, string[]>()
+  for (const s of studentRows ?? []) {
+    if (!s.payer_id || s.status === 'archived') continue
+    childrenByPayer.set(s.payer_id, [...(childrenByPayer.get(s.payer_id) ?? []), s.full_name])
+  }
+  const payerOptions: PayerOption[] = (payerRows ?? [])
+    .map((p) => ({ id: p.id, fullName: p.full_name, phone: p.phone, children: childrenByPayer.get(p.id) ?? [] }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'))
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
   const { data: center } = await supabase
@@ -85,7 +102,7 @@ export default async function StaffPage() {
             Доступ выдаётся по ссылке-приглашению. Ссылка действует 7 дней.
           </p>
         </div>
-        <InviteDialog actorRole={role} teachers={teacherOptions} />
+        <InviteDialog actorRole={role} teachers={teacherOptions} payers={payerOptions} />
       </div>
 
       <Card>
@@ -99,6 +116,7 @@ export default async function StaffPage() {
             actorRole={role}
             currentUserId={user.id}
             timeZone={timeZone}
+            payers={payerOptions}
           />
         </CardContent>
       </Card>

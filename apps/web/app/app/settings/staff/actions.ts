@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache'
 import {
   changeMemberRoleSchema,
   createInvitationSchema,
+  linkParentPayerSchema,
   revokeMembershipSchema,
 } from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
+import { toAppError } from '@/lib/errors'
 import { siteUrl } from '@/lib/env'
 
 export type StaffState = { error?: string; notice?: string; inviteUrl?: string }
@@ -24,6 +26,7 @@ export async function createInvitation(_prev: StaffState, formData: FormData): P
     phone: optional(formData, 'phone'),
     email: optional(formData, 'email'),
     teacherId: optional(formData, 'teacherId'),
+    payerId: optional(formData, 'payerId'),
   })
 
   if (!parsed.success) {
@@ -38,19 +41,52 @@ export async function createInvitation(_prev: StaffState, formData: FormData): P
     p_phone: parsed.data.phone,
     p_email: parsed.data.email,
     p_teacher_id: parsed.data.teacherId,
+    p_payer_id: parsed.data.payerId,
   })
 
+  // Ошибки — через общий разбор (CLAUDE.md): «телефон уже есть», «карточка
+  // не найдена» и гонка на уникальном индексе приходят одним русским текстом.
   if (error) {
-    return { error: error.message || 'Не удалось создать приглашение' }
+    return { error: toAppError(error, 'Не удалось создать приглашение').message }
   }
 
-  const token = data?.[0]?.token
-  if (!token) {
+  const row = data?.[0]
+  if (!row?.token) {
     return { error: 'Приглашение создано, но ссылку получить не удалось. Обновите страницу.' }
   }
 
   revalidatePath('/app/settings/staff')
-  return { notice: 'Приглашение создано', inviteUrl: `${siteUrl()}/invite/${token}` }
+  // Текст — по ответу базы, не по тому, что было в селекте: карточку могли
+  // архивировать, пока форма была открыта.
+  const notice = row.payer_created
+    ? 'Приглашение создано. Заведена новая карточка плательщика без детей — привяжите к ней ребёнка на карточке ученика, иначе родитель ничего не увидит.'
+    : 'Приглашение создано'
+  return { notice, inviteUrl: `${siteUrl()}/invite/${row.token}` }
+}
+
+/** 0060: привязать «ничьего» родителя к карточке или исправить привязку; пустой payerId — отвязать. */
+export async function linkParentPayer(_prev: StaffState, formData: FormData): Promise<StaffState> {
+  const parsed = linkParentPayerSchema.safeParse({
+    userId: String(formData.get('userId') ?? ''),
+    payerId: optional(formData, 'payerId') ?? null,
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Проверьте введённые данные' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('link_parent_payer', {
+    p_user_id: parsed.data.userId,
+    p_payer_id: parsed.data.payerId ?? undefined,
+  })
+
+  if (error) {
+    return { error: toAppError(error, 'Не удалось привязать плательщика').message }
+  }
+
+  revalidatePath('/app/settings/staff')
+  return { notice: parsed.data.payerId ? 'Плательщик привязан' : 'Плательщик отвязан' }
 }
 
 export async function revokeMembership(_prev: StaffState, formData: FormData): Promise<StaffState> {
@@ -64,7 +100,7 @@ export async function revokeMembership(_prev: StaffState, formData: FormData): P
   const { error } = await supabase.rpc('revoke_membership', { p_user_id: parsed.data.userId })
 
   if (error) {
-    return { error: error.message || 'Не удалось отключить доступ' }
+    return { error: toAppError(error, 'Не удалось отключить доступ').message }
   }
 
   revalidatePath('/app/settings/staff')
@@ -88,7 +124,7 @@ export async function changeMemberRole(_prev: StaffState, formData: FormData): P
   })
 
   if (error) {
-    return { error: error.message || 'Не удалось изменить роль' }
+    return { error: toAppError(error, 'Не удалось изменить роль').message }
   }
 
   revalidatePath('/app/settings/staff')
@@ -110,7 +146,7 @@ export async function cancelInvitation(_prev: StaffState, formData: FormData): P
     .eq('id', id)
 
   if (error) {
-    return { error: error.message || 'Не удалось отменить приглашение' }
+    return { error: toAppError(error, 'Не удалось отменить приглашение').message }
   }
 
   revalidatePath('/app/settings/staff')
