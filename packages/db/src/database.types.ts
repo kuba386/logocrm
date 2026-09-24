@@ -4414,6 +4414,20 @@ export type Database = {
           subject_id: string
         }[]
       }
+      assistant_begin: { Args: never; Returns: Json }
+      assistant_finish: {
+        Args: {
+          p_error?: string
+          p_intent?: string
+          p_model?: string
+          p_request_id: string
+          p_status: string
+          p_tokens_in?: number
+          p_tokens_out?: number
+        }
+        Returns: undefined
+      }
+      assistant_quota: { Args: never; Returns: Json }
       export_attendance: {
         Args: { p_from: string; p_to: string }
         Returns: {
