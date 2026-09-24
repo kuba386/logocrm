@@ -10,7 +10,9 @@ import { MobileNav } from '@/app/app/mobile-nav'
 import { SidebarNav } from '@/app/app/sidebar-nav'
 import { BottomTabs } from '@/app/app/bottom-tabs'
 import { PlanBanner } from '@/app/app/plan-banner'
+import { GlobalSearch } from '@/app/app/global-search'
 import { parseCenterLimits } from '@/lib/plan'
+import { centerTimeZone } from '@/lib/timezone'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -56,7 +58,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isAdmin = role === 'owner' || role === 'admin'
 
   const [{ data: center }, { count: centersCount }, { data: limitsJson }] = await Promise.all([
-    supabase.from('centers').select('name, plan').eq('id', centerId).maybeSingle(),
+    supabase.from('centers').select('name, plan, settings').eq('id', centerId).maybeSingle(),
     // Только свои членства: владельцу по RLS видны и чужие строки его центра,
     // из-за чего счётчик показывал «Сменить центр» при единственном центре.
     supabase
@@ -71,6 +73,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const frontDesk = isFrontDesk(role)
   const finance = isFinance(role)
   const payments = canPayments(role)
+  // Поиск (0062): бухгалтеру не показывается — под RLS у роли нет строк
+  // students/payers (0031), её списки рисуют definer-RPC; плейсхолдер про
+  // телефон — только тем, кому payers читаемы (зеркало SQL, не гейт).
+  const canSearch = role !== 'finance'
+  const canSeeContacts = isAdmin || role === 'registrar'
+  const timeZone = centerTimeZone(center?.settings)
 
   const navLinks = [
     { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
@@ -136,6 +144,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </span>
         </Link>
 
+        {canSearch ? <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} /> : null}
+
         <SidebarNav links={navLinks} />
 
         <div className="flex flex-col gap-2 border-t border-border p-3">
@@ -192,6 +202,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
+
+        {/* Мобильный поиск — строкой под хедером: в самом хедере места нет. */}
+        {canSearch ? (
+          <div className="border-b border-border bg-card sm:hidden">
+            <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} compact />
+          </div>
+        ) : null}
 
         <PlanBanner limits={limits} />
 

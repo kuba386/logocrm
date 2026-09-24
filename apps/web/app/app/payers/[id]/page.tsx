@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { statusLabel, studentAge } from '@/lib/students'
+import { isFrontDesk } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
 
@@ -19,8 +20,11 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // Гейт — RLS, не роль в коде (0062): карточку читают те, кому payers
+  // читаемы (owner/admin, registrar, родитель — свою); остальным строка не
+  // придёт → notFound. Иначе поиск отдавал бы строки, которые нельзя открыть.
   const { data: role } = await supabase.rpc('my_role')
-  if (role !== 'owner' && role !== 'admin') redirect('/app')
+  const frontDesk = isFrontDesk(role)
 
   const { data: payer } = await supabase
     .from('payers')
@@ -46,7 +50,9 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
       .is('deleted_at', null)
       .eq('is_active', true)
       .order('full_name'),
-    supabase.rpc('payer_telegram_linked', { p_payer_id: id }),
+    // Бейдж и действия стойки — только стойке; родитель видит свою карточку
+    // без кнопок (RLS пустила бы его к строке, а RPC отказал бы).
+    frontDesk ? supabase.rpc('payer_telegram_linked', { p_payer_id: id }) : Promise.resolve({ data: null }),
   ])
 
   const wa = whatsappNumber(payer.phone)
@@ -54,19 +60,23 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/app/payers" className="text-sm text-muted-foreground hover:underline">
-          ← Все плательщики
-        </Link>
+        {frontDesk ? (
+          <Link href="/app/payers" className="text-sm text-muted-foreground hover:underline">
+            ← Все плательщики
+          </Link>
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{payer.full_name}</h1>
-          <span
-            className={cn(
-              'rounded-full px-2 py-0.5 text-xs',
-              telegramLinked ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            {telegramLinked ? 'Telegram привязан' : 'Telegram не привязан'}
-          </span>
+          {frontDesk ? (
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-xs',
+                telegramLinked ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {telegramLinked ? 'Telegram привязан' : 'Telegram не привязан'}
+            </span>
+          ) : null}
         </div>
         <p className="text-sm text-muted-foreground">
           {payer.relation ?? 'родитель'} · {formatKgPhone(payer.phone)}
@@ -74,6 +84,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
         </p>
       </div>
 
+      {frontDesk ? (
       <div className="flex flex-wrap gap-2">
         <a href={`tel:${payer.phone}`} className={buttonVariants({ variant: 'outline' })}>
           Позвонить
@@ -106,6 +117,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           label="Добавить ребёнка"
         />
       </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -134,7 +146,8 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
         </CardContent>
       </Card>
 
-      {payer.notes ? (
+      {/* Заметка стойки о родителе — не родителю. */}
+      {frontDesk && payer.notes ? (
         <Card>
           <CardHeader>
             <CardTitle>Заметка</CardTitle>
