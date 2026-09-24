@@ -26,7 +26,7 @@
 | [docs/Decisions/ADR-006](docs/Decisions/ADR-006-lesson-participants.md) | Состав занятия — отдельная таблица `lesson_participants` |
 | [docs/Decisions/ADR-007](docs/Decisions/ADR-007-design-source.md) | Источник макетов — Stitch → структура/токены в shadcn, не копия HTML |
 | [docs/Decisions/ADR-008](docs/Decisions/ADR-008-event-delivery.md) | Доставка событий: n8n забирает из очереди, Postgres не отправляет; роль `bot_worker` вместо `service_role` |
-| [docs/OBSERVABILITY_SETUP.md](docs/OBSERVABILITY_SETUP.md) | Черновой чек-лист (не выполнялся, не сверен с кодом): Sentry, UptimeRobot, n8n-алерты, лимиты расходов Supabase/Vercel. Пример health-эндпоинта ссылается на таблицу `tenants` — в этом проекте тенант называется `centers`, перед использованием поправить |
+| [docs/OBSERVABILITY_SETUP.md](docs/OBSERVABILITY_SETUP.md) | Чек-лист наблюдаемости и лимитов расходов: Sentry, `/api/health` + UptimeRobot, n8n `alerts` в Telegram, Spend Cap Supabase/Vercel. Сверен с репозиторием; эндпоинт уже в коде, остальное — тумблеры и ключи, руками владельца (стадия Prod этапа 8) |
 
 ## Дизайн
 
