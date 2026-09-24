@@ -191,7 +191,6 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
                   </span>
                 </p>
               ))}
-              moreLabel={(hidden) => t('dashboard', 'showMore', { count: hidden })}
             />
           </CardContent>
         </Card>
@@ -215,7 +214,6 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
                   <span className={cn('shrink-0 font-medium', p.amount_tiyin < 0 && 'text-destructive')}>{formatSom(p.amount_tiyin)}</span>
                 </p>
               ))}
-              moreLabel={(hidden) => t('dashboard', 'showMore', { count: hidden })}
             />
           )}
         </CardContent>
