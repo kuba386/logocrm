@@ -788,6 +788,37 @@ export const aiQuotaExceededSchema = z.object({
   }),
 })
 
+/**
+ * «Вынос базы клиентов» обязан оставить след (0056 Р11) — веб зовёт
+ * record_center_export() одним вызовом после сборки файла; число строк по
+ * каждой таблице (allow-list export_center_tables()) считает сама
+ * функция, не принимает от вызывающего.
+ */
+export const centerExportedSchema = z.object({
+  type: z.literal('center.exported'),
+  payload: z.object({
+    tables: z.record(z.number().int()),
+  }),
+})
+
+/** Заявка на удаление центра (0056 Р8) — owner, mandatory (не выключить). */
+export const centerDeletionRequestedSchema = z.object({
+  type: z.literal('center.deletion_requested'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    by: z.string().uuid(),
+  }),
+})
+
+/** Отмена заявки на удаление (0056 Р9) — owner. */
+export const centerDeletionCancelledSchema = z.object({
+  type: z.literal('center.deletion_cancelled'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    by: z.string().uuid(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -858,6 +889,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionEndingSchema,
   subscriptionExpiredSchema,
   aiQuotaExceededSchema,
+  centerExportedSchema,
+  centerDeletionRequestedSchema,
+  centerDeletionCancelledSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
