@@ -498,11 +498,132 @@ export type Database = {
           },
         ]
       }
+      clinical_forms: {
+        Row: {
+          code: string
+          is_active: boolean
+          name: string
+          sort: number
+        }
+        Insert: {
+          code: string
+          is_active?: boolean
+          name: string
+          sort: number
+        }
+        Update: {
+          code?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+        }
+        Relationships: []
+      }
+      diagnostic_clinical_forms: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          diagnostic_id: string
+          form_code: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          diagnostic_id: string
+          form_code: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          diagnostic_id?: string
+          form_code?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_clinical_forms_diagnostic_fk"
+            columns: ["diagnostic_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostics"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "diagnostic_clinical_forms_form_code_fkey"
+            columns: ["form_code"]
+            isOneToOne: false
+            referencedRelation: "clinical_forms"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      diagnostic_referrals: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          diagnostic_id: string
+          id: string
+          note: string | null
+          target_code: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          diagnostic_id: string
+          id?: string
+          note?: string | null
+          target_code: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          diagnostic_id?: string
+          id?: string
+          note?: string | null
+          target_code?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnostic_referrals_diagnostic_fk"
+            columns: ["diagnostic_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostics"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "diagnostic_referrals_target_code_fkey"
+            columns: ["target_code"]
+            isOneToOne: false
+            referencedRelation: "referral_targets"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
       diagnostics: {
         Row: {
           attachments: Json
           center_id: string
           conclusion: string | null
+          conclusion_code: string | null
           created_at: string
           created_by: string | null
           custom_fields: Json
@@ -519,6 +640,7 @@ export type Database = {
           attachments?: Json
           center_id?: string
           conclusion?: string | null
+          conclusion_code?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
@@ -535,6 +657,7 @@ export type Database = {
           attachments?: Json
           center_id?: string
           conclusion?: string | null
+          conclusion_code?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
@@ -554,6 +677,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diagnostics_conclusion_code_fkey"
+            columns: ["conclusion_code"]
+            isOneToOne: false
+            referencedRelation: "speech_conclusions"
+            referencedColumns: ["code"]
           },
           {
             foreignKeyName: "diagnostics_student_fk"
@@ -2757,6 +2887,27 @@ export type Database = {
           },
         ]
       }
+      referral_targets: {
+        Row: {
+          code: string
+          is_active: boolean
+          name: string
+          sort: number
+        }
+        Insert: {
+          code: string
+          is_active?: boolean
+          name: string
+          sort: number
+        }
+        Update: {
+          code?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+        }
+        Relationships: []
+      }
       rooms: {
         Row: {
           capacity: number
@@ -2958,6 +3109,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      speech_conclusions: {
+        Row: {
+          code: string
+          is_active: boolean
+          name: string
+          sort: number
+        }
+        Insert: {
+          code: string
+          is_active?: boolean
+          name: string
+          sort: number
+        }
+        Update: {
+          code?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+        }
+        Relationships: []
       }
       student_payers: {
         Row: {
@@ -4023,6 +4195,10 @@ export type Database = {
           type: string
         }[]
       }
+      clinical_diagnostic_visible: {
+        Args: { p_diagnostic_id: string }
+        Returns: boolean
+      }
       clinical_goal_visible: { Args: { p_goal_id: string }; Returns: boolean }
       clinical_homework_visible: {
         Args: { p_homework_id: string }
@@ -4167,6 +4343,15 @@ export type Database = {
         Args: { p_reason?: string; p_request_id: string }
         Returns: undefined
       }
+      diagnostic_set_details: {
+        Args: {
+          p_center_id: string
+          p_diagnostic_id: string
+          p_forms: string[]
+          p_referrals: Json
+        }
+        Returns: undefined
+      }
       emit_clinical_event: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
         Returns: number
@@ -4224,6 +4409,7 @@ export type Database = {
         }[]
       }
       export_center_info: { Args: never; Returns: Json }
+      export_center_lookups: { Args: never; Returns: Json }
       export_center_table: { Args: { p_table: string }; Returns: Json }
       export_center_tables: {
         Args: never
@@ -4586,8 +4772,11 @@ export type Database = {
       record_center_export: { Args: never; Returns: number }
       record_diagnostic: {
         Args: {
+          p_clinical_forms?: string[]
           p_conclusion?: string
+          p_conclusion_code?: string
           p_date?: string
+          p_referrals?: Json
           p_sounds?: Json
           p_speech_areas?: Json
           p_student_id: string
@@ -4839,6 +5028,15 @@ export type Database = {
           subscription_id: string
         }[]
       }
+      student_conclusions: {
+        Args: never
+        Returns: {
+          conclusion_code: string
+          conclusion_name: string
+          date: string
+          student_id: string
+        }[]
+      }
       student_debts: {
         Args: never
         Returns: {
@@ -4850,6 +5048,7 @@ export type Database = {
         Args: { p_student_id: string }
         Returns: {
           conclusion: string
+          conclusion_name: string
           date: string
           id: string
           teacher_name: string
@@ -5029,9 +5228,12 @@ export type Database = {
       unlink_telegram: { Args: never; Returns: boolean }
       update_diagnostic: {
         Args: {
+          p_clinical_forms?: string[]
           p_conclusion?: string
+          p_conclusion_code?: string
           p_date?: string
           p_id: string
+          p_referrals?: Json
           p_sounds?: Json
           p_speech_areas?: Json
         }
