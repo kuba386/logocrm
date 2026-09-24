@@ -3285,6 +3285,91 @@ export type Database = {
           },
         ]
       }
+      student_articulation: {
+        Row: {
+          bite: string | null
+          center_id: string
+          collected_at: string | null
+          created_at: string
+          created_by: string | null
+          frenulum: string | null
+          hard_palate: string | null
+          id: string
+          lips_mobility: string | null
+          lips_structure: string[] | null
+          notes: string | null
+          soft_palate: string[] | null
+          student_id: string
+          teeth: string[] | null
+          tongue_mobility: string | null
+          tongue_structure: string[] | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          bite?: string | null
+          center_id?: string
+          collected_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          frenulum?: string | null
+          hard_palate?: string | null
+          id?: string
+          lips_mobility?: string | null
+          lips_structure?: string[] | null
+          notes?: string | null
+          soft_palate?: string[] | null
+          student_id: string
+          teeth?: string[] | null
+          tongue_mobility?: string | null
+          tongue_structure?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          bite?: string | null
+          center_id?: string
+          collected_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          frenulum?: string | null
+          hard_palate?: string | null
+          id?: string
+          lips_mobility?: string | null
+          lips_structure?: string[] | null
+          notes?: string | null
+          soft_palate?: string[] | null
+          student_id?: string
+          teeth?: string[] | null
+          tongue_mobility?: string | null
+          tongue_structure?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_articulation_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_articulation_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "student_articulation_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       student_payers: {
         Row: {
           center_id: string
@@ -5260,6 +5345,14 @@ export type Database = {
         }
         Returns: string
       }
+      set_student_articulation: {
+        Args: {
+          p_expected_updated_at?: string
+          p_fields: Json
+          p_student_id: string
+        }
+        Returns: string
+      }
       slugify: { Args: { p_text: string }; Returns: string }
       student_alive: { Args: { p_student_id: string }; Returns: boolean }
       student_attendance_brief: {
@@ -5343,6 +5436,10 @@ export type Database = {
           lesson_id: string
           parent_summary: string
         }[]
+      }
+      student_primary_teacher: {
+        Args: { p_student_id: string }
+        Returns: boolean
       }
       student_subscription_badge: {
         Args: { p_student_id: string }
