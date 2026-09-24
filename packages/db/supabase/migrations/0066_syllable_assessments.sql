@@ -118,6 +118,17 @@
 --        даёт повторно нажать раньше ответа сервера. Если станет реальной
 --        проблемой — отдельное решение с собственной миграцией и текстом
 --        в CHECK_MESSAGES/UNIQUE_MESSAGES.
+--
+-- Пойман только реальным CI (джоб db), не ревью:
+--
+--   Р18. Числовой порядок для классов (Р15) сортировал `s.x::int` —
+--        произвольный текст в p_affected_classes падал 22P02 на самом
+--        `::int`, ещё до insert, где сработал бы настоящий 23514. RPC
+--        обязан не подменять код ошибки CHECK своим — тот же принцип, что
+--        «RPC не дублирует список кодов» (шапка), только для сортировки,
+--        не для членства. Порядок — по (length(x), x): для закрытого
+--        набора кодов «1».."14" без ведущих нулей это даёт тот же
+--        числовой порядок, что ::int, но не падает на невалидном входе.
 -- =============================================================================
 
 create table if not exists public.syllable_assessments (
@@ -304,7 +315,11 @@ begin
   -- порядок текстовых кодов дал бы '10' раньше '2'), дедуп + алфавитный для
   -- типов ошибок — <@ проверяет только принадлежность, не мощность и не
   -- уникальность, а cardinality-кап без дедупа не спасает от '5','5','5'.
-  select coalesce(array_agg(s.x order by s.x::int), '{}'::text[]) into v_affected
+  -- Порядок — по (длина, текст), НЕ ::int: класс валидирует только CHECK
+  -- (RPC не дублирует список, шапка миграции), а `::int` на произвольном
+  -- мусоре в p_affected_classes падал бы 22P02 раньше, чем дойдёт до
+  -- insert и настоящего 23514 — CI поймал на невалидном коде.
+  select coalesce(array_agg(s.x order by length(s.x), s.x), '{}'::text[]) into v_affected
     from (select distinct x from unnest(coalesce(p_affected_classes, '{}'::text[])) x) s;
   select coalesce(array_agg(s.x order by s.x), '{}'::text[]) into v_error
     from (select distinct x from unnest(coalesce(p_error_types, '{}'::text[])) x) s;
@@ -394,7 +409,7 @@ begin
   -- параметр реально передан; иначе оставляем уже нормализованное
   -- значение строки как есть (нормализовать нечего).
   if p_affected_classes is not null then
-    select coalesce(array_agg(s.x order by s.x::int), '{}'::text[]) into v_affected
+    select coalesce(array_agg(s.x order by length(s.x), s.x), '{}'::text[]) into v_affected
       from (select distinct x from unnest(p_affected_classes) x) s;
   else
     v_affected := v_row.affected_classes;

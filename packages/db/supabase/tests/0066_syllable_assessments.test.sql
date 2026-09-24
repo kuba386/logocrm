@@ -199,16 +199,12 @@ select throws_ok(
   '23514', null, 'NULL-элемент в массиве классов — containment не считает NULL совпадением, 23514');
 select throws_ok(
   $q$ select public.record_syllable_assessment('a0660000-0000-0000-0000-000000000040',
-        current_date + 10) $q$,
-  '23514', null, 'Дата за верхней границей — CHECK 23514');
+        current_date + 10, null, array['1']) $q$,
+  '23514', null, 'Дата за верхней границей — CHECK 23514 (с содержательным полем, иначе бьётся о находку 3)');
 select throws_ok(
   $q$ select public.record_syllable_assessment('a0660000-0000-0000-0000-000000000040', null, null,
         null, null, repeat('ф', 2001)) $q$,
   '23514', null, 'conclusion сверх 2000 символов — CHECK 23514');
-select throws_ok(
-  $q$ select public.record_syllable_assessment('a0660000-0000-0000-0000-000000000040', null, null,
-        array['1','2','3','4','5','6','7','8','9','10','11','12','13','14','1']) $q$,
-  '23514', null, 'affected_classes сверх cardinality 14 — CHECK 23514 (Р8)');
 select throws_ok(
   $q$ select public.record_syllable_assessment('a0660000-0000-0000-0000-000000000040') $q$,
   '22023', null, 'Ни одного содержательного поля — 22023, не тихая запись «нарушений нет» (находка 3)');
@@ -253,12 +249,12 @@ select is(
   '{}'::text[], 'affected_classes очищен явной пустой заменой');
 select is(
   (select error_types from public.syllable_assessments where id = (select id from t0066_a)),
-  array['omission','cluster_simplification'], 'error_types не тронут — не передан в p_fields');
+  array['cluster_simplification','omission'], 'error_types не тронут (дедуп при создании отсортировал алфавитно)');
 
 select lives_ok(
   $q$ select public.update_syllable_assessment((select id from t0066_a), null, null, null, '',
         (select updated_at from public.syllable_assessments where id = (select id from t0066_a))) $q$,
-  '''' в conclusion снимает его (сентинел, находка 6)');
+  ''''' в conclusion снимает его (сентинел, находка 6)');
 select is(
   (select conclusion from public.syllable_assessments where id = (select id from t0066_a)), null,
   'conclusion снят');
@@ -271,6 +267,18 @@ select is(
   'conclusion остался null после null-параметра');
 
 reset role;
+
+-- Р18: RPC дедуплицирует до insert — 15 элементов с одним дублем
+-- схлопываются в 14 валидных до того, как cardinality-CHECK вообще
+-- увидит массив, так что через RPC предел уже не достижим (кодов ровно
+-- 14). CHECK всё равно держит границу — проверяем прямым insert от
+-- postgres, мимо RPC-дедупа и мимо грантов (тот же обход, что и для
+-- фактов существования CHECK в остальных заборах).
+select throws_ok(
+  $q$ insert into public.syllable_assessments (center_id, student_id, affected_classes) values
+      ('a0660000-0000-0000-0000-0000000000c1','a0660000-0000-0000-0000-000000000040',
+       array['1','2','3','4','5','6','7','8','9','10','11','12','13','14','1']) $q$,
+  '23514', null, 'affected_classes сверх cardinality 14 мимо RPC-дедупа — CHECK всё равно держит (Р8/Р18)');
 
 
 -- 3. Право доступа — симметрия чтения/записи ---------------------------------------------------
