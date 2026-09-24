@@ -226,7 +226,7 @@ select public.set_funnel_stage((select id from t0055_student), 'contacted', 'п�
 reset role;
 -- order by at, id: at одинаков внутри одной транзакции (весь файл — один
 -- begin/rollback), id — единственный надёжный тай-брейк (тот же приём,
--- что funnel_summary, header Р10).
+-- что уже документирован в funnel_summary, header Р10).
 select ok(
   (select fe.cause = 'перезвонили сами' and fe.is_service = false and fe.by = 'a0550000-0000-0000-0000-000000000003'
      from public.funnel_events fe where fe.student_id = (select id from t0055_student) and fe.to_stage = 'contacted'

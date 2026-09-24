@@ -788,7 +788,12 @@ export const aiQuotaExceededSchema = z.object({
   }),
 })
 
-/** Владелец экспортировал данные центра (0056): счётчики строк по таблицам. */
+/**
+ * «Вынос базы клиентов» обязан оставить след (0056 Р11) — веб зовёт
+ * record_center_export() одним вызовом после сборки файла; число строк по
+ * каждой таблице (allow-list export_center_tables()) считает сама
+ * функция, не принимает от вызывающего.
+ */
 export const centerExportedSchema = z.object({
   type: z.literal('center.exported'),
   payload: z.object({
@@ -796,7 +801,7 @@ export const centerExportedSchema = z.object({
   }),
 })
 
-/** Владелец подал заявку на удаление центра (0056). */
+/** Заявка на удаление центра (0056 Р8) — owner, mandatory (не выключить). */
 export const centerDeletionRequestedSchema = z.object({
   type: z.literal('center.deletion_requested'),
   payload: z.object({
@@ -805,7 +810,7 @@ export const centerDeletionRequestedSchema = z.object({
   }),
 })
 
-/** Владелец отменил заявку на удаление центра (0056). */
+/** Отмена заявки на удаление (0056 Р9) — owner. */
 export const centerDeletionCancelledSchema = z.object({
   type: z.literal('center.deletion_cancelled'),
   payload: z.object({
