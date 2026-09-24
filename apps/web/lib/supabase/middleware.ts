@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@logocrm/db'
 import { supabaseEnv } from '@/lib/env'
 
-const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite']
+const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite', '/book']
 
 
 /**

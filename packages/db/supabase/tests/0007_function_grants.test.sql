@@ -110,7 +110,12 @@ from unnest(array[
   'public.notification_log_transition()',
   'public.notification_log_subject_required()',
   'public.center_write_state(uuid)',
-  'public.export_center_excluded_tables()'
+  'public.export_center_excluded_tables()',
+  'public.booking_published(uuid)',
+  'public.notification_front_desk_targets(uuid,text)',
+  'public.booking_center_info(text)',
+  'public.booking_teacher_busy(text,uuid,date)',
+  'public.submit_booking_request(text,uuid,uuid,timestamptz,text,text,text)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -299,7 +304,11 @@ select set_eq(
     ('my_memberships()'),
     ('request_center_deletion(text)'),
     ('cancel_center_deletion()'),
-    ('center_deletion_state()')
+    ('center_deletion_state()'),
+    ('set_booking_enabled(boolean)'),
+    ('booking_request_payer_match(uuid)'),
+    ('confirm_booking_request(uuid,uuid)'),
+    ('decline_booking_request(uuid,text)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

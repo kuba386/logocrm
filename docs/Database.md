@@ -575,6 +575,28 @@ PostgREST ролью `bot_worker` и забирает пачку. Почему �
 (`0024` снимал гранты только у `public`/`anon`/`authenticated`), и ключ
 n8n открывал бы карточки детей всех центров мимо узких функций 0031.
 
+### Роль `public_booking`
+
+Та же схема, что у `bot_worker`, для публичной витрины записи `/book/[slug]`
+(0057): ни одного табличного гранта, только `execute` на три функции
+(`booking_center_info`, `booking_teacher_busy`, `submit_booking_request`).
+Не `anon` — анонимный ключ Supabase лежит в браузерном бандле, а параметры
+RPC были бы под контролем атакующего (rate limit по count(*) не устоял бы);
+не `service_role` — тот же довод, что у `bot_worker`. JWT без `sub` заводит
+владелец, используется только в `apps/web/lib/supabase/booking.ts` на
+сервере (`SUPABASE_BOOKING_JWT`, не `NEXT_PUBLIC_*`).
+
+Анонимный путь пишет только `booking_requests` — заявку на подтверждение,
+не `students`/`lessons` напрямую (иначе публичный `EXCLUDE`-конфликт
+`lessons_teacher_no_overlap` даёт отказ в обслуживании на расписание
+специалиста). Подтверждает и превращает в ученика+занятие уже стойка
+(owner/admin/registrar) через `confirm_booking_request` — обычная
+`authenticated`-сессия, `can_front_desk()`.
+
+`emit_event` (0002) требует `auth.uid() is not null` — у `public_booking`
+его нет, поэтому заявка идёт через `emit_event_unchecked` (0018), как у
+`bot_worker`.
+
 ### Очередь
 
 | Функция | Что делает |

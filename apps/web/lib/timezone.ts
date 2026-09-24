@@ -92,3 +92,17 @@ export function startOfDayInZone(day: string, timeZone: string): string {
   const offsetMin = tzOffsetMinutes(new Date(`${day}T12:00:00Z`), timeZone)
   return new Date(new Date(`${day}T00:00:00Z`).getTime() - offsetMin * 60000).toISOString()
 }
+
+/**
+ * «2026-10-05» + «14:30» в поясе центра → ISO в UTC. Нужна там, где
+ * дату/время выбирает форма без пояса (нативные <input type=date/time>) —
+ * витрина записи (0057): сервер, где выполняется action, не в поясе
+ * центра, и new Date(`${day}T${time}`) взял бы часовой пояс СЕРВЕРА, не
+ * центра — та же ошибка класса «T00:00:00Z вместо местной полуночи», что
+ * startOfDayInZone уже закрывает для дат.
+ */
+export function zonedDateTimeToIso(day: string, time: string, timeZone: string): string {
+  const naiveUtc = new Date(`${day}T${time}:00Z`)
+  const offsetMin = tzOffsetMinutes(naiveUtc, timeZone)
+  return new Date(naiveUtc.getTime() - offsetMin * 60000).toISOString()
+}
