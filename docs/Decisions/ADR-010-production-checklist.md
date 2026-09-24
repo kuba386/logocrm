@@ -67,19 +67,19 @@ ADR-004. Пункты, которые уже можно закрыть в код
 
 ### 2. GitHub Environment `production`
 
-- [ ] Settings → Environments → **New environment** → `production`.
-- [ ] **Required reviewers** — сам владелец (или доверенное лицо):
-      запуск `deploy-prod.yml` должен ждать подтверждения, даже если его
-      нажал сам владелец — вторая пара глаз на день, когда её не будет.
-- [ ] Секреты окружения `production` (не repository-secrets — они видны
-      всем workflow, а `deploy-prod.yml` должен читать эти значения
-      только внутри `environment: production`):
-      `SUPABASE_ACCESS_TOKEN` (тот же путь, что и для staging — токен
-      аккаунтный, но ref в workflow зашит и ограничивает его одним
-      проектом, см. `deploy-staging.yml` за тем же приёмом).
-- [ ] Переменная окружения (Variables, не Secrets — не секрет) с ref
-      прод-проекта, если решено не хардкодить его в файле workflow (см.
-      примечание в самом `deploy-prod.yml`).
+- [x] Окружение существует как `Production` (создано интеграцией Vercel;
+      имена окружений GitHub регистронезависимы, `environment: production`
+      в workflow попадает в него). Отдельного не заводили.
+- [x] **Required reviewers** — владелец (`kuba386`), 25.09.2026; ветки —
+      только защищённые (`main`). Запуск `deploy-prod.yml` ждёт
+      подтверждения, даже если его нажал сам владелец — вторая пара глаз
+      на день, когда её не будет.
+- [x] Секрет окружения `SUPABASE_ACCESS_TOKEN` — отдельный токен
+      `github-deploy-prod`, 25.09.2026 (не repository-secret: читается
+      только внутри `environment: production`; токен аккаунтный, но ref в
+      workflow зашит и ограничивает его одним проектом).
+- [x] Ref — в файле workflow, не в Variables (решение в самом
+      `deploy-prod.yml`: меняется только через ревью кода).
 
 ### 3. `deploy-prod.yml`
 
