@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 
-export type SearchKind = 'student' | 'payer' | 'lesson' | 'group'
+export type SearchKind = 'student' | 'payer' | 'lesson'
 
 export type SearchRow = {
   kind: SearchKind
@@ -17,7 +17,7 @@ export type SearchRow = {
   rank: number
 }
 
-const KINDS: SearchKind[] = ['student', 'payer', 'lesson', 'group']
+const KINDS: SearchKind[] = ['student', 'payer', 'lesson']
 
 /**
  * Глобальный поиск (0062): один вызов global_search — SECURITY INVOKER, роль

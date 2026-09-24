@@ -1,6 +1,6 @@
 -- pgTAP: глобальный поиск (0062) — границы выдачи по ролям = RLS, телефон в
--- любом формате, ближайшее занятие, край входа, забор колонок и природы
--- функции (SECURITY INVOKER).
+-- любом формате, ближайшее занятие, порядок самой функции, край входа,
+-- забор колонок и природы функции (SECURITY INVOKER).
 
 begin;
 
@@ -33,10 +33,13 @@ insert into public.teachers (id, center_id, full_name, profile_id) values
   ('aaaaaaaa-0000-0000-0000-000000000631','cccccccc-0000-0000-0000-000000000063','Специалист Б',   null);
 
 -- phone_alt хранится «как ввели» — поиск обязан нормализовать обе стороны.
+-- Номер P4 начинается так же, как хвост phone_alt у P1 («555111…»), —
+-- вхождение не должно склеивать двух родителей на точном номере.
 insert into public.payers (id, center_id, full_name, phone, phone_alt, deleted_at) values
   ('dddddddd-0000-0000-0000-000000000621','cccccccc-0000-0000-0000-000000000062','Гульнара Иванова','+996700123456','0555 111 222', null),
   ('dddddddd-0000-0000-0000-000000000622','cccccccc-0000-0000-0000-000000000062','Семён Петров',    '+996700999888', null, null),
   ('dddddddd-0000-0000-0000-000000000623','cccccccc-0000-0000-0000-000000000062','Удалённый Плательщик','+996700777666', null, now()),
+  ('dddddddd-0000-0000-0000-000000000624','cccccccc-0000-0000-0000-000000000062','Только Архивный', '+996555111333', null, null),
   ('dddddddd-0000-0000-0000-000000000631','cccccccc-0000-0000-0000-000000000063','Плательщик Б',    '+996700123456', null, null);
 
 insert into public.students (id, center_id, full_name, payer_id, primary_teacher_id, birth_date, status, deleted_at) values
@@ -45,6 +48,11 @@ insert into public.students (id, center_id, full_name, payer_id, primary_teacher
   ('eeeeeeee-0000-0000-0000-000000000623','cccccccc-0000-0000-0000-000000000062','Архивная Айжан',   'dddddddd-0000-0000-0000-000000000621','aaaaaaaa-0000-0000-0000-000000000621', null,        'archived', null),
   ('eeeeeeee-0000-0000-0000-000000000624','cccccccc-0000-0000-0000-000000000062','Удалённая Айжан',  'dddddddd-0000-0000-0000-000000000621','aaaaaaaa-0000-0000-0000-000000000621', null,        'active',   now()),
   ('eeeeeeee-0000-0000-0000-000000000625','cccccccc-0000-0000-0000-000000000062','Бекзат Асанов',    'dddddddd-0000-0000-0000-000000000622','aaaaaaaa-0000-0000-0000-000000000622', null,        'active',   null),
+  -- Порядок самой функции: архивный с префиксом, активный с вхождением, пауза с префиксом.
+  ('eeeeeeee-0000-0000-0000-000000000626','cccccccc-0000-0000-0000-000000000062','Нурлан Кыдыров',   'dddddddd-0000-0000-0000-000000000622','aaaaaaaa-0000-0000-0000-000000000622', null,        'archived', null),
+  ('eeeeeeee-0000-0000-0000-000000000627','cccccccc-0000-0000-0000-000000000062','Мария Нурланова',  'dddddddd-0000-0000-0000-000000000622','aaaaaaaa-0000-0000-0000-000000000622', null,        'active',   null),
+  ('eeeeeeee-0000-0000-0000-000000000628','cccccccc-0000-0000-0000-000000000062','Нурлан Паузов',    'dddddddd-0000-0000-0000-000000000622','aaaaaaaa-0000-0000-0000-000000000622', null,        'paused',   null),
+  ('eeeeeeee-0000-0000-0000-000000000629','cccccccc-0000-0000-0000-000000000062','Ребёнок Архивного','dddddddd-0000-0000-0000-000000000624','aaaaaaaa-0000-0000-0000-000000000622', null,        'archived', null),
   ('eeeeeeee-0000-0000-0000-000000000631','cccccccc-0000-0000-0000-000000000063','Айжан Б',          'dddddddd-0000-0000-0000-000000000631','aaaaaaaa-0000-0000-0000-000000000631', null,        'active',   null);
 
 insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) values
@@ -55,25 +63,28 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
   ('55555555-5555-5555-5555-555555555555','cccccccc-0000-0000-0000-000000000062','parent',    null, 'dddddddd-0000-0000-0000-000000000621'),
   ('66666666-6666-6666-6666-666666666666','cccccccc-0000-0000-0000-000000000063','owner',     null, null);
 
-insert into public.groups (id, center_id, name, teacher_id, deleted_at) values
-  ('99990000-0000-0000-0000-000000000621','cccccccc-0000-0000-0000-000000000062','Малыши',  'aaaaaaaa-0000-0000-0000-000000000622', null),
-  ('99990000-0000-0000-0000-000000000622','cccccccc-0000-0000-0000-000000000062','Старшие', 'aaaaaaaa-0000-0000-0000-000000000622', now());
+insert into public.groups (id, center_id, name, teacher_id) values
+  ('99990000-0000-0000-0000-000000000621','cccccccc-0000-0000-0000-000000000062','Малыши','aaaaaaaa-0000-0000-0000-000000000622');
 insert into public.group_students (center_id, group_id, student_id) values
   ('cccccccc-0000-0000-0000-000000000062','99990000-0000-0000-0000-000000000621','eeeeeeee-0000-0000-0000-000000000625');
 
--- Занятия Айжан: L2 (+1 день, Специалист Два) ближе, чем L1 (+2 дня, Специалист
--- Один); L4 отменено (+12 ч), L5 прошло. L3 — Семён у Специалиста Один
--- (teacher_teaches_student). L6 — группа «Малыши» с Бекзатом, из которой его
--- уберут (lp.deleted_at).
+-- Занятия Айжан: L7 идёт прямо сейчас (Специалист Два) — «ближайшее» для
+-- владельца и родителя; L2 (+1 день, Два) и L1 (+2 дня, Один) — для
+-- специалиста Один видно только L1; L4 отменено (+12 ч), L5 прошло.
+-- L3 — Семён у Специалиста Один (teacher_teaches_student). L6 — группа
+-- «Малыши» с Бекзатом; потом Бекзат выйдет из группы (group_students.left_at
+-- → триггер удалит строку lp).
 insert into public.lessons (id, center_id, teacher_id, student_id, group_id, status, starts_at, ends_at) values
   ('44440000-0000-0000-0000-000000000621','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000621','eeeeeeee-0000-0000-0000-000000000621', null, 'planned',   now() + interval '2 days',   now() + interval '2 days 45 minutes'),
   ('44440000-0000-0000-0000-000000000622','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000622','eeeeeeee-0000-0000-0000-000000000621', null, 'planned',   now() + interval '1 day',    now() + interval '1 day 45 minutes'),
   ('44440000-0000-0000-0000-000000000623','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000621','eeeeeeee-0000-0000-0000-000000000622', null, 'planned',   now() + interval '3 days',   now() + interval '3 days 45 minutes'),
   ('44440000-0000-0000-0000-000000000624','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000621','eeeeeeee-0000-0000-0000-000000000621', null, 'cancelled', now() + interval '12 hours', now() + interval '12 hours 45 minutes'),
   ('44440000-0000-0000-0000-000000000625','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000621','eeeeeeee-0000-0000-0000-000000000621', null, 'planned',   now() - interval '1 day',    now() - interval '1 day' + interval '45 minutes'),
-  ('44440000-0000-0000-0000-000000000626','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000622', null, '99990000-0000-0000-0000-000000000621', 'planned', now() + interval '1 day 2 hours', now() + interval '1 day 2 hours 45 minutes');
-update public.lesson_participants set deleted_at = now()
- where lesson_id = '44440000-0000-0000-0000-000000000626';
+  ('44440000-0000-0000-0000-000000000626','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000622', null, '99990000-0000-0000-0000-000000000621', 'planned', now() + interval '1 day 2 hours', now() + interval '1 day 2 hours 45 minutes'),
+  ('44440000-0000-0000-0000-000000000627','cccccccc-0000-0000-0000-000000000062','aaaaaaaa-0000-0000-0000-000000000622','eeeeeeee-0000-0000-0000-000000000621', null, 'planned',   now() - interval '10 minutes', now() + interval '35 minutes');
+-- Бекзат вышел из группы — тем путём, каким это делает приложение.
+update public.group_students set left_at = current_date
+ where student_id = 'eeeeeeee-0000-0000-0000-000000000625';
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -85,22 +96,23 @@ end;
 $$;
 
 
--- 1-9. Владелец: имя, имя плательщика, архив, телефон во всех форматах ------------------
+-- Владелец: имя, имя плательщика, архив, порядок, телефон во всех форматах ---------------
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-000000000062');
 set local role authenticated;
 
 select is(
-  (select array_agg(title order by rank, (status = 'archived'), title)
-     from public.global_search('айжан') where kind = 'student'),
+  (select array_agg(title order by rank, title) from public.global_search('айжан') where kind = 'student'),
   array['Айжан Токтосунова', 'Архивная Айжан'],
   'Владелец: по части ФИО — активная и архивная, без удалённой и без чужого центра');
 select is(
-  (select title from public.global_search('айжан') where kind = 'student' order by (status = 'archived'), rank, title limit 1),
-  'Айжан Токтосунова', 'Активная — раньше архивной (Р5)');
+  (select array_agg(title order by rank) from public.global_search('нурлан') where kind = 'student'),
+  array['Нурлан Паузов', 'Мария Нурланова', 'Нурлан Кыдыров'],
+  'Порядок самой функции по rank: префикс (пауза) → вхождение (активная) → архивный, даже с префиксом (Р5)');
 select is(
-  (select status from public.global_search('айжан') where kind = 'student' and title = 'Архивная Айжан'),
-  'archived', 'Архивная — с пометкой статуса');
+  (select array_agg(status order by rank) from public.global_search('нурлан') where kind = 'student'),
+  array['paused', 'active', 'archived'],
+  'Статус отдаётся для всех — paused и archived видны в выдаче');
 select is(
   (select subtitle from public.global_search('токтосун') where kind = 'student'),
   'Гульнара Иванова', 'subtitle ученика — имя плательщика через payer_display_name');
@@ -115,53 +127,61 @@ select is(
   'Гульнара Иванова', '…и сама карточка плательщика');
 select is(
   (select extra from public.global_search('гульнара') where kind = 'payer'),
-  'Айжан Токтосунова', 'extra плательщика — живые не-архивные дети');
+  'Айжан Токтосунова, Архивная Айжан', 'extra плательщика — все живые дети, включая архивных');
+select is(
+  (select extra from public.global_search('только архивный') where kind = 'payer'),
+  'Ребёнок Архивного', 'Плательщик с единственным архивным ребёнком — не «детей нет»');
 
 select is(
-  (select array_agg(kind || ':' || title order by kind) from public.global_search('0700 123 456') where kind in ('payer','student')),
+  (select array_agg(kind || ':' || title order by kind, title) from public.global_search('0700 123 456') where kind in ('payer','student')),
   array['payer:Гульнара Иванова', 'student:Айжан Токтосунова', 'student:Архивная Айжан'],
   'Полный номер в местном формате — плательщик и её дети');
-select is((select rank from public.global_search('+996 700 12-34-56') where kind = 'payer'), 0,
+select is((select rank from public.global_search('+996 (700) 12-34-56') where kind = 'payer'), 0,
   'Точное совпадение телефона — ранг 0');
+select is((select title from public.global_search('00996700123456') where kind = 'payer'), 'Гульнара Иванова',
+  'Международная запись с двумя нулями');
 select is((select title from public.global_search('123456') where kind = 'payer'), 'Гульнара Иванова', 'Хвост номера');
 select is((select title from public.global_search('07001234') where kind = 'payer'), 'Гульнара Иванова', 'Начало номера с ведущим нулём (Р4)');
-select is((select title from public.global_search('555 111 222') where kind = 'payer'), 'Гульнара Иванова', 'phone_alt в сыром формате — тоже ищется');
+select is(
+  (select array_agg(title order by title) from public.global_search('555 111 222') where kind = 'payer'),
+  array['Гульнара Иванова'], 'phone_alt в сыром формате — тоже ищется, и только он: «555111333» другого плательщика не склеивается');
+select is(
+  (select array_agg(title order by title) from public.global_search('555111') where kind = 'payer'),
+  array['Гульнара Иванова', 'Только Архивный'], 'Общее начало номера — оба, это вхождение');
 select is((select count(*)::int from public.global_search('777666')), 0, 'Удалённый плательщик не находится ни по номеру…');
 select is((select count(*)::int from public.global_search('удалённ')), 0, '…ни по имени; удалённый ученик — тоже нет');
 select is((select count(*)::int from public.global_search('123')), 0, 'Три цифры — не телефон и не имя');
 
 select is(
-  (select array_agg(kind || ':' || title order by kind) from public.global_search('семен')),
+  (select array_agg(kind || ':' || title order by kind, title) from public.global_search('семен')),
   array['payer:Семён Петров', 'student:Семён Иванов'],
   '«ё»/«е» — одно и то же (Р7)');
 select is((select count(*)::int from public.global_search('СЕМЁН')), 2, 'Регистр кириллицы не важен');
 
 
--- 10-14. Ближайшее занятие и группы ------------------------------------------------------
+-- Ближайшее занятие ---------------------------------------------------------------------
 
 select is((select count(*)::int from public.global_search('токтосун') where kind = 'lesson'), 1,
   'Ровно одно занятие на ребёнка');
 select is(
   (select id from public.global_search('токтосун') where kind = 'lesson'),
-  '44440000-0000-0000-0000-000000000622',
-  'Ближайшее запланированное: L2 (+1 день); отменённое (+12 ч) и прошедшее — нет');
+  '44440000-0000-0000-0000-000000000627',
+  'Идущее прямо сейчас занятие — ближайшее (ends_at >= now()); отменённое и прошедшее — нет');
 select is((select subtitle from public.global_search('токтосун') where kind = 'lesson'), 'Специалист Два',
   'subtitle занятия — специалист, который ведёт');
 select is(
   (select week_start from public.global_search('токтосун') where kind = 'lesson'),
-  date_trunc('week', ((now() + interval '1 day') at time zone 'Asia/Bishkek')::date)::date,
+  date_trunc('week', ((now() - interval '10 minutes') at time zone 'Asia/Bishkek')::date)::date,
   'week_start — понедельник недели занятия в поясе центра (Р6)');
 select is((select count(*)::int from public.global_search('архивная') where kind = 'lesson'), 0,
   'У архивной занятий нет');
 select is((select count(*)::int from public.global_search('бекзат') where kind = 'student'), 1, 'Бекзат находится…');
 select is((select count(*)::int from public.global_search('бекзат') where kind = 'lesson'), 0,
-  '…но занятие группы, из которой его убрали (lp.deleted_at), не выдаётся (Р3)');
-select is((select subtitle from public.global_search('малыш') where kind = 'group'), 'Специалист Два',
-  'Группа — по названию, с ведущим');
-select is((select count(*)::int from public.global_search('старш')), 0, 'Удалённая группа не находится');
+  '…но занятие группы, из которой он вышел (group_students.left_at → триггер), не выдаётся (Р3)');
+select is((select count(*)::int from public.global_search('малыш')), 0, 'Групп в выдаче нет (Р12)');
 
 
--- 15-22. Край входа: пусто, не исключение ----------------------------------------------
+-- Край входа: пусто, не исключение --------------------------------------------------------
 
 select lives_ok($q$ select * from public.global_search(null) $q$, 'null — не падает');
 select is((select count(*)::int from public.global_search(null)), 0, 'null — пусто');
@@ -177,7 +197,7 @@ select lives_ok($q$ select * from public.global_search('айжан', 100000) $q$
 reset role;
 
 
--- 23-30. Специалист: только свои ученики, без телефона -------------------------------------
+-- Специалист: только свои ученики, без телефона -------------------------------------------
 
 select public.tests_claims('44444444-4444-4444-4444-444444444444','cccccccc-0000-0000-0000-000000000062');
 set local role authenticated;
@@ -188,7 +208,7 @@ select is(
 select is((select subtitle from public.global_search('токтосун') where kind = 'student'), 'Гульнара Иванова',
   'teacher: имя плательщика своего ученика — как в students_teacher_view');
 select is((select count(*)::int from public.global_search('гульнара') where kind = 'student'), 2,
-  'teacher: находит по имени плательщика — ровно как видит его в списке');
+  'teacher: находит по имени плательщика — ровно как видит его в списке (ветка payer_display_name, Р11)');
 select is((select count(*)::int from public.global_search('гульнара') where kind = 'payer'), 0,
   'teacher: карточки плательщика в выдаче нет — payers ему не читаемы');
 select is((select count(*)::int from public.global_search('0700123456')), 0,
@@ -201,11 +221,11 @@ select is((select count(*)::int from public.global_search('бекзат')), 0, '
 select is(
   (select id from public.global_search('токтосун') where kind = 'lesson'),
   '44440000-0000-0000-0000-000000000621',
-  'teacher: ближайшее из ВИДИМЫХ ему занятий — L1 (своё, +2 дня), а не L2 другого специалиста');
+  'teacher: ближайшее из ВИДИМЫХ ему занятий — L1 (своё, +2 дня), а не L7/L2 другого специалиста');
 reset role;
 
 
--- 31-35. Родитель: только свои дети и своя карточка -----------------------------------------
+-- Родитель: только свои дети и своя карточка -------------------------------------------------
 
 select public.tests_claims('55555555-5555-5555-5555-555555555555','cccccccc-0000-0000-0000-000000000062');
 set local role authenticated;
@@ -215,14 +235,15 @@ select is(
 select is((select count(*)::int from public.global_search('семён')), 0, 'parent: чужой ребёнок и чужой плательщик — нет');
 select is((select title from public.global_search('0700123456') where kind = 'payer'), 'Гульнара Иванова',
   'parent: своя карточка по телефону (payers_read_self)');
+select is((select count(*)::int from public.global_search('гульнара') where kind = 'student'), 2,
+  'parent: дети по имени плательщика — через payers_read_self (name_hit)');
 select is(
   (select id from public.global_search('токтосун') where kind = 'lesson'),
-  '44440000-0000-0000-0000-000000000622', 'parent: ближайшее занятие ребёнка (parent_of_lesson)');
-select is((select count(*)::int from public.global_search('малыш')), 0, 'parent: групп не видит');
+  '44440000-0000-0000-0000-000000000627', 'parent: ближайшее занятие ребёнка (parent_of_lesson) — идущее сейчас');
 reset role;
 
 
--- 36-39. Бухгалтер — пусто (Р1); регистратор — как владелец; чужой центр ---------------------
+-- Бухгалтер — пусто (Р1); регистратор — как владелец; чужой центр --------------------------
 
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-000000000062');
 set local role authenticated;
@@ -239,14 +260,14 @@ reset role;
 select public.tests_claims('66666666-6666-6666-6666-666666666666','cccccccc-0000-0000-0000-000000000063');
 set local role authenticated;
 select is(
-  (select array_agg(kind || ':' || title order by kind) from public.global_search('0700123456')),
+  (select array_agg(kind || ':' || title order by kind, title) from public.global_search('0700123456')),
   array['payer:Плательщик Б', 'student:Айжан Б'],
   'Владелец центра Б по тому же номеру видит только своих (ADR-002)');
 select is((select count(*)::int from public.global_search('токтосун')), 0, '…и ребёнка центра А не находит');
 reset role;
 
 
--- 40-43. Забор: колонки, природа функции, гранты ----------------------------------------------
+-- Забор: колонки, природа функции, гранты ------------------------------------------------------
 
 select is(
   pg_get_function_result('public.global_search(text, integer)'::regprocedure),

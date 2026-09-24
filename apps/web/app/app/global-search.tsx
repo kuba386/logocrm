@@ -15,9 +15,8 @@ const KIND_LABELS: Record<SearchKind, string> = {
   student: 'Ученики',
   payer: 'Плательщики',
   lesson: 'Ближайшие занятия',
-  group: 'Группы',
 }
-const KIND_ORDER: SearchKind[] = ['student', 'payer', 'lesson', 'group']
+const KIND_ORDER: SearchKind[] = ['student', 'payer', 'lesson']
 
 function hrefFor(row: SearchRow): string {
   switch (row.kind) {
@@ -29,15 +28,15 @@ function hrefFor(row: SearchRow): string {
       // Неделю посчитала база в поясе центра (0062 Р6); подсветки занятия у
       // расписания нет — открывается неделя.
       return row.weekStart ? `/app/schedule?week=${row.weekStart}` : '/app/schedule'
-    case 'group':
-      return '/app/groups'
   }
 }
 
 function describe(row: SearchRow, timeZone: string): string {
   switch (row.kind) {
     case 'student':
-      return [row.subtitle, row.extra ? `${row.extra} лет` : null, row.status === 'archived' ? statusLabel(row.status) : null]
+      // Любой статус, кроме «занимается», — бейджем: лид или пауза на звонке
+      // важны не меньше архива.
+      return [row.subtitle, row.extra ? `${row.extra} лет` : null, row.status && row.status !== 'active' ? statusLabel(row.status) : null]
         .filter(Boolean)
         .join(' · ')
     case 'payer':
@@ -46,8 +45,6 @@ function describe(row: SearchRow, timeZone: string): string {
       return [row.startsAt ? `${dayInZone(row.startsAt, timeZone)}, ${timeInZone(row.startsAt, timeZone)}` : null, row.subtitle]
         .filter(Boolean)
         .join(' · ')
-    case 'group':
-      return row.subtitle ?? ''
   }
 }
 
@@ -79,6 +76,9 @@ export function GlobalSearch({ canSeeContacts, timeZone, compact }: { canSeeCont
       return
     }
     const id = ++requestId.current
+    // Прошлый ответ гасится сразу: пока летит «Айжан», в панели не должен
+    // висеть ответ на «Айж».
+    setRows([])
     setPending(true)
     const timer = setTimeout(async () => {
       const result = await globalSearch(q)
@@ -164,7 +164,7 @@ export function GlobalSearch({ canSeeContacts, timeZone, compact }: { canSeeCont
           className="absolute left-3 right-3 z-30 mt-1 max-h-96 overflow-y-auto rounded-md border border-border bg-card p-1 text-sm shadow-md"
         >
           {error ? <p className="px-2 py-1.5 text-destructive">{error}</p> : null}
-          {!error && pending && ordered.length === 0 ? <p className="px-2 py-1.5 text-muted-foreground">Ищем…</p> : null}
+          {!error && pending ? <p className="px-2 py-1.5 text-muted-foreground">Ищем…</p> : null}
           {!error && !pending && ordered.length === 0 ? <p className="px-2 py-1.5 text-muted-foreground">Ничего не найдено</p> : null}
           {groups.map((group) => (
             <div key={group.kind} className="py-1">
