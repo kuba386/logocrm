@@ -168,6 +168,10 @@ select is(
   (select array_agg(k order by k) from (select to_jsonb(r) j from t_pay r limit 1) s, jsonb_object_keys(s.j) k),
   array['amount_tiyin','comment','kind','paid_on','paid_time','payer_name','payer_phone','source_name','student_name','subscription_type'],
   'Забор по колонкам платежей: ровно этот набор, notes/custom_fields нет (Р4)');
+
+-- Журнал событий читаем как postgres: RLS events не отдаёт строки finance,
+-- а проверяется здесь запись функции, не право чтения.
+reset role;
 select is(
   (select count(*)::int from public.events
     where center_id = 'cccccccc-0000-0000-0000-000000000058' and type = 'report.exported'
@@ -192,6 +196,8 @@ select is(
 
 -- 9-12. Границы периода — исключение, не пустой файл (Р3) ----------------------------
 
+select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-000000000058');
+set local role authenticated;
 select throws_ok(
   $q$ select * from public.export_payments(null, current_date) $q$,
   '22023', 'Укажите период выгрузки', 'null вместо даты — 22023');
