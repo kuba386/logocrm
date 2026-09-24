@@ -75,6 +75,61 @@ export async function archiveDiagnostic(studentId: string, id: string): Promise<
   return { message: '', notice: 'Запись убрана' }
 }
 
+// --- Анамнез (0063) ------------------------------------------------------------
+
+function strOrNull(formData: FormData, key: string): string | null {
+  const value = String(formData.get(key) ?? '').trim()
+  return value === '' ? null : value
+}
+
+function numOrNull(formData: FormData, key: string): number | null {
+  const raw = String(formData.get(key) ?? '').trim()
+  if (raw === '') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+// Форма всегда шлёт полный набор полей (не построчный патч) — пустое поле
+// снимает значение (нужен реальный jsonb null/"", не отсутствие ключа: сама
+// RPC трактует отсутствующий ключ как «не трогать», а нам здесь нужно
+// «очистить», раз форма — полный снимок текущего состояния анамнеза).
+export async function setAnamnesis(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const expectedUpdatedAt = optional(formData, 'expectedUpdatedAt')
+
+  const fields = {
+    collected_at: strOrNull(formData, 'collectedAt'),
+    pregnancy_number: numOrNull(formData, 'pregnancyNumber'),
+    birth_number: numOrNull(formData, 'birthNumber'),
+    pregnancy_course: strOrNull(formData, 'pregnancyCourse'),
+    birth_course: strOrNull(formData, 'birthCourse'),
+    apgar_note: strOrNull(formData, 'apgarNote'),
+    early_development: strOrNull(formData, 'earlyDevelopment'),
+    cooing_age: strOrNull(formData, 'cooingAge'),
+    babbling_age: strOrNull(formData, 'babblingAge'),
+    first_words_age: strOrNull(formData, 'firstWordsAge'),
+    phrase_speech_age: strOrNull(formData, 'phraseSpeechAge'),
+    illnesses_injuries: strOrNull(formData, 'illnessesInjuries'),
+    heredity: strOrNull(formData, 'heredity'),
+    upbringing_conditions: strOrNull(formData, 'upbringingConditions'),
+    hearing_note: strOrNull(formData, 'hearingNote'),
+    vision_note: strOrNull(formData, 'visionNote'),
+    notes: strOrNull(formData, 'notes'),
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('set_student_anamnesis', {
+    p_student_id: studentId,
+    p_fields: fields,
+    p_expected_updated_at: expectedUpdatedAt,
+  })
+
+  if (error) return toAppError(error, 'Не удалось сохранить анамнез')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Анамнез сохранён' }
+}
+
 // --- Цели ------------------------------------------------------------------------
 
 export async function createGoal(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
