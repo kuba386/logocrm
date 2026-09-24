@@ -4,9 +4,11 @@ import { PLAN_WARNING_DAYS, type CenterLimits } from '@/lib/plan'
 import { cn } from '@/lib/utils'
 
 /**
- * Три состояния из center_limits() (0050 Р11): истёк — только чтение;
- * заканчивается через ≤ 3 дня — предупреждение; иначе ничего. Дни считает
- * SQL в поясе центра, здесь — только текст и ссылка на экран тарифа.
+ * Состояния из center_limits() (0050 Р11, 0056 Р7): удалён — заявка на
+ * удаление подана; истёк — только чтение; заканчивается через ≤ 3 дня —
+ * предупреждение; иначе ничего. «Удалён» и «истёк» — разные тексты:
+ * после «Удалить центр» требование «оплатите» читалось бы как издёвка.
+ * Дни считает SQL в поясе центра, здесь — только текст и ссылка.
  */
 export function PlanBanner({ limits }: { limits: CenterLimits | null }) {
   if (!limits) return null
@@ -14,7 +16,10 @@ export function PlanBanner({ limits }: { limits: CenterLimits | null }) {
   let text: string | null = null
   let tone: 'destructive' | 'accent' = 'accent'
 
-  if (!limits.writable) {
+  if (limits.state === 'deleted') {
+    text = t('plan', 'bannerDeleted')
+    tone = 'destructive'
+  } else if (!limits.writable) {
     text = limits.isTrial ? t('plan', 'bannerTrialExpired') : t('plan', 'bannerExpired')
     tone = 'destructive'
   } else if (limits.daysLeft !== null && limits.daysLeft <= PLAN_WARNING_DAYS) {

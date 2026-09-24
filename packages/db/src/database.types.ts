@@ -779,6 +779,13 @@ export type Database = {
             referencedColumns: ["id", "center_id"]
           },
           {
+            foreignKeyName: "funnel_events_student_center_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
             foreignKeyName: "funnel_events_to_stage_fkey"
             columns: ["to_stage"]
             isOneToOne: false
@@ -3840,6 +3847,7 @@ export type Database = {
       can_finance: { Args: { p_center_id?: string }; Returns: boolean }
       can_front_desk: { Args: { p_center_id?: string }; Returns: boolean }
       can_payments: { Args: { p_center_id?: string }; Returns: boolean }
+      cancel_center_deletion: { Args: never; Returns: undefined }
       cancel_installment_plan: {
         Args: { p_subscription_id: string }
         Returns: number
@@ -3857,12 +3865,14 @@ export type Database = {
         Returns: number
       }
       center_ai_notes_used: { Args: { p_center_id: string }; Returns: number }
+      center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
       center_plan_name: { Args: { p_center_id: string }; Returns: string }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
       center_today: { Args: { p_center_id?: string }; Returns: string }
       center_writable: { Args: { p_center_id: string }; Returns: boolean }
+      center_write_state: { Args: { p_center_id: string }; Returns: string }
       change_member_role: {
         Args: { p_role: string; p_user_id: string }
         Returns: undefined
@@ -4042,6 +4052,25 @@ export type Database = {
           subject_id: string
         }[]
       }
+      export_center_audit: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      export_center_excluded_tables: {
+        Args: never
+        Returns: {
+          reason: string
+          table_name: string
+        }[]
+      }
+      export_center_info: { Args: never; Returns: Json }
+      export_center_table: { Args: { p_table: string }; Returns: Json }
+      export_center_tables: {
+        Args: never
+        Returns: {
+          table_name: string
+        }[]
+      }
       extend_subscription: {
         Args: {
           p_amount_tiyin: number
@@ -4071,6 +4100,7 @@ export type Database = {
         Args: { p_from: string; p_id: string; p_to?: string }
         Returns: undefined
       }
+      funnel_stage_rank: { Args: { p_code: string }; Returns: number }
       funnel_stuck: {
         Args: { p_days?: number }
         Returns: {
@@ -4082,10 +4112,7 @@ export type Database = {
           student_id: string
         }[]
       }
-      funnel_summary: {
-        Args: { p_from: string; p_to: string }
-        Returns: Json
-      }
+      funnel_summary: { Args: { p_from: string; p_to: string }; Returns: Json }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       installment_plans_cancel_live: {
         Args: { p_subscription_id: string }
@@ -4149,6 +4176,15 @@ export type Database = {
         Returns: undefined
       }
       month_open_lessons_count: { Args: { p_month: string }; Returns: number }
+      my_memberships: {
+        Args: never
+        Returns: {
+          center_id: string
+          center_name: string
+          deleted: boolean
+          role: string
+        }[]
+      }
       my_payer_id: { Args: never; Returns: string }
       my_role: { Args: never; Returns: string }
       my_teacher_id: { Args: never; Returns: string }
@@ -4329,6 +4365,7 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: undefined
       }
+      record_center_export: { Args: never; Returns: number }
       record_diagnostic: {
         Args: {
           p_conclusion?: string
@@ -4386,6 +4423,7 @@ export type Database = {
         Returns: string
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
+      refund_calc_unchecked: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
@@ -4404,6 +4442,10 @@ export type Database = {
       report_voice_note: {
         Args: { p_chat_id: number; p_duration?: number; p_file_id: string }
         Returns: Json
+      }
+      request_center_deletion: {
+        Args: { p_confirm_name: string }
+        Returns: undefined
       }
       request_voice_note: {
         Args: { p_lesson_id: string; p_student_id: string }

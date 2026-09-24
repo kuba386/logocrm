@@ -7,6 +7,19 @@
 
 ### Добавлено
 
+- **Этап 8a, шаг 7: экспорт центра и заявка на удаление** —
+  `0056_center_export_deletion.sql`. `export_center_tables()` — явный
+  allow-list (не «каталог минус deny»), `export_center_table(table)` — по
+  таблице за вызов (без `statement_timeout` на большом центре),
+  `export_center_audit(from, to)` — журнал изменений отдельно, с
+  вычеркнутыми секретами (`invitations`/`lesson_voice_requests`).
+  `request_center_deletion(confirm_name)`/`cancel_center_deletion()` —
+  только owner, идемпотентно, `deleted_at` + событие; физическая очистка
+  через 30 дней — не в этом этапе (ADR-012). Попутно закрыта RLS-дыра:
+  `centers_update_owner` пускала прямой `PATCH deleted_at` в обход RPC.
+  `center_write_state()` различает «истекла подписка» и «центр удалён» —
+  раньше оба состояния показывали один и тот же текст «оплатите тариф».
+  Экран `/app/settings/plan` — кнопки экспорта и удаления/отмены.
 - **Этап 8a, шаг 6: воронка учеников** — `0055_funnel.sql`.
   `students.funnel_stage` (семь шагов, отдельно от `status`; `'lead'` —
   мёртвое значение — снят из `students.status`), история переходов

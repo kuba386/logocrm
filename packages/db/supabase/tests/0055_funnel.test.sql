@@ -144,14 +144,14 @@ select is(
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select lives_ok(
-  $q$ select public.create_student_with_payer('Клиент 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), null, null, null, null, null, null, null, null, 'active') $q$,
+  $q$ select public.create_student_with_payer('Клиент 0055', 'a0550000-0000-0000-0000-000000000030', null, null, null, null, null, null, null, null, 'active') $q$,
   'С явным этапом active — кассир заводит уже действующего клиента (Б)');
 select throws_ok(
-  $q$ select public.create_student_with_payer('Плохой 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), null, null, null, null, null, null, null, null, 'completed') $q$,
+  $q$ select public.create_student_with_payer('Плохой 0055', 'a0550000-0000-0000-0000-000000000030', null, null, null, null, null, null, null, null, 'completed') $q$,
   '22023', null,
   'Завести сразу с completed нельзя');
 select throws_ok(
-  $q$ select public.create_student_with_payer('Плохой2 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), null, null, null, null, null, null, null, null, 'no-such-stage') $q$,
+  $q$ select public.create_student_with_payer('Плохой2 0055', 'a0550000-0000-0000-0000-000000000030', null, null, null, null, null, null, null, null, 'no-such-stage') $q$,
   '22023', null,
   'Неизвестный этап отбивается');
 reset role;
@@ -161,11 +161,12 @@ select is((select funnel_stage from public.students where full_name = 'Клие�
 -- Основной ученик для графа и автоперехода: свежесозданный лид.
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('Граф 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('Граф 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 
 create temporary table t0055_student as
   select id from public.students where full_name = 'Граф 0055';
+grant select on t0055_student to authenticated;
 
 
 -- 3. Граф переходов: ручной путь (Р3, Р4) -----------------------------------------------------------------
@@ -223,10 +224,13 @@ select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000
 set local role authenticated;
 select public.set_funnel_stage((select id from t0055_student), 'contacted', 'перезвонили сами', false);
 reset role;
+-- order by at, id: at одинаков внутри одной транзакции (весь файл — один
+-- begin/rollback), id — единственный надёжный тай-брейк (тот же приём,
+-- что funnel_summary, header Р10).
 select ok(
   (select fe.cause = 'перезвонили сами' and fe.is_service = false and fe.by = 'a0550000-0000-0000-0000-000000000003'
      from public.funnel_events fe where fe.student_id = (select id from t0055_student) and fe.to_stage = 'contacted'
-    order by fe.at desc limit 1),
+    order by fe.at desc, fe.id desc limit 1),
   'cause/is_service/by записаны верно (В)');
 
 -- Коррекция ошибки оператора — is_service=true, отдельно от обычного шага.
@@ -237,7 +241,7 @@ reset role;
 select ok(
   (select fe.is_service = true and fe.cause = 'опечатка при вводе'
      from public.funnel_events fe where fe.student_id = (select id from t0055_student) and fe.to_stage = 'consultation'
-    order by fe.at desc limit 1),
+    order by fe.at desc, fe.id desc limit 1),
   'p_is_service=true доезжает до строки — коррекция, а не обычный шаг (Р10 её исключает из funnel_summary.transitions)');
 
 
@@ -289,14 +293,15 @@ select is(
 -- Отдельный студент для чистого автоперехода.
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('Продажа 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('Продажа 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 create temporary table t0055_sale as select id from public.students where full_name = 'Продажа 0055';
+grant select on t0055_sale to authenticated;
 
 select public.tests_claims(null, null);
 insert into public.subscriptions (center_id, student_id, payer_id, price_tiyin, starts_at)
 values ('a0550000-0000-0000-0000-0000000000c1', (select id from t0055_sale),
-        (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), 700000, current_date);
+        'a0550000-0000-0000-0000-000000000030', 700000, current_date);
 
 select is((select funnel_stage from public.students where id = (select id from t0055_sale)), 'active',
   'Продажа абонемента переводит lead → active автоматически (Р5)');
@@ -308,7 +313,7 @@ select is(
 select public.tests_claims(null, null);
 insert into public.subscriptions (center_id, student_id, payer_id, price_tiyin, starts_at)
 values ('a0550000-0000-0000-0000-0000000000c1', (select id from t0055_sale),
-        (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), 700000, current_date);
+        'a0550000-0000-0000-0000-000000000030', 700000, current_date);
 select is(
   (select count(*)::int from public.funnel_events where student_id = (select id from t0055_sale) and to_stage = 'active'),
   1, 'Вторая продажа не создала второе событие — студент уже active');
@@ -316,9 +321,10 @@ select is(
 -- Посещение: студент для теста «Прогул» не переводит, а «Пришёл» — переводит.
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('Посещение 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('Посещение 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 create temporary table t0055_att as select id from public.students where full_name = 'Посещение 0055';
+grant select on t0055_att to authenticated;
 
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
   ('a0550000-0000-0000-0000-000000000060','a0550000-0000-0000-0000-0000000000c1','a0550000-0000-0000-0000-000000000010',
@@ -328,18 +334,26 @@ insert into public.lessons (id, center_id, teacher_id, student_id, service_id, s
    (select id from t0055_att),'a0550000-0000-0000-0000-000000000020','planned',
    now() - interval '1 hour', now() - interval '15 minutes');
 
-select public.tests_claims(null, null);
+-- Реальная сессия, не tests_claims(null,null): attendance_recalc_trigger
+-- (0010) безусловно зовёт emit_event('attendance.marked', ...) на каждый
+-- insert, а emit_event (0002) с этой миграции требует auth.uid() — без
+-- сессии сама вставка падает раньше, чем что-либо про воронку.
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
 values ('a0550000-0000-0000-0000-0000000000c1', 'a0550000-0000-0000-0000-000000000060', (select id from t0055_att),
         (select id from public.attendance_statuses where center_id = 'a0550000-0000-0000-0000-0000000000c1' and code = 'absent'));
+reset role;
 
 select is((select funnel_stage from public.students where id = (select id from t0055_att)), 'lead',
   'Отметка «Прогул» (deducts_lesson=true, is_present=false) НЕ переводит в active — deducted не годится критерием (Д)');
 
-select public.tests_claims(null, null);
+select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
 values ('a0550000-0000-0000-0000-0000000000c1', 'a0550000-0000-0000-0000-000000000061', (select id from t0055_att),
         (select id from public.attendance_statuses where center_id = 'a0550000-0000-0000-0000-0000000000c1' and code = 'present'));
+reset role;
 
 select is((select funnel_stage from public.students where id = (select id from t0055_att)), 'active',
   'Отметка «Пришёл» (is_present=true) переводит в active (Р5)');
@@ -348,14 +362,14 @@ select is((select funnel_stage from public.students where id = (select id from t
 -- paused/archived не трогает автопереход; completed→active (реактивация) разрешён.
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('Пауза 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('Пауза 0055', 'a0550000-0000-0000-0000-000000000030');
 reset role;
 create temporary table t0055_paused as select id from public.students where full_name = 'Пауза 0055';
 select public.tests_claims(null, null);
 update public.students set status = 'paused' where id = (select id from t0055_paused);
 insert into public.subscriptions (center_id, student_id, payer_id, price_tiyin, starts_at)
 values ('a0550000-0000-0000-0000-0000000000c1', (select id from t0055_paused),
-        (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), 700000, current_date);
+        'a0550000-0000-0000-0000-000000000030', 700000, current_date);
 select is((select funnel_stage from public.students where id = (select id from t0055_paused)), 'lead',
   'Приостановленный студент не реактивируется продажей абонемента (Р5)');
 
@@ -371,7 +385,7 @@ select is((select funnel_stage from public.students where id = (select id from t
 select public.tests_claims(null, null);
 insert into public.subscriptions (center_id, student_id, payer_id, price_tiyin, starts_at)
 values ('a0550000-0000-0000-0000-0000000000c1', (select id from t0055_sale),
-        (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'), 700000, current_date);
+        'a0550000-0000-0000-0000-000000000030', 700000, current_date);
 select is((select funnel_stage from public.students where id = (select id from t0055_sale)), 'active',
   'Новая продажа вернувшемуся клиенту из completed переводит в active — реактивация (Р9)');
 select is(
@@ -389,7 +403,7 @@ select is(
 
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('СессияПродажа 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('СессияПродажа 0055', 'a0550000-0000-0000-0000-000000000030');
 create temporary table t0055_sess_sale as select id from public.students where full_name = 'СессияПродажа 0055';
 select public.sell_subscription('a0550000-0000-0000-0000-000000000040', (select id from t0055_sess_sale));
 reset role;
@@ -402,13 +416,15 @@ select is(
 
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('СессияПосещение 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('СессияПосещение 0055', 'a0550000-0000-0000-0000-000000000030');
 create temporary table t0055_sess_att as select id from public.students where full_name = 'СессияПосещение 0055';
 
+-- Не now()-1h/-15m: тот же слот у того же специалиста уже занят лесс. 061
+-- в разделе 6 (lessons_teacher_no_overlap отбил бы вставку).
 insert into public.lessons (id, center_id, teacher_id, student_id, service_id, status, starts_at, ends_at) values
   ('a0550000-0000-0000-0000-000000000062','a0550000-0000-0000-0000-0000000000c1','a0550000-0000-0000-0000-000000000010',
    (select id from t0055_sess_att),'a0550000-0000-0000-0000-000000000020','planned',
-   now() - interval '1 hour', now() - interval '15 minutes');
+   now() - interval '3 hours', now() - interval '2 hours 15 minutes');
 
 -- registrar пишет attendance напрямую (apply_role_rls 'write', 0028) —
 -- тот же путь, что учитель использует на экране расписания.
@@ -427,13 +443,13 @@ select is(
 -- не продажа: не должен засчитываться конверсией (Р12б, находка 8).
 select public.tests_claims('a0550000-0000-0000-0000-000000000003','a0550000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select public.create_student_with_payer('ДонорПереноса 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('ДонорПереноса 0055', 'a0550000-0000-0000-0000-000000000030');
 create temporary table t0055_donor as select id from public.students where full_name = 'ДонорПереноса 0055';
 select public.sell_subscription('a0550000-0000-0000-0000-000000000040', (select id from t0055_donor));
 create temporary table t0055_donor_sub as
   select id from public.subscriptions where student_id = (select id from t0055_donor) order by created_at desc limit 1;
 
-select public.create_student_with_payer('ПолучательПереноса 0055', (select id from public.payers where center_id = 'a0550000-0000-0000-0000-0000000000c1'));
+select public.create_student_with_payer('ПолучательПереноса 0055', 'a0550000-0000-0000-0000-000000000030');
 create temporary table t0055_receiver as select id from public.students where full_name = 'ПолучательПереноса 0055';
 select public.transfer_remaining((select id from t0055_donor_sub), (select id from t0055_receiver));
 reset role;
@@ -504,12 +520,19 @@ select throws_ok(
   '22023', null,
   'from > to отбивается');
 
+-- center_today(), не current_date: сессия CI — в UTC, а funnel_summary
+-- переводит границы периода в пояс центра (Asia/Bishkek, +6) — вечером по
+-- UTC «сегодня» в Бишкеке уже следующий день, и current_date снаружи не
+-- совпадал бы с той датой, которую функция считает «сегодня» внутри.
 create temporary table t0055_summary as
-  select public.funnel_summary(current_date - 30, current_date) as s;
+  select public.funnel_summary(
+    public.center_today('a0550000-0000-0000-0000-0000000000c1') - 30,
+    public.center_today('a0550000-0000-0000-0000-0000000000c1')
+  ) as s;
 
 select ok(
   (select count(*)::int from jsonb_array_elements((select s from t0055_summary) -> 'current') x
-    where (x ->> 'stage') = 'active' and (x ->> 'count')::int >= 2),
+    where (x ->> 'stage') = 'active' and (x ->> 'count')::int >= 2) > 0,
   'funnel_summary.current: минимум двое active сейчас (Продажа 0055, Посещение 0055)');
 select ok(
   (select count(*)::int from jsonb_array_elements((select s from t0055_summary) -> 'transitions') x

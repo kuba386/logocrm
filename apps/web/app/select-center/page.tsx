@@ -21,23 +21,18 @@ export default async function SelectCenterPage() {
 
   const currentCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
 
-  const { data: memberships } = await supabase
-    .from('memberships')
-    .select('center_id, role, centers(id, name)')
-    .eq('user_id', user.id)
+  // my_memberships() (0056 Р15), не .from('memberships').select('centers(...)'):
+  // тот join фильтруется RLS на centers и прячет центр, помеченный на
+  // удаление, от его же владельца — окно отсрочки было бы нечем открыть.
+  const { data: memberships } = await supabase.rpc('my_memberships')
 
-  const centers: CenterOption[] = (memberships ?? [])
-    .map((membership) => {
-      const center = membership.centers as unknown as { id: string; name: string } | null
-      if (!center) return null
-      return {
-        centerId: center.id,
-        name: center.name,
-        role: membership.role,
-        isCurrent: center.id === currentCenterId,
-      }
-    })
-    .filter((center): center is CenterOption => center !== null)
+  const centers: CenterOption[] = (memberships ?? []).map((membership) => ({
+    centerId: membership.center_id,
+    name: membership.center_name,
+    role: membership.role,
+    isCurrent: membership.center_id === currentCenterId,
+    deleted: membership.deleted,
+  }))
 
   if (centers.length === 0) {
     redirect(await noCenterRedirectPath(supabase))
