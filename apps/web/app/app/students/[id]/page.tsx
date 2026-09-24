@@ -21,6 +21,7 @@ import {
 } from './subscriptions-panel'
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
 import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
+import { ArticulationPanel, type ArticulationEntry } from './articulation-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
@@ -428,6 +429,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   let anamnesis: AnamnesisEntry | null = null
   const showAnamnesis = isAdmin || isTeacher
 
+  // Артикуляционный аппарат (0065) — тот же класс данных и та же
+  // видимость, что анамнез.
+  let articulation: ArticulationEntry | null = null
+  const showArticulation = isAdmin || isTeacher
+
   // Дата заметки рендерится в поясе центра — та же дата, что уходит
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
@@ -758,6 +764,33 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  if (showArticulation) {
+    const { data: articulationRow } = await supabase
+      .from('student_articulation')
+      .select(
+        'updated_at, collected_at, lips_structure, lips_mobility, teeth, bite, hard_palate, soft_palate, tongue_structure, tongue_mobility, frenulum, notes',
+      )
+      .eq('student_id', id)
+      .maybeSingle()
+
+    if (articulationRow) {
+      articulation = {
+        updatedAt: articulationRow.updated_at,
+        collectedAt: articulationRow.collected_at,
+        lipsStructure: articulationRow.lips_structure,
+        lipsMobility: articulationRow.lips_mobility,
+        teeth: articulationRow.teeth,
+        bite: articulationRow.bite,
+        hardPalate: articulationRow.hard_palate,
+        softPalate: articulationRow.soft_palate,
+        tongueStructure: articulationRow.tongue_structure,
+        tongueMobility: articulationRow.tongue_mobility,
+        frenulum: articulationRow.frenulum,
+        notes: articulationRow.notes,
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -882,6 +915,18 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           </CardHeader>
           <CardContent>
             <AnamnesisPanel studentId={id} entry={anamnesis} canWrite={canWriteClinical} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showArticulation ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Артикуляционный аппарат</CardTitle>
+            <CardDescription>Строение и подвижность. Родителю не показывается.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ArticulationPanel studentId={id} entry={articulation} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
       ) : null}
