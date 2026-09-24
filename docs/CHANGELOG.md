@@ -7,6 +7,22 @@
 
 ### Добавлено
 
+- **`/api/health` и чек-лист наблюдаемости** — `apps/web/app/api/health/route.ts`
+  отвечает `{"ok":true}`, когда `invitation_preview` с заведомо
+  несуществующим токеном вернула строку `(null, null, false)` — единственная
+  функция, которую `anon` вправе вызвать до входа (0004; список из одной
+  функции держит pgTAP 0007, у `anon` нет прав ни на одну таблицу — 0024,
+  поэтому «анонимный select по `centers`» не работает). Публичный ключ, не
+  `service_role` (ADR-008); `503` с текстом при отказе; путь добавлен в
+  `PUBLIC_PATHS` middleware, иначе монитор без сессии получал бы редирект
+  на `/login`. Проверено на живом dev-сервере: `200 {"ok":true}` без
+  cookie, `/app` без cookie по-прежнему `307` на `/login`. [docs/OBSERVABILITY_SETUP.md](OBSERVABILITY_SETUP.md)
+  — Sentry, UptimeRobot, n8n `alerts` в Telegram, Spend Cap
+  Supabase/Vercel; сверен с репозиторием (пути `apps/web`,
+  `next.config.mjs`, `pnpm`, `centers`, существующий бот). Ключи и тумблеры
+  дашбордов — руками владельца, как и остальная стадия Prod этапа 8.
+  `.env.sentry-build-plugin` добавлен в `.gitignore` заранее — под
+  `.env*.local` он не попадал.
 - **Этап 8a, шаг 8: публичная витрина записи `/book/[slug]`** —
   `0057_public_booking.sql`. Заявка на подтверждение (`booking_requests`),
   не мгновенная запись — анонимный путь не касается `students`/`lessons`/
