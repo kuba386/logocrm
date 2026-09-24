@@ -278,7 +278,7 @@ select throws_ok(
   $q$ select public.link_parent_payer('66666666-6666-6666-6666-666666666666', 'dddddddd-0000-0000-0000-000000000601') $q$,
   '42704', null, 'Специалист — не родитель: тот же 42704');
 select throws_ok(
-  $q$ select public.link_parent_payer('99999999-9999-9999-9999-999999999999', 'dddddddd-0000-0000-0000-000000000601') $q$,
+  $q$ select public.link_parent_payer('abababab-abab-abab-abab-abababababab', 'dddddddd-0000-0000-0000-000000000601') $q$,
   '42704', null, 'Несуществующий пользователь — 42704');
 select throws_ok(
   $q$ select public.link_parent_payer('88888888-8888-8888-8888-888888888888', 'dddddddd-0000-0000-0000-000000000605') $q$,
