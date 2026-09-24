@@ -240,21 +240,39 @@ call public.apply_readonly_guard('student_anamnesis');
 -- своей же записи — тот же приём, что 0038/0059 Р18 для diagnostics
 -- (created_by = auth.uid() видит и правит независимо от текущей
 -- clinical_teacher_sees).
+-- CI поймал то, что ревью не заметило: «or created_by = auth.uid()» без
+-- дополнительной обёртки обходит не только проверку роли внутри
+-- clinical_student_visible, но и её же проверку «ученик не удалён» —
+-- автор-owner увидел бы анамнез archived-мимо-приложения ученика. Обе
+-- ветки заворачиваются в общую проверку «ученик жив», исключение автора
+-- снимает только требование роли/clinical_teacher_sees, не существование.
 drop policy if exists student_anamnesis_teacher_read on public.student_anamnesis;
 create policy student_anamnesis_teacher_read on public.student_anamnesis
   for select to authenticated
   using (
     center_id = public.current_center()
+    and exists (
+      select 1 from public.students s
+       where s.id = student_id and s.center_id = public.current_center() and s.deleted_at is null
+    )
     and (public.clinical_student_visible(student_id) or created_by = auth.uid())
   );
 
 -- Р5: restrictive — обязательна для ВСЕХ читателей, включая owner/admin
 -- через permissive tenant_admin (0059 Р14, тот же класс дыры). Исключение
--- автора — то же самое и здесь, иначе restrictive отменит его.
+-- автора — то же самое и здесь, иначе restrictive отменит его; та же
+-- обёртка «ученик жив» — иначе restrictive пропустила бы ровно то, что
+-- должна была ловить (см. комментарий выше).
 drop policy if exists student_anamnesis_visible on public.student_anamnesis;
 create policy student_anamnesis_visible on public.student_anamnesis
   as restrictive for select to authenticated
-  using (public.clinical_student_visible(student_id) or created_by = auth.uid());
+  using (
+    exists (
+      select 1 from public.students s
+       where s.id = student_id and s.center_id = public.current_center() and s.deleted_at is null
+    )
+    and (public.clinical_student_visible(student_id) or created_by = auth.uid())
+  );
 
 revoke all on table public.student_anamnesis from public, anon, authenticated;
 grant select on public.student_anamnesis to authenticated;
