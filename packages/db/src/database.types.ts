@@ -4225,6 +4225,12 @@ export type Database = {
       }
       export_center_info: { Args: never; Returns: Json }
       export_center_table: { Args: { p_table: string }; Returns: Json }
+      export_center_tables: {
+        Args: never
+        Returns: {
+          table_name: string
+        }[]
+      }
       export_debts: {
         Args: never
         Returns: {
@@ -4272,12 +4278,6 @@ export type Database = {
           calc_tiyin: number
           teacher_name: string
           total_tiyin: number
-        }[]
-      }
-      export_center_tables: {
-        Args: never
-        Returns: {
-          table_name: string
         }[]
       }
       extend_subscription: {
@@ -4657,6 +4657,10 @@ export type Database = {
       }
       reopen_month: { Args: { p_month: string }; Returns: undefined }
       repair_center_scoped_refs: { Args: never; Returns: undefined }
+      report_period_check: {
+        Args: { p_from: string; p_to: string }
+        Returns: undefined
+      }
       report_voice_note: {
         Args: { p_chat_id: number; p_duration?: number; p_file_id: string }
         Returns: Json
