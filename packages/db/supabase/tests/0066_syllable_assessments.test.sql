@@ -14,9 +14,9 @@
 -- центр Б — 42704; архивирует только owner/admin; классы/типы ошибок вне
 -- набора или сверх лимита — 23514 от CHECK (RPC не дублирует список);
 -- дата вне диапазона — 23514; замок по updated_at — 22023; read-only
--- центр — PT402 на всех трёх RPC; архивация ребёнка НЕ прячет историю от
--- owner/admin (Р5 — сознательное отличие от профилей 0063/0065), но
--- прячет от teacher.
+-- центр — PT402 на всех трёх RPC; архивация ребёнка (deleted_at мимо
+-- приложения) прячет историю от ВСЕХ без исключения, включая owner/admin
+-- (Р13 — пересмотр исходного Р5, точный образец 0063/0065).
 --
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
@@ -401,6 +401,7 @@ select ok(
 select is(
   (select count(*)::int from public.syllable_assessments where student_id = 'a0660000-0000-0000-0000-000000000040'), 1,
   'После архива одной — вторая осталась видимой (архив не каскадом)');
+reset role;
 
 -- Р13 (пересмотр Р5): student_alive в restrictive держит ВСЕХ, включая
 -- owner/admin, — students.deleted_at выставлен мимо приложения (в
@@ -453,9 +454,12 @@ reset role;
 -- заведён просроченным в фикстуре) — проверяет update_/archive_ отдельно.
 select public.tests_claims(null, null);
 create temporary table t0066_ro as
-  insert into public.syllable_assessments (center_id, student_id, affected_classes)
-    values ('a0660000-0000-0000-0000-0000000000c3','a0660000-0000-0000-0000-000000000043', array['3'])
-    returning id;
+  with ins as (
+    insert into public.syllable_assessments (center_id, student_id, affected_classes)
+      values ('a0660000-0000-0000-0000-0000000000c3','a0660000-0000-0000-0000-000000000043', array['3'])
+      returning id
+  )
+  select id from ins;
 grant select on t0066_ro to authenticated;
 
 select public.tests_claims('a0660000-0000-0000-0000-000000000008','a0660000-0000-0000-0000-0000000000c3');
