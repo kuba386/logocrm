@@ -20,6 +20,7 @@ export type CenterOption = {
   name: string
   role: string
   isCurrent: boolean
+  deleted: boolean
 }
 
 function SubmitButton({ isCurrent }: { isCurrent: boolean }) {
@@ -49,6 +50,7 @@ export function CenterList({ centers }: { centers: CenterOption[] }) {
               <p className="text-sm text-muted-foreground">
                 {ROLE_LABELS[center.role] ?? center.role}
                 {center.isCurrent ? ' · текущий' : ''}
+                {center.deleted ? ' · помечен на удаление' : ''}
               </p>
             </div>
             <form action={formAction}>

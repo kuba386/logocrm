@@ -8,6 +8,7 @@ import { parseCenterLimits } from '@/lib/plan'
 import { centerTimeZone, formatInTimeZone } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { PaymentForm, WithdrawForm } from './payment-form'
+import { CancelDeletionForm, DeleteCenterForm, ExportAuditForm, ExportDataForm } from './export-delete-panel'
 
 export const metadata = { title: 'Тариф и оплата — LogoCRM' }
 
@@ -56,19 +57,35 @@ export default async function PlanPage() {
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
 
-  const [{ data: limitsJson, error: limitsError }, { data: plans }, { data: center }, { data: payments }] =
-    await Promise.all([
-      supabase.rpc('center_limits'),
-      supabase.from('plans').select('code, name, price_tiyin, limits, sort').eq('is_public', true).order('sort'),
-      supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
-      supabase
-        .from('platform_payments')
-        .select(
-          'id, claimed_plan, claimed_months, claimed_amount_tiyin, source, note, created_at, withdrawn_at, rejected_at, reject_reason, confirmed_at, plan, months, amount_tiyin',
-        )
-        .order('created_at', { ascending: false })
-        .limit(20),
-    ])
+  const [
+    { data: limitsJson, error: limitsError },
+    { data: plans },
+    { data: center },
+    { data: payments },
+    { data: deletionJson },
+    { data: todayStr },
+  ] = await Promise.all([
+    supabase.rpc('center_limits'),
+    supabase.from('plans').select('code, name, price_tiyin, limits, sort').eq('is_public', true).order('sort'),
+    supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+    supabase
+      .from('platform_payments')
+      .select(
+        'id, claimed_plan, claimed_months, claimed_amount_tiyin, source, note, created_at, withdrawn_at, rejected_at, reject_reason, confirmed_at, plan, months, amount_tiyin',
+      )
+      .order('created_at', { ascending: false })
+      .limit(20),
+    // center_deletion_state (0056 Р10) — обходит RLS: после request_center_deletion
+    // обычный select .from('centers') строку уже не отдаёт.
+    supabase.rpc('center_deletion_state'),
+    // Даты по умолчанию для экспорта журнала — в поясе центра, не UTC
+    // браузера (0056, ревью написанного SQL, находка 8).
+    supabase.rpc('center_today', {}),
+  ])
+
+  const deletion = deletionJson as { name: string; deleted: boolean; deleted_at: string | null } | null
+  const today = todayStr ?? new Date().toISOString().slice(0, 10)
+  const monthAgo = new Date(new Date(`${today}T00:00:00Z`).getTime() - 30 * 86400000).toISOString().slice(0, 10)
 
   const limits = parseCenterLimits(limitsJson)
   const timeZone = centerTimeZone(center?.settings)
@@ -274,6 +291,41 @@ export default async function PlanPage() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('plan', 'exportSectionTitle')}</CardTitle>
+              <CardDescription>{t('plan', 'exportSectionSubtitle')}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ExportDataForm />
+              <div className="space-y-2 border-t border-border pt-4">
+                <p className="text-sm font-medium">{t('plan', 'exportAuditTitle')}</p>
+                <ExportAuditForm today={today} monthAgo={monthAgo} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {role === 'owner' ? (
+            <Card className="border-destructive/30">
+              <CardHeader>
+                <CardTitle>{t('plan', 'deleteSectionTitle')}</CardTitle>
+                <CardDescription>{t('plan', 'deleteSectionSubtitle')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {deletion?.deleted ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-destructive">
+                      {t('plan', 'deletedNotice', { date: deletion.deleted_at ? date(deletion.deleted_at) : '—' })}
+                    </p>
+                    <CancelDeletionForm />
+                  </div>
+                ) : (
+                  <DeleteCenterForm centerName={deletion?.name ?? ''} />
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       )}
     </div>

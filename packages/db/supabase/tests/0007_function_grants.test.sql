@@ -108,7 +108,9 @@ from unnest(array[
   'public.ai_write_lesson_note(bigint,jsonb)',
   'public.lesson_note_goal_scores_check_student()',
   'public.notification_log_transition()',
-  'public.notification_log_subject_required()'
+  'public.notification_log_subject_required()',
+  'public.center_write_state(uuid)',
+  'public.export_center_excluded_tables()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -288,7 +290,16 @@ select set_eq(
     ('approve_lesson_note(uuid)'),
     ('archive_lesson_note(uuid)'),
     ('complete_lesson(uuid,jsonb)'),
-    ('save_exercise(text,uuid,text,text,text,text,text,integer,integer,text[],boolean)')
+    ('save_exercise(text,uuid,text,text,text,text,text,integer,integer,text[],boolean)'),
+    ('export_center_tables()'),
+    ('export_center_table(text)'),
+    ('export_center_audit(date,date)'),
+    ('record_center_export()'),
+    ('export_center_info()'),
+    ('my_memberships()'),
+    ('request_center_deletion(text)'),
+    ('cancel_center_deletion()'),
+    ('center_deletion_state()')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
