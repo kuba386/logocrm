@@ -4,7 +4,7 @@
 -- authenticated), под readonly-guard, в export_center_tables(). Роль
 -- public_booking не имеет ни одного табличного гранта, только execute на
 -- три функции витрины. booking_center_info/booking_teacher_busy —
--- found=false/пусто одинаково для неизвестного slug, неопубликованного,
+-- is_open=false/пусто одинаково для неизвестного slug, неопубликованного,
 -- read-only и удалённого центра; никакого PII в ответе; teacher чужого
 -- центра не виден. submit_booking_request — не трогает students/lessons/
 -- payers; телефон нормализуется; rate limit по телефону и по центру;
@@ -117,14 +117,14 @@ $$;
 select public.tests_claims(null, null);
 
 select is(
-  (select found from public.booking_center_info('centr-a-0057')), true,
-  'Опубликованный центр — found=true');
+  (select is_open from public.booking_center_info('centr-a-0057')), true,
+  'Опубликованный центр — is_open=true');
 select is(
-  (select found from public.booking_center_info('net-takogo-slug')), false,
-  'Неизвестный slug — found=false');
+  (select is_open from public.booking_center_info('net-takogo-slug')), false,
+  'Неизвестный slug — is_open=false');
 select is(
-  (select found from public.booking_center_info('centr-b-0057')), false,
-  'Центр без booking_enabled — found=false, неотличимо от неизвестного slug (Р4)');
+  (select is_open from public.booking_center_info('centr-b-0057')), false,
+  'Центр без booking_enabled — is_open=false, неотличимо от неизвестного slug (Р4)');
 select is(
   (select jsonb_array_length(teachers) from public.booking_center_info('centr-a-0057')), 1,
   'Только активные специалисты опубликованного центра');
