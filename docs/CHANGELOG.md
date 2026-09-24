@@ -7,6 +7,23 @@
 
 ### Добавлено
 
+- **Этап 8a, шаг 8: публичная витрина записи `/book/[slug]`** —
+  `0057_public_booking.sql`. Заявка на подтверждение (`booking_requests`),
+  не мгновенная запись — анонимный путь не касается `students`/`lessons`/
+  `payers`. Новая роль `public_booking` (калька `bot_worker`, 0032): ни
+  одного табличного гранта, только `execute` на `booking_center_info`/
+  `booking_teacher_busy`/`submit_booking_request`; не `anon` и не
+  `service_role`. Rate limit по телефону (в границах центра,
+  `pg_advisory_xact_lock`) и мягкий backstop по центру — без отдельной
+  attempts-таблицы. Подтверждение/отклонение — стойка (owner/admin/
+  registrar) через `confirm_booking_request`/`decline_booking_request`,
+  предпросмотр совпадения с существующим плательщиком по телефону
+  (`booking_request_payer_match`) — явный выбор, не неявный матчинг.
+  Тумблер публикации центра — `set_booking_enabled` (owner/admin),
+  `centers.settings.booking_enabled`. Экраны: публичная форма `/book/
+  [slug]`, очередь заявок `/app/bookings`, тумблер в `/app/settings/plan`.
+  Требует владельца: JWT роли `public_booking` (`SUPABASE_BOOKING_JWT` в
+  Vercel), как у `SUPABASE_BOT_JWT`.
 - **Этап 8a, шаг 7: экспорт центра и заявка на удаление** —
   `0056_center_export_deletion.sql`. `export_center_tables()` — явный
   allow-list (не «каталог минус deny»), `export_center_table(table)` — по

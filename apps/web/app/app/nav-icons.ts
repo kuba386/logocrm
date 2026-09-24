@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Contact,
   GraduationCap,
+  Inbox,
   Landmark,
   LayoutDashboard,
   Receipt,
@@ -30,6 +31,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   '/app/salary': Wallet,
   '/app/my-salary': Wallet,
   '/app/notifications': Bell,
+  '/app/bookings': Inbox,
   '/app/telegram': Send,
   '/app/settings/staff': Settings,
 }

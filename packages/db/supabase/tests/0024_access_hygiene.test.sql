@@ -60,7 +60,8 @@ select ok(
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
       and c.relname in ('lesson_participants', 'audit_log', 'events', 'memberships',
-                        'ai_usage', 'lesson_note_goal_scores', 'monthly_reports', 'funnel_events')),
+                        'ai_usage', 'lesson_note_goal_scores', 'monthly_reports', 'funnel_events',
+                        'booking_requests')),
   'Денормализованные и служебные таблицы — только чтение'
 );
 -- 0041: токен диктовки и очередь работ ИИ не видны прикладным ролям вовсе —

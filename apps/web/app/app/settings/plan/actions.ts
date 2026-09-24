@@ -137,3 +137,13 @@ export async function cancelDeletion(_prev: PlanState, _formData: FormData): Pro
   revalidatePath('/app', 'layout')
   return { notice: t('plan', 'deleteCancelled') }
 }
+
+/** Публикация витрины записи (0057 Р3) — owner/admin. */
+export async function setBookingEnabled(enabled: boolean, _prev: PlanState): Promise<PlanState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('set_booking_enabled', { p_enabled: enabled })
+  if (error) return toAppError(error, t('bookingQueue', 'actionFailed'))
+
+  revalidatePath('/app/settings/plan')
+  return { notice: enabled ? t('bookingQueue', 'publishOn') : t('bookingQueue', 'publishOff') }
+}

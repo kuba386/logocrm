@@ -9,6 +9,7 @@ import { centerTimeZone, formatInTimeZone } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { PaymentForm, WithdrawForm } from './payment-form'
 import { CancelDeletionForm, DeleteCenterForm, ExportAuditForm, ExportDataForm } from './export-delete-panel'
+import { BookingToggleForm } from './booking-panel'
 
 export const metadata = { title: 'Тариф и оплата — LogoCRM' }
 
@@ -67,7 +68,7 @@ export default async function PlanPage() {
   ] = await Promise.all([
     supabase.rpc('center_limits'),
     supabase.from('plans').select('code, name, price_tiyin, limits, sort').eq('is_public', true).order('sort'),
-    supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+    supabase.from('centers').select('settings, slug').eq('id', centerId ?? '').maybeSingle(),
     supabase
       .from('platform_payments')
       .select(
@@ -84,6 +85,7 @@ export default async function PlanPage() {
   ])
 
   const deletion = deletionJson as { name: string; deleted: boolean; deleted_at: string | null } | null
+  const bookingEnabled = Boolean((center?.settings as Record<string, unknown> | null)?.booking_enabled)
   const today = todayStr ?? new Date().toISOString().slice(0, 10)
   const monthAgo = new Date(new Date(`${today}T00:00:00Z`).getTime() - 30 * 86400000).toISOString().slice(0, 10)
 
@@ -289,6 +291,18 @@ export default async function PlanPage() {
                   </TableBody>
                 </Table>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('bookingQueue', 'publishTitle')}</CardTitle>
+              <CardDescription>
+                {t('bookingQueue', 'publishDescription', { slug: center?.slug ?? '' })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BookingToggleForm enabled={bookingEnabled} />
             </CardContent>
           </Card>
 

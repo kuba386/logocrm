@@ -819,6 +819,17 @@ export const centerDeletionCancelledSchema = z.object({
   }),
 })
 
+/** Заявка с публичной витрины записи /book/[slug] (0057) — очередь на подтверждение, не мгновенная запись. */
+export const bookingRequestedSchema = z.object({
+  type: z.literal('booking.requested'),
+  payload: z.object({
+    request_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    service_id: z.string().uuid(),
+    starts_at: z.string(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -892,6 +903,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   centerExportedSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
+  bookingRequestedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 
