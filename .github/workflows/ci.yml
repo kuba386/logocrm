@@ -83,8 +83,11 @@ jobs:
     timeout-minutes: 25
     # Единственный джоб с правом записи: коммитит в ветку PR канонические
     # типы, сгенерированные из миграций. В main не пишет никогда.
+    # packages: read — вход в ghcr.io ниже, только на чтение чужих публичных
+    # образов, ничего не публикует.
     permissions:
       contents: write
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -101,10 +104,17 @@ jobs:
         with:
           version: 2.116.0
 
-      # ghcr.io регулярно отвечает toomanyrequests на подъёме образов
-      # (supabase/postgres, kong, gotrue и т.д.) — транзиентный лимит
-      # реестра, не связан с содержимым PR (23-24.09.2026, минимум пять
-      # прогонов подряд на разных PR). Пять попыток с растущей паузой.
+      # toomanyrequests ниже — анонимный лимит ghcr.io считается по egress
+      # IP раннера, общему для чужих прогонов на том же пуле, а не по
+      # репозиторию. Вход по GITHUB_TOKEN переводит подъём образов Supabase
+      # в авторизованный (более высокий и свой) лимит — до чужого трафика на
+      # том же IP это больше не касается. Образы supabase/* публичные,
+      # логин не значит доступ к чему-то новому, только другой лимит.
+      - name: Войти в ghcr.io (снимает анонимный rate-limit на подъёме образов)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Ретрай — подстраховка на случай, если даже авторизованный лимит
+      # исчерпан (23-24.09.2026, минимум пять прогонов подряд на разных PR).
       - name: Запуск локального Supabase
         working-directory: packages/db
         run: |
@@ -227,6 +237,12 @@ jobs:
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # contents: read — по умолчанию workflow и так read, но джоб с любым
+    # permissions: теряет неперечисленные права; packages: read — вход в
+    # ghcr.io ниже.
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -244,9 +260,12 @@ jobs:
       - name: Установка зависимостей
         run: pnpm install --frozen-lockfile
 
-      # ghcr.io регулярно отвечает toomanyrequests на подъёме образов —
-      # транзиентный лимит реестра, не связан с содержимым PR (см. джоб
-      # db). Пять попыток с растущей паузой.
+      # Вход в ghcr.io — см. джоб db, тот же смысл: анонимный лимит по
+      # общему IP раннера меняется на авторизованный по GITHUB_TOKEN.
+      - name: Войти в ghcr.io (снимает анонимный rate-limit на подъёме образов)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Ретрай — подстраховка, см. джоб db.
       - name: Запуск локального Supabase
         working-directory: packages/db
         run: |
