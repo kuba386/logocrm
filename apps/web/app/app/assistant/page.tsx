@@ -19,8 +19,9 @@ export default async function AssistantPage() {
 
   const configured = isAssistantConfigured()
   const { data: quotaJson } = configured ? await supabase.rpc('assistant_quota') : { data: null }
-  const q = quotaJson as { used?: number; limit?: number } | null
+  const q = quotaJson as { used?: number; limit?: number; intents?: string[] } | null
   const quota = q && typeof q.used === 'number' && typeof q.limit === 'number' ? { used: q.used, limit: q.limit } : undefined
+  const intents = Array.isArray(q?.intents) ? q.intents.filter((v): v is string => typeof v === 'string') : []
 
   return (
     <div className="space-y-6">
@@ -28,7 +29,7 @@ export default async function AssistantPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{t('assistant', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('assistant', 'subtitle')}</p>
       </div>
-      {configured ? <AssistantForm quota={quota} /> : <FormNotice message={t('assistant', 'notConfigured')} />}
+      {configured ? <AssistantForm quota={quota} intents={intents} /> : <FormNotice message={t('assistant', 'notConfigured')} />}
     </div>
   )
 }

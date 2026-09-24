@@ -27,7 +27,13 @@ function calendarDate(day: string, timeZone: string): string {
   return formatInTimeZone(`${day}T12:00:00Z`, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export async function executeIntent(supabase: Client, intent: AssistantIntent, timeZone: string, today: string): Promise<AssistantAnswer | null> {
+export async function executeIntent(
+  supabase: Client,
+  intent: AssistantIntent,
+  timeZone: string,
+  today: string,
+  allowedIntents: string[],
+): Promise<AssistantAnswer | null> {
   switch (intent.intent) {
     case 'lessons_on':
       return lessonsOn(supabase, intent.date, timeZone)
@@ -36,7 +42,10 @@ export async function executeIntent(supabase: Client, intent: AssistantIntent, t
     case 'expiring_subscriptions':
       return expiring(supabase, intent.days, intent.lessons_left, timeZone, today)
     case 'student_info':
-      return studentInfo(supabase, intent.name, timeZone)
+      // Денежные колонки — только ролям, которым читаемы их источники
+      // (student_balance пуст для teacher): пустоту нельзя выдавать за
+      // «нет абонемента».
+      return studentInfo(supabase, intent.name, timeZone, allowedIntents.includes('expiring_subscriptions'))
     case 'payments_summary':
       return paymentsSummary(supabase, intent.from, intent.to, timeZone)
     case 'unknown':
@@ -84,10 +93,9 @@ async function lessonsOn(supabase: Client, date: string, timeZone: string): Prom
 async function debtors(supabase: Client, minSom: number): Promise<AssistantAnswer> {
   const { data: debts } = await supabase.rpc('student_debts')
   const filtered = (debts ?? []).filter((d) => d.debt_tiyin >= minSom * 100).sort((a, b) => b.debt_tiyin - a.debt_tiyin)
-  const ids = filtered.map((d) => d.student_id).filter((v): v is string => Boolean(v))
-  const { data: students } = ids.length ? await supabase.from('students').select('id, full_name, payer_id').in('id', ids) : { data: [] }
-  const payerIds = [...new Set((students ?? []).map((s) => s.payer_id).filter((v): v is string => Boolean(v)))]
-  const { data: payers } = payerIds.length ? await supabase.from('payers').select('id, full_name').in('id', payerIds) : { data: [] }
+  // Имена — из тех же definer-источников, что у экранов роли: у finance нет
+  // политик на students/payers (0031), прямой select дал бы прочерки.
+  const [{ data: students }, { data: payers }] = await Promise.all([supabase.rpc('students_brief'), supabase.rpc('payers_brief')])
   const studentById = new Map((students ?? []).map((s) => [s.id, s]))
   const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
 
@@ -108,11 +116,13 @@ async function expiring(supabase: Client, days: number, lessonsLeft: number, tim
     .from('student_balance')
     .select('student_id, active_subscription_id, lessons_left, ends_at, state')
     .not('active_subscription_id', 'is', null)
+  // Срок — от сегодня: давно истёкшие с непустым active_subscription_id —
+  // не «заканчиваются», а уже закончились.
   const hits = (balances ?? []).filter(
-    (b) => (b.lessons_left != null && b.lessons_left <= lessonsLeft) || (b.ends_at != null && b.ends_at <= until),
+    (b) =>
+      (b.lessons_left != null && b.lessons_left <= lessonsLeft) || (b.ends_at != null && b.ends_at >= today && b.ends_at <= until),
   )
-  const ids = hits.map((b) => b.student_id).filter((v): v is string => Boolean(v))
-  const { data: students } = ids.length ? await supabase.from('students').select('id, full_name').in('id', ids) : { data: [] }
+  const { data: students } = await supabase.rpc('students_brief')
   const name = new Map((students ?? []).map((s) => [s.id, s.full_name]))
 
   return {
@@ -129,35 +139,40 @@ async function expiring(supabase: Client, days: number, lessonsLeft: number, tim
   }
 }
 
-async function studentInfo(supabase: Client, name: string, timeZone: string): Promise<AssistantAnswer> {
+async function studentInfo(supabase: Client, name: string, timeZone: string, withMoney: boolean): Promise<AssistantAnswer> {
   const { data: found } = await supabase.rpc('global_search', { p_query: name, p_limit: 5 })
   const rows = found ?? []
   const students = rows.filter((r) => r.kind === 'student')
   const lessons = new Map(rows.filter((r) => r.kind === 'lesson').map((r) => [r.title, r]))
   const ids = students.map((s) => s.id)
-  const { data: balances } = ids.length
-    ? await supabase.from('student_balance').select('student_id, active_subscription_id, lessons_left, ends_at, debt_tiyin, state').in('student_id', ids)
-    : { data: [] }
+  const { data: balances } =
+    withMoney && ids.length
+      ? await supabase.from('student_balance').select('student_id, active_subscription_id, lessons_left, ends_at, debt_tiyin, state').in('student_id', ids)
+      : { data: [] }
   const balance = new Map((balances ?? []).map((b) => [b.student_id, b]))
 
+  const moneyColumns = withMoney ? [t('assistant', 'colSubscription'), t('assistant', 'colDebtSom')] : []
   return {
     title: t('assistant', 'studentInfo', { name }),
-    columns: [t('assistant', 'colStudent'), t('assistant', 'colSubscription'), t('assistant', 'colDebtSom'), t('assistant', 'colNextLesson')],
+    columns: [t('assistant', 'colStudent'), ...moneyColumns, t('assistant', 'colNextLesson')],
     rows: students.map((s) => {
       const b = balance.get(s.id)
-      const sub = !b?.active_subscription_id
-        ? t('assistant', 'noSubscription')
-        : b.state === 'frozen'
-          ? t('assistant', 'frozen')
-          : b.lessons_left == null
-            ? t('assistant', 'unlimited')
-            : `${b.lessons_left}${b.ends_at ? ` · до ${calendarDate(b.ends_at, timeZone)}` : ''}`
+      // Нет строки — «—», не «нет абонемента»: отсутствие данных ≠ факт.
+      const sub = !b
+        ? '—'
+        : !b.active_subscription_id
+          ? t('assistant', 'noSubscription')
+          : b.state === 'frozen'
+            ? t('assistant', 'frozen')
+            : b.lessons_left == null
+              ? t('assistant', 'unlimited')
+              : `${b.lessons_left}${b.ends_at ? ` · до ${calendarDate(b.ends_at, timeZone)}` : ''}`
       const next = lessons.get(s.title)
       const status = s.status && s.status !== 'active' ? ` (${statusLabel(s.status)})` : ''
+      const money = withMoney ? [sub, b?.debt_tiyin ? formatSom(b.debt_tiyin) : '—'] : []
       return [
         `${s.title}${status}`,
-        sub,
-        b?.debt_tiyin ? formatSom(b.debt_tiyin) : '—',
+        ...money,
         next?.starts_at ? `${dayInZone(next.starts_at, timeZone)}, ${timeInZone(next.starts_at, timeZone)}` : '—',
       ]
     }),

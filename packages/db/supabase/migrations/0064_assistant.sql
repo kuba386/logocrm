@@ -36,7 +36,14 @@
 --   Р5. Единица учёта: один вопрос = ровно один вызов провайдера; модель
 --       результат RPC не видит. Второй вызов «сформулировать ответ по
 --       данным» — отдельное решение владельца и правка ADR-009; проверяется
---       Vitest (ядро запроса — packages/core/assistant.ts).
+--       Vitest (ядро запроса — packages/contracts/src/assistant-request.ts).
+--   Р15. Ответ провайдера ВСЕГДА закрывает попытку (ревью написанного SQL):
+--        известная модель → done + строка расхода; незнакомая модель →
+--        failed с причиной (деньги признаны потерянными явно); намерение
+--        вне карты роли → done, расход записан, вердикт allowed=false
+--        значением, не исключением. raise после ответа провайдера откатил
+--        бы строку расхода и оставил попытку running навсегда — бесплатный
+--        и невидимый трафик. Токены сверх потолка — clamp, не отказ.
 --   Р6. Исполнение не существует без попытки: server action исполняет
 --       намерение только с id попытки в состоянии running, созданной этим
 --       же auth.uid(); assistant_finish повторяет ролевой гейт по карте Р3.
@@ -103,7 +110,10 @@ revoke all on function public.ai_model_rates() from public, anon, authenticated,
 create table if not exists public.assistant_requests (
   id          uuid primary key default gen_random_uuid(),
   center_id   uuid not null references public.centers (id) on delete cascade,
-  created_by  uuid not null references auth.users (id) on delete cascade,
+  -- set null, не cascade: попытка — учёт, удаление аккаунта её не стирает
+  -- («ничего не удаляется»); гейт finish сравнивает с auth.uid() — null не
+  -- совпадёт ни с кем.
+  created_by  uuid references auth.users (id) on delete set null,
   status      text not null default 'running'
                 check (status in ('running', 'done', 'failed')),
   intent      text,
@@ -143,7 +153,7 @@ as $$
   --   debtors                 — student_debts(): can_payments (owner, admin, registrar, finance)
   --   expiring_subscriptions  — subscriptions + student_balance: owner, admin, registrar, finance
   --   student_info            — global_search (0062): owner, admin, registrar, teacher
-  --   payments_summary        — cash_by_source: owner, admin
+  --   payments_summary        — payments под RLS tenant_admin: owner, admin
   select case p_role
     when 'owner'     then array['lessons_on','debtors','expiring_subscriptions','student_info','payments_summary']
     when 'admin'     then array['lessons_on','debtors','expiring_subscriptions','student_info','payments_summary']
@@ -226,7 +236,9 @@ begin
   end if;
 
   if v_limit >= 0 then
-    perform pg_advisory_xact_lock(hashtext('center_limit:' || v_center::text));
+    -- Тот же ключ, что у лимитов 0049/0053 (hashtextextended, не hashtext):
+    -- одна очередь на центр для всех платных счётчиков.
+    perform pg_advisory_xact_lock(hashtextextended('center_limit:' || v_center::text, 0));
     v_used := public.center_ai_questions_used(v_center) + public.assistant_questions_reserved(v_center);
     if v_used >= v_limit then
       if v_role in ('owner', 'admin') then
@@ -274,18 +286,23 @@ create or replace function public.assistant_finish(
   p_tokens_out integer default 0,
   p_error      text default null
 )
-  returns void
+  returns jsonb
   language plpgsql
   security definer
   set search_path = ''
 as $$
 declare
-  v_center uuid := public.current_center();
-  v_role   text := coalesce(public.my_role(), '');
-  v_req    public.assistant_requests;
-  v_rate   record;
-  v_cost   integer;
-  v_usage  uuid;
+  v_center  uuid := public.current_center();
+  v_role    text := coalesce(public.my_role(), '');
+  v_req     public.assistant_requests;
+  v_rate    record;
+  v_in      integer;
+  v_out     integer;
+  v_cost    integer;
+  v_usage   uuid;
+  v_status  text := p_status;
+  v_error   text := null;
+  v_allowed boolean := true;
 begin
   if auth.uid() is null or v_center is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -302,47 +319,51 @@ begin
   if v_req.status <> 'running' then
     raise exception 'Попытка уже закрыта' using errcode = '22023';
   end if;
-
   if p_status not in ('done', 'failed') then
     raise exception 'Неизвестный статус попытки' using errcode = '22023';
   end if;
 
+  -- Ниже — ни одного raise (Р15): провайдер уже ответил, деньги уплачены.
   if p_status = 'done' then
-    if p_intent is not null and not (p_intent = any (public.assistant_intents_for(v_role))) then
-      -- Р3/Р6: намерение вне карты роли — отказ, не «пустой ответ».
-      raise exception 'Этот вопрос вашей роли недоступен' using errcode = '42501';
-    end if;
-
-    -- Р2: цена — из справочника, токены — с потолком.
-    if coalesce(p_tokens_in, 0) < 0 or coalesce(p_tokens_out, 0) < 0
-       or coalesce(p_tokens_in, 0) > 20000 or coalesce(p_tokens_out, 0) > 2000 then
-      raise exception 'Неправдоподобное число токенов' using errcode = '22023';
-    end if;
     select * into v_rate from public.ai_model_rates() m where m.model = p_model;
     if not found then
-      raise exception 'Неизвестная модель ассистента: %', coalesce(p_model, '—') using errcode = '22023';
-    end if;
-    v_cost := ceil((coalesce(p_tokens_in, 0)::numeric * v_rate.in_tiyin_per_m
-                    + coalesce(p_tokens_out, 0)::numeric * v_rate.out_tiyin_per_m) / 1000000)::integer;
+      v_status := 'failed';
+      v_error  := 'Неизвестная модель ассистента: ' || coalesce(p_model, '—') || ' — расход не учтён';
+    else
+      -- Р2: цена — из справочника; токены — с потолком (clamp).
+      v_in  := least(greatest(coalesce(p_tokens_in, 0), 0), 20000);
+      v_out := least(greatest(coalesce(p_tokens_out, 0), 0), 2000);
+      v_cost := ceil((v_in::numeric * v_rate.in_tiyin_per_m + v_out::numeric * v_rate.out_tiyin_per_m) / 1000000)::integer;
 
-    insert into public.ai_usage (center_id, event_id, kind, model, tokens_in, tokens_out, cost_tiyin, rate_note)
-    values (v_center, null, 'question', p_model, coalesce(p_tokens_in, 0), coalesce(p_tokens_out, 0), v_cost,
-            format('%s: in %s out %s тыйын/1M', v_rate.model, v_rate.in_tiyin_per_m, v_rate.out_tiyin_per_m))
-    returning id into v_usage;
+      insert into public.ai_usage (center_id, event_id, kind, model, tokens_in, tokens_out, cost_tiyin, rate_note)
+      values (v_center, null, 'question', v_rate.model, v_in, v_out, v_cost,
+              format('%s: in %s out %s тыйын/1M', v_rate.model, v_rate.in_tiyin_per_m, v_rate.out_tiyin_per_m))
+      returning id into v_usage;
+
+      -- Р3/Р6: намерение вне карты роли — вердикт значением; расход уже записан.
+      if p_intent is not null and not (p_intent = any (public.assistant_intents_for(v_role))) then
+        v_allowed := false;
+        v_error   := 'Намерение вне карты роли: ' || p_intent;
+      end if;
+    end if;
+  else
+    v_error := left(p_error, 200);
   end if;
 
   update public.assistant_requests
-     set status      = p_status,
-         intent      = p_intent,
+     set status      = v_status,
+         intent      = case when v_allowed then p_intent else null end,
          usage_id    = v_usage,
-         error       = case when p_status = 'failed' then left(p_error, 200) else null end,
+         error       = v_error,
          finished_at = now()
    where id = v_req.id;
+
+  return jsonb_build_object('status', v_status, 'allowed', v_allowed, 'usage_id', v_usage);
 end;
 $$;
 
 comment on function public.assistant_finish(uuid, text, text, text, integer, integer, text) is
-  'Закрытие попытки (0064): done — строка ai_usage kind=question с ценой по ai_model_rates() (Р2), намерение сверяется с картой роли (Р3); failed — без расхода, текст ошибки. Только своя попытка (Р6).';
+  'Закрытие попытки (0064, Р15): всегда закрывает. done + известная модель — строка ai_usage kind=question с ценой по ai_model_rates() (Р2), токены clamp; незнакомая модель — failed с причиной; намерение вне карты роли — allowed=false значением (Р3). Только своя попытка (Р6).';
 
 revoke execute on function public.assistant_finish(uuid, text, text, text, integer, integer, text) from public, anon;
 grant  execute on function public.assistant_finish(uuid, text, text, text, integer, integer, text) to authenticated;
@@ -382,7 +403,8 @@ revoke execute on function public.assistant_quota() from public, anon;
 grant  execute on function public.assistant_quota() to authenticated;
 
 
--- 10. center_limits: счётчик вопросов на экране тарифа (тело из 0053) ------------------------------
+-- 10. center_limits: счётчик вопросов на экране тарифа (тело из 0056 — последняя редакция,
+--     с state; 0053 — не последняя) --------------------------------------------------------------
 
 create or replace function public.center_limits()
   returns jsonb
@@ -426,10 +448,12 @@ begin
     'days_left',   case when v_until is null then null
                         else ((v_until at time zone v_tz)::date - v_today) end,
     'writable',    public.center_writable(v_center),
+    'state',       public.center_write_state(v_center),
     'limits',      v_p.limits,
     'usage', jsonb_build_object(
       'teachers', (select count(*) from public.teachers t where t.center_id = v_center and t.deleted_at is null),
       'students', (select count(*) from public.students s where s.center_id = v_center and s.deleted_at is null and s.status <> 'archived'),
+      -- 0053 Р5: тот же счётчик, что у гейта; резерв работ в полёте не показывается.
       'ai_notes_month', public.center_ai_notes_used(v_center),
       -- 0064: тот же счётчик, что у гейта ассистента; резерв не показывается.
       'ai_questions_month', public.center_ai_questions_used(v_center)
@@ -445,5 +469,34 @@ begin
 end;
 $$;
 
-revoke execute on function public.center_limits() from public, anon;
+comment on function public.center_limits() is
+  'Тариф, лимиты, использование, дни до конца, writable/state (ok/expired/deleted/missing, 0056 Р7) в поясе центра, галочки онбординга — одним запросом для экрана тарифа и баннера (0049 Р9, 0050 Р11, 0053 Р5, 0064 — ai_questions_month). Родителю недоступно.';
+
+revoke execute on function public.center_limits() from public, anon, service_role;
 grant  execute on function public.center_limits() to authenticated;
+
+
+-- 11. Забор экспорта центра (0056): новая таблица — с решением, не молча ---------------------------
+
+create or replace function public.export_center_excluded_tables()
+  returns table (table_name text, reason text)
+  language sql
+  immutable
+  set search_path = ''
+as $$
+  values
+    ('audit_log',                 'Своя функция export_center_audit() — за диапазон дат, у платящего центра самая большая таблица'),
+    ('invitations',                'Р2: token — единственный секрет 7-дневного приглашения (0004); утечка = вход в центр ролью из приглашения'),
+    ('lesson_voice_requests',      'Р2: путь к файлу голосового в Storage — секрет по факту (0041)'),
+    ('ai_jobs',                    'Внутренняя очередь ИИ-обработки, не данные центра — результат уже в lesson_notes/monthly_reports'),
+    ('ai_usage',                   'Внутренний учёт расхода ИИ (0053 Р3), не данные о ребёнке'),
+    ('assistant_requests',         'Внутренний учёт попыток ассистента (0064): текста вопроса нет, расход — в ai_usage, тоже исключён'),
+    ('center_digest_runs',         'Отметка воркера (0050 Р3)'),
+    ('events',                     'Внутренняя очередь доставки, не данные центра'),
+    ('lesson_confirmations',       'Пишет только bot_worker (0050 Р3), техническая отметка подтверждения'),
+    ('lesson_reminders_sent',      'Отметка воркера (0050 Р3)'),
+    ('notification_log',           'Журнал доставки, не данные центра — что отправлено, не что произошло'),
+    ('subscription_reminders_sent', 'Отметка воркера (0052 Р3)')
+$$;
+
+revoke all on function public.export_center_excluded_tables() from public, anon, authenticated, service_role;

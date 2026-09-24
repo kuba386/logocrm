@@ -147,12 +147,17 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   },
 ]
 
-/** Примеры для экрана — те же формулировки, что в Backlog владельца. */
-export const ASSISTANT_EXAMPLES = [
-  'Какие занятия завтра?',
-  'Кто должен денег?',
-  'У кого заканчивается абонемент?',
-  'Сколько пришло денег за эту неделю?',
+/**
+ * Примеры для экрана — те же формулировки, что в Backlog владельца. Каждый
+ * помечен намерением: экран показывает только те, что доступны роли
+ * (карта — assistant_intents_for в SQL), иначе готовая кнопка тратила бы
+ * вопрос из квоты на заведомый отказ.
+ */
+export const ASSISTANT_EXAMPLES: { text: string; intent: Exclude<AssistantIntentName, 'unknown'> }[] = [
+  { text: 'Какие занятия завтра?', intent: 'lessons_on' },
+  { text: 'Кто должен денег?', intent: 'debtors' },
+  { text: 'У кого заканчивается абонемент?', intent: 'expiring_subscriptions' },
+  { text: 'Сколько пришло денег за эту неделю?', intent: 'payments_summary' },
 ]
 
 function daysBetween(from: string, to: string): number {

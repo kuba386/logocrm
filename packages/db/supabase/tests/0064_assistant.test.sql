@@ -1,7 +1,11 @@
 -- pgTAP: AI-ассистент (0064) — тарифный лимит, горловина assistant_begin
 -- (роль, PT402, квота с резервом, дата из базы, карта намерений), закрытие
--- assistant_finish (своя попытка, цена по справочнику, потолок токенов,
--- гейт намерения), витрины, заборы.
+-- assistant_finish (своя попытка, всегда закрывает, цена по справочнику,
+-- clamp токенов, вердикт по карте роли), витрины, заборы.
+--
+-- centers.plan/subscription_until меняет только администратор платформы
+-- (centers_protect_plan, 0049) — каждый такой update идёт под claims
+-- платформенного пользователя (шов из 0001/0050).
 
 begin;
 
@@ -48,16 +52,20 @@ select ok(
   and has_function_privilege('authenticated', 'public.assistant_quota()', 'EXECUTE')
   and not has_function_privilege('anon', 'public.assistant_begin()', 'EXECUTE'),
   'begin/finish/quota — authenticated, anon нет');
-select is(
-  (select string_agg(case when tg.tgtype & 4 > 0 then 'i' else '' end || case when tg.tgtype & 16 > 0 then 'u' else '' end || case when tg.tgtype & 8 > 0 then 'd' else '' end, ',')
-     from pg_trigger tg where tg.tgname = 'a00_readonly_guard' and tg.tgrelid = 'public.assistant_requests'::regclass),
-  'i', 'assistant_requests — readonly guard только на insert: закрытие начатой попытки идёт всегда (Р4)');
+select set_eq(
+  $$ select tg.tgrelid::regclass::text from pg_trigger tg
+      where tg.tgname = 'a00_readonly_guard' and tg.tgtype & 4 > 0 and not (tg.tgtype & 16 > 0) and not (tg.tgtype & 8 > 0) $$,
+  $$ values ('memberships'), ('invitations'), ('assistant_requests') $$,
+  'Guard только на insert — ровно у трёх таблиц: закрытие начатой попытки идёт всегда (Р4)');
+select ok(
+  exists (select 1 from public.export_center_excluded_tables() x where x.table_name = 'assistant_requests'),
+  'assistant_requests — в списке исключений экспорта центра с причиной (забор 0056)');
 
 -- Карта намерений (Р3)
 select is(public.assistant_intents_for('owner'),     array['lessons_on','debtors','expiring_subscriptions','student_info','payments_summary'], 'owner — все пять');
-select is(public.assistant_intents_for('finance'),   array['debtors','expiring_subscriptions'], 'finance — без занятий, поиска и кассы (lessons/global_search/cash_by_source ей не читаемы)');
+select is(public.assistant_intents_for('finance'),   array['debtors','expiring_subscriptions'], 'finance — без занятий, поиска и кассы (lessons/global_search/payments ей не читаемы)');
 select is(public.assistant_intents_for('teacher'),   array['lessons_on','student_info'], 'teacher — без долгов, абонементов и кассы');
-select is(public.assistant_intents_for('registrar'), array['lessons_on','debtors','expiring_subscriptions','student_info'], 'registrar — без кассы (cash_by_source только owner/admin)');
+select is(public.assistant_intents_for('registrar'), array['lessons_on','debtors','expiring_subscriptions','student_info'], 'registrar — без кассы (payments — только tenant_admin)');
 select is(public.assistant_intents_for('parent'),    array[]::text[], 'parent — ничего (В3)');
 
 
@@ -75,9 +83,12 @@ values
   ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000003','authenticated','authenticated','parent-0064@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000004','authenticated','authenticated','finance-0064@test.kg','','','','','','','',''),
   ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000005','authenticated','authenticated','owner-b-0064@test.kg','','','','','','','',''),
-  ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000006','authenticated','authenticated','owner-c-0064@test.kg','','','','','','','','');
+  ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000006','authenticated','authenticated','owner-c-0064@test.kg','','','','','','','',''),
+  ('00000000-0000-0000-0000-000000000000','a0640000-0000-0000-0000-000000000009','authenticated','authenticated','platform-0064@test.kg','','','','','','','','');
+update auth.users set email_confirmed_at = now() where id = 'a0640000-0000-0000-0000-000000000009';
+insert into public.platform_admins (email) values ('platform-0064@test.kg');
 
--- А — solo (лимит 100), Б — solo, чужой; В — истёкшая подписка (PT402).
+-- А — solo (лимит 100), Б — solo, чужой; В — истёкшая подписка (PT402), пояс UTC+14.
 insert into public.centers (id, name, slug, plan, subscription_until, settings) values
   ('a0640000-0000-0000-0000-0000000000c1','Центр А 0064','centr-a-0064','solo', now() + interval '30 days', '{"timezone":"Asia/Bishkek"}'::jsonb),
   ('a0640000-0000-0000-0000-0000000000c2','Центр Б 0064','centr-b-0064','solo', now() + interval '30 days', '{"timezone":"Asia/Bishkek"}'::jsonb),
@@ -107,6 +118,8 @@ $$;
 
 create temporary table t_ins (name text primary key, id uuid);
 grant select, insert on t_ins to authenticated;
+create temporary table t_out (name text primary key, j jsonb);
+grant select, insert on t_out to authenticated;
 
 
 -- Гейт горловины ----------------------------------------------------------------------------------
@@ -125,6 +138,7 @@ select throws_ok($q$ select public.assistant_begin() $q$, 'PT402', null, 'Ист
 reset role;
 
 -- Дата — из базы, в поясе центра (Р12): центр В на Kiritimati (UTC+14).
+select public.tests_claims('a0640000-0000-0000-0000-000000000009', null);
 update public.centers set subscription_until = now() + interval '30 days' where id = 'a0640000-0000-0000-0000-0000000000c3';
 select public.tests_claims('a0640000-0000-0000-0000-000000000006','a0640000-0000-0000-0000-0000000000c3');
 set local role authenticated;
@@ -135,16 +149,16 @@ select is(
 reset role;
 
 
--- Владелец: попытка, карта, закрытие ----------------------------------------------------------------
+-- Владелец: попытка, карта, закрытие (Р15: всегда закрывает) -----------------------------------------
 
 select public.tests_claims('a0640000-0000-0000-0000-000000000001','a0640000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-create temporary table t_begin as select public.assistant_begin() as j;
-insert into t_ins values ('r1', ((select j from t_begin)->>'request_id')::uuid);
+insert into t_out values ('begin', public.assistant_begin());
+insert into t_ins values ('r1', ((select j from t_out where name = 'begin')->>'request_id')::uuid);
 
-select is((select j->>'timezone' from t_begin), 'Asia/Bishkek', 'timezone в ответе');
+select is((select j->>'timezone' from t_out where name = 'begin'), 'Asia/Bishkek', 'timezone в ответе');
 select is(
-  (select j->'intents' from t_begin),
+  (select j->'intents' from t_out where name = 'begin'),
   '["lessons_on","debtors","expiring_subscriptions","student_info","payments_summary"]'::jsonb,
   'Владелец получает все намерения (Р3)');
 select is((select (public.assistant_quota())->>'used')::int, 0, 'quota: пока 0 оплаченных');
@@ -152,57 +166,74 @@ select is((select (public.assistant_quota())->>'limit')::int, 100, 'quota: ли�
 select is((select (public.assistant_quota())->>'plan_name'), 'Solo', 'quota: имя тарифа — владельцу');
 
 select throws_ok(
-  $q$ select public.assistant_finish((select id from t_ins where name = 'r1'), 'done', 'payments_summary', 'gpt-5-turbo', 100, 10) $q$,
-  '22023', null, 'Неизвестная модель — отказ, не ставка 0 (Р2)');
-select throws_ok(
-  $q$ select public.assistant_finish((select id from t_ins where name = 'r1'), 'done', 'payments_summary', 'gpt-4o-mini', 99999999, 10) $q$,
-  '22023', null, 'Неправдоподобные токены — отказ (Р2)');
-select throws_ok(
   $q$ select public.assistant_finish((select id from t_ins where name = 'r1'), 'weird') $q$,
-  '22023', null, 'Неизвестный статус — отказ');
-select lives_ok(
-  $q$ select public.assistant_finish((select id from t_ins where name = 'r1'), 'done', 'payments_summary', 'gpt-4o-mini', 1000, 100) $q$,
-  'Закрытие done со своим намерением');
+  '22023', null, 'Неизвестный статус — отказ до денег');
+-- r1: незнакомая модель → попытка ЗАКРЫТА как failed, расхода нет (Р15).
+insert into t_out values ('fin1', public.assistant_finish((select id from t_ins where name = 'r1'), 'done', 'payments_summary', 'gpt-5-turbo', 100, 10));
+select is((select j->>'status' from t_out where name = 'fin1'), 'failed', 'Незнакомая модель — failed значением, не исключение (Р15)');
 select throws_ok(
   $q$ select public.assistant_finish((select id from t_ins where name = 'r1'), 'done', 'payments_summary', 'gpt-4o-mini', 1000, 100) $q$,
   '22023', 'Попытка уже закрыта', 'Повторное закрытие — 22023');
-select is((select (public.assistant_quota())->>'used')::int, 1, 'quota: одна оплаченная');
+
+-- r1b: токены сверх потолка — clamp, не отказ.
+insert into t_ins values ('r1b', ((public.assistant_begin())->>'request_id')::uuid);
+insert into t_out values ('fin1b', public.assistant_finish((select id from t_ins where name = 'r1b'), 'done', 'debtors', 'gpt-4o-mini', 99999999, 10));
+select is((select j->>'status' from t_out where name = 'fin1b'), 'done', 'Неправдоподобные токены — clamp, попытка done');
+
+-- r1c: обычное закрытие — цена по справочнику.
+insert into t_ins values ('r1c', ((public.assistant_begin())->>'request_id')::uuid);
+insert into t_out values ('fin1c', public.assistant_finish((select id from t_ins where name = 'r1c'), 'done', 'payments_summary', 'gpt-4o-mini', 1000, 100));
+select is((select (j->>'allowed')::boolean from t_out where name = 'fin1c'), true, 'Намерение по карте — allowed');
+select is((select (public.assistant_quota())->>'used')::int, 2, 'quota: две оплаченные (r1b, r1c); failed не считается');
 reset role;
 
 select is(
-  (select cost_tiyin from public.ai_usage where kind = 'question' and center_id = 'a0640000-0000-0000-0000-0000000000c1'),
+  (select status || ':' || coalesce(intent, '-') || ':' || (usage_id is null)::text from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
+  'failed:-:true', 'r1 закрыта: failed, без намерения и без расхода');
+select like(
+  (select error from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
+  'Неизвестная модель ассистента: gpt-5-turbo%', '…причина записана');
+select is(
+  (select tokens_in from public.ai_usage where id = (select usage_id from public.assistant_requests where id = (select id from t_ins where name = 'r1b'))),
+  20000, 'r1b: токены зажаты потолком 20000 (Р2)');
+select is(
+  (select cost_tiyin from public.ai_usage where id = (select usage_id from public.assistant_requests where id = (select id from t_ins where name = 'r1c'))),
   2, 'Цена считается в SQL: ceil((1000·1300 + 100·5200)/1e6) = 2 тыйына, не параметр вызова (Р2)');
 select is(
-  (select event_id from public.ai_usage where kind = 'question' and center_id = 'a0640000-0000-0000-0000-0000000000c1'),
+  (select event_id from public.ai_usage where id = (select usage_id from public.assistant_requests where id = (select id from t_ins where name = 'r1c'))),
   null::bigint, 'У строки вопроса нет события');
 select is(
-  (select status || ':' || intent from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
+  (select status || ':' || intent from public.assistant_requests where id = (select id from t_ins where name = 'r1c')),
   'done:payments_summary', 'Попытка закрыта с намерением');
-select ok(
-  (select usage_id is not null and finished_at is not null from public.assistant_requests where id = (select id from t_ins where name = 'r1')),
-  '…и связана со строкой расхода');
 
 
--- Гейт намерения при закрытии (Р3/Р6): finance с payments_summary --------------------------------------
+-- Вердикт по карте роли (Р3/Р6): finance с payments_summary --------------------------------------------
 
 select public.tests_claims('a0640000-0000-0000-0000-000000000004','a0640000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-insert into t_ins values ('rf', ((public.assistant_begin())->>'request_id')::uuid);
 select is((select (public.assistant_quota())->>'plan_name'), null::text, 'Сотруднику имя тарифа не отдаётся (Р10)');
 select is((select (public.assistant_quota())->'intents'), '["debtors","expiring_subscriptions"]'::jsonb, 'finance: два намерения');
-select throws_ok(
-  $q$ select public.assistant_finish((select id from t_ins where name = 'rf'), 'done', 'payments_summary', 'gpt-4o-mini', 100, 10) $q$,
-  '42501', 'Этот вопрос вашей роли недоступен', 'Намерение вне карты роли — отказ при закрытии, не пустой ответ (Р3)');
+insert into t_ins values ('rf1', ((public.assistant_begin())->>'request_id')::uuid);
+insert into t_out values ('finf1', public.assistant_finish((select id from t_ins where name = 'rf1'), 'done', 'payments_summary', 'gpt-4o-mini', 100, 10));
+select is((select (j->>'allowed')::boolean from t_out where name = 'finf1'), false,
+  'Намерение вне карты роли — allowed=false значением; расход записан, попытка закрыта (Р15)');
+insert into t_ins values ('rf2', ((public.assistant_begin())->>'request_id')::uuid);
 select lives_ok(
-  $q$ select public.assistant_finish((select id from t_ins where name = 'rf'), 'failed', null, null, 0, 0, 'Провайдер не ответил за 15 секунд') $q$,
+  $q$ select public.assistant_finish((select id from t_ins where name = 'rf2'), 'failed', null, null, 0, 0, 'Провайдер не ответил за 15 секунд') $q$,
   'failed — закрывается без расхода (Р8)');
 reset role;
 select is(
-  (select count(*)::int from public.ai_usage where kind = 'question' and center_id = 'a0640000-0000-0000-0000-0000000000c1'),
-  1, 'failed не создал строку расхода');
+  (select status || ':' || coalesce(intent, '-') || ':' || (usage_id is not null)::text from public.assistant_requests where id = (select id from t_ins where name = 'rf1')),
+  'done:-:true', 'rf1: done, намерение не записано (вне карты), расход есть — деньги уплачены');
 select is(
-  (select error from public.assistant_requests where id = (select id from t_ins where name = 'rf')),
-  'Провайдер не ответил за 15 секунд', '…но причина записана');
+  (select count(*)::int from public.ai_usage where kind = 'question' and center_id = 'a0640000-0000-0000-0000-0000000000c1'),
+  3, 'Три оплаченные строки (r1b, r1c, rf1); failed расход не создал');
+select is(
+  (select error from public.assistant_requests where id = (select id from t_ins where name = 'rf2')),
+  'Провайдер не ответил за 15 секунд', '…но причина failed записана');
+select is(
+  (select count(*)::int from public.assistant_requests where center_id = 'a0640000-0000-0000-0000-0000000000c1' and status = 'running'),
+  0, 'Ни одной попытки не осталось running после ответа провайдера (Р15)');
 
 
 -- Чужой центр ------------------------------------------------------------------------------------------
@@ -218,7 +249,6 @@ select throws_ok(
   '42704', null, 'Попытка центра А не закрывается владельцем центра Б (Р6, ADR-002)');
 select is((select (public.assistant_quota())->>'used')::int, 0, 'Счётчик центра Б не видит расход центра А');
 reset role;
--- Специалист того же центра — не автор попытки.
 select public.tests_claims('a0640000-0000-0000-0000-000000000002','a0640000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select throws_ok(
@@ -229,10 +259,10 @@ reset role;
 
 -- Квота с резервом (Р9) -------------------------------------------------------------------------------
 
--- r2 — running, свежая: занимает место. Добиваем до лимита оплаченными строками.
+-- r2 — running, свежая: занимает место. 3 оплаченных + 96 = 99 + 1 running = 100.
 insert into public.ai_usage (center_id, kind, model, tokens_in, tokens_out, cost_tiyin)
 select 'a0640000-0000-0000-0000-0000000000c1', 'question', 'gpt-4o-mini', 10, 1, 1
-  from generate_series(1, 98);  -- 1 (r1) + 98 = 99 оплаченных + 1 running = 100
+  from generate_series(1, 96);
 
 select public.tests_claims('a0640000-0000-0000-0000-000000000001','a0640000-0000-0000-0000-0000000000c1');
 set local role authenticated;
@@ -257,7 +287,8 @@ set local role authenticated;
 select lives_ok($q$ select public.assistant_begin() $q$, 'Попытка старше 5 минут перестаёт занимать место (Р9)');
 reset role;
 
--- Без лимита (−1) и без ключа.
+-- Без лимита (−1) и без ключа — тариф правит платформа.
+select public.tests_claims('a0640000-0000-0000-0000-000000000009', null);
 update public.centers set plan = 'center' where id = 'a0640000-0000-0000-0000-0000000000c1';
 update public.plans set limits = limits || '{"ai_questions_month": -1}' where code = 'center';
 select public.tests_claims('a0640000-0000-0000-0000-000000000001','a0640000-0000-0000-0000-0000000000c1');
@@ -271,6 +302,7 @@ set local role authenticated;
 select throws_ok($q$ select public.assistant_begin() $q$, '23514', null, 'Ключа лимита нет — «не задан тариф», не бесконечность');
 reset role;
 update public.plans set limits = limits || '{"ai_questions_month": 2000}' where code = 'center';
+select public.tests_claims('a0640000-0000-0000-0000-000000000009', null);
 update public.centers set plan = 'solo' where id = 'a0640000-0000-0000-0000-0000000000c1';
 
 
@@ -278,10 +310,19 @@ update public.centers set plan = 'solo' where id = 'a0640000-0000-0000-0000-0000
 
 select public.tests_claims('a0640000-0000-0000-0000-000000000001','a0640000-0000-0000-0000-0000000000c1');
 set local role authenticated;
+select set_eq(
+  $$ select jsonb_object_keys(public.center_limits()) $$,
+  $$ values ('plan'), ('plan_name'), ('price_tiyin'), ('is_trial'), ('until'), ('days_left'), ('writable'), ('state'), ('limits'), ('usage'), ('onboarding') $$,
+  'center_limits: полный набор ключей, включая state из 0056 — переиздача не потеряла ничего');
+select set_eq(
+  $$ select jsonb_object_keys(public.center_limits()->'usage') $$,
+  $$ values ('teachers'), ('students'), ('ai_notes_month'), ('ai_questions_month') $$,
+  'center_limits.usage — четыре счётчика');
 select is(
   ((public.center_limits())->'usage'->>'ai_questions_month')::int,
   (public.assistant_quota()->>'used')::int,
   'center_limits.usage.ai_questions_month = тот же счётчик, что у витрины и гейта');
+select is((public.center_limits())->>'state', 'ok', 'state — как в 0056');
 reset role;
 select is(
   (select count(*)::int from public.ai_usage where kind = 'question' and event_id is null and center_id = 'a0640000-0000-0000-0000-0000000000c1'),

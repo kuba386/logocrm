@@ -1,6 +1,6 @@
 'use server'
 
-import { assistantQuestionSchema } from '@logocrm/contracts'
+import { ASSISTANT_MODEL, assistantQuestionSchema } from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
@@ -57,27 +57,34 @@ export async function askAssistant(_prev: AssistantState, formData: FormData): P
   }
 
   const intentName = classified.intent.intent === 'unknown' ? undefined : classified.intent.intent
-  const { error: finishError } = await supabase.rpc('assistant_finish', {
+  // Модель — константа запроса (ставка в SQL по ней); если провайдер назвал
+  // другую, расхождение уходит в текст ошибки попытки, а не ломает учёт.
+  const { data: finishJson, error: finishError } = await supabase.rpc('assistant_finish', {
     p_request_id: begin.request_id,
     p_status: 'done',
     p_intent: intentName,
-    p_model: classified.model,
+    p_model: ASSISTANT_MODEL,
     p_tokens_in: classified.tokensIn,
     p_tokens_out: classified.tokensOut,
+    p_error: classified.model !== ASSISTANT_MODEL ? `Провайдер назвал модель ${classified.model}` : undefined,
   })
   if (finishError) {
-    // 42501 «этот вопрос вашей роли недоступен» и прочее — общим разбором.
     return { question, error: toAppError(finishError, t('assistant', 'failed')).message }
   }
+  const verdict = finishJson as { status?: string; allowed?: boolean } | null
 
   const quota = await readQuota(supabase)
 
+  if (verdict?.allowed === false) {
+    // Карта намерений в SQL сказала «нет» — это отказ роли, не «не понял».
+    return { question, error: t('assistant', 'notAllowed'), quota }
+  }
   if (classified.intent.intent === 'unknown') {
     return { question, notice: t('assistant', 'unknown'), quota }
   }
 
   try {
-    const answer = await executeIntent(supabase, classified.intent, begin.timezone, begin.today)
+    const answer = await executeIntent(supabase, classified.intent, begin.timezone, begin.today, begin.intents)
     return answer ? { question, answer, quota } : { question, notice: t('assistant', 'unknown'), quota }
   } catch (error) {
     return { question, error: toAppError(error as { code?: string; message?: string }, t('assistant', 'failed')).message, quota }

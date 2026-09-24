@@ -4425,7 +4425,7 @@ export type Database = {
           p_tokens_in?: number
           p_tokens_out?: number
         }
-        Returns: undefined
+        Returns: Json
       }
       assistant_quota: { Args: never; Returns: Json }
       export_attendance: {

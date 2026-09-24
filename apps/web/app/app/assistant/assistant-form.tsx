@@ -34,8 +34,9 @@ function QuotaLine({ quota }: { quota?: { used: number; limit: number } }) {
   )
 }
 
-export function AssistantForm({ quota }: { quota?: { used: number; limit: number } }) {
+export function AssistantForm({ quota, intents }: { quota?: { used: number; limit: number }; intents: string[] }) {
   const [state, action] = useActionState(askAssistant, initial)
+  const examples = ASSISTANT_EXAMPLES.filter((e) => intents.includes(e.intent))
 
   return (
     <div className="space-y-6">
@@ -99,11 +100,11 @@ export function AssistantForm({ quota }: { quota?: { used: number; limit: number
       <div>
         <p className="mb-2 text-sm font-medium">{t('assistant', 'examples')}</p>
         <div className="flex flex-wrap gap-2">
-          {ASSISTANT_EXAMPLES.map((example) => (
-            <form key={example} action={action}>
-              <input type="hidden" name="question" value={example} />
+          {examples.map((example) => (
+            <form key={example.intent} action={action}>
+              <input type="hidden" name="question" value={example.text} />
               <Button type="submit" variant="outline" size="sm">
-                {example}
+                {example.text}
               </Button>
             </form>
           ))}

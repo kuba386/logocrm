@@ -171,6 +171,11 @@ export default async function PlanPage() {
                   used={limits.usage.aiNotesMonth}
                   limit={limits.limits.aiNotesMonth}
                 />
+                <LimitRow
+                  title={t('plan', 'aiQuestions')}
+                  used={limits.usage.aiQuestionsMonth}
+                  limit={limits.limits.aiQuestionsMonth}
+                />
               </CardContent>
             </Card>
           </div>

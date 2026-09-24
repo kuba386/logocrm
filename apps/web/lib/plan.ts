@@ -13,8 +13,8 @@ export type CenterLimits = {
   writable: boolean
   /** ok/expired/deleted/missing (0056 Р7) — центр может быть read-only по двум разным причинам. */
   state: 'ok' | 'expired' | 'deleted' | 'missing'
-  limits: { teachers: number; students: number; aiNotesMonth: number }
-  usage: { teachers: number; students: number; aiNotesMonth: number }
+  limits: { teachers: number; students: number; aiNotesMonth: number; aiQuestionsMonth: number }
+  usage: { teachers: number; students: number; aiNotesMonth: number; aiQuestionsMonth: number }
   onboarding: { teacher: boolean; service: boolean; student: boolean; lesson: boolean; attendance: boolean }
 }
 
@@ -46,11 +46,13 @@ export function parseCenterLimits(json: unknown): CenterLimits | null {
       teachers: num(limits.teachers, -1),
       students: num(limits.students, -1),
       aiNotesMonth: num(limits.ai_notes_month, -1),
+      aiQuestionsMonth: num(limits.ai_questions_month, -1),
     },
     usage: {
       teachers: num(usage.teachers),
       students: num(usage.students),
       aiNotesMonth: num(usage.ai_notes_month),
+      aiQuestionsMonth: num(usage.ai_questions_month),
     },
     onboarding: {
       teacher: bool(onboarding.teacher),
