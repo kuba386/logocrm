@@ -152,11 +152,18 @@ select is((select count(*)::int from public.global_search('777666')), 0, 'Уда
 select is((select count(*)::int from public.global_search('удалённ')), 0, '…ни по имени; удалённый ученик — тоже нет');
 select is((select count(*)::int from public.global_search('123')), 0, 'Три цифры — не телефон и не имя');
 
+-- «семен» — это и ученик Семён Иванов, и плательщик Семён Петров, а значит
+-- и все дети Петрова (поиск по имени плательщика) с их занятиями.
 select is(
-  (select array_agg(kind || ':' || title order by kind, title) from public.global_search('семен')),
-  array['payer:Семён Петров', 'student:Семён Иванов'],
-  '«ё»/«е» — одно и то же (Р7)');
-select is((select count(*)::int from public.global_search('СЕМЁН')), 2, 'Регистр кириллицы не важен');
+  (select array_agg(title order by title) from public.global_search('семен') where kind = 'payer'),
+  array['Семён Петров'], '«ё»/«е» — одно и то же: плательщик (Р7)');
+select ok(
+  'Семён Иванов' = any (select title from public.global_search('семен') where kind = 'student'),
+  '…и ученик');
+select is(
+  (select count(*)::int from public.global_search('СЕМЁН')),
+  (select count(*)::int from public.global_search('семен')),
+  'Регистр кириллицы не важен — та же выдача');
 
 
 -- Ближайшее занятие ---------------------------------------------------------------------
