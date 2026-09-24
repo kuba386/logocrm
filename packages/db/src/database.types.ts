@@ -5237,6 +5237,10 @@ export type Database = {
         Args: { p_lesson_id: string; p_new_teacher_id: string }
         Returns: undefined
       }
+      suggest_speech_conclusion: {
+        Args: { p_speech_areas: Json }
+        Returns: string
+      }
       switch_center: { Args: { p_center_id: string }; Returns: undefined }
       teacher_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       teacher_teaches_student: {

@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { SPEECH_AREA_KEYS, suggestSpeechConclusion, type SpeechAreaKey } from '@logocrm/core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +19,7 @@ const SOUND_STATUSES = [
   { code: 'отсутствие', label: 'отсутствие' },
   { code: 'замена', label: 'замена' },
 ]
-const SPEECH_AREAS = ['звукопроизношение', 'фонематика', 'лексика', 'грамматика', 'связная речь']
+const SPEECH_AREAS = SPEECH_AREA_KEYS
 
 const SOUND_COLORS: Record<string, string> = {
   '': 'bg-muted text-muted-foreground',
@@ -72,6 +73,8 @@ export function DiagnosticsPanel({
   const [state, action] = useActionState(recordDiagnostic, initial)
   const [archiveState, setArchiveState] = useState<ClinicalState>(initial)
   const [pending, startTransition] = useTransition()
+  const [areaScores, setAreaScores] = useState<Partial<Record<SpeechAreaKey, number>>>({})
+  const conclusionRef = useRef<HTMLSelectElement>(null)
 
   function archive(id: string) {
     startTransition(async () => {
@@ -80,6 +83,20 @@ export function DiagnosticsPanel({
       if (outcome.notice) router.refresh()
     })
   }
+
+  // Живая подсказка по мере ввода баллов — зеркало SQL suggest_speech_conclusion
+  // (0061), считается на клиенте, без похода в базу. Никогда не проставляется
+  // в поле заключения сама — только по клику «Применить».
+  const suggestion = suggestSpeechConclusion(areaScores)
+  const suggestedLookup = conclusions.find((c) => c.code === suggestion)
+
+  // React 19 сбрасывает неконтролируемые поля формы после успешного action,
+  // но areaScores — отдельный state: без сброса подсказка от предыдущей
+  // записи осталась бы висеть над уже пустыми полями, и «Применить» подставил
+  // бы код, выведенный из чужих баллов.
+  useEffect(() => {
+    if (state.notice) setAreaScores({})
+  }, [state.notice])
 
   const latest = entries[0]
 
@@ -184,7 +201,7 @@ export function DiagnosticsPanel({
 
             <div className="space-y-1">
               <Label htmlFor="conclusionCode">Заключение</Label>
-              <Select id="conclusionCode" name="conclusionCode" defaultValue="">
+              <Select id="conclusionCode" name="conclusionCode" defaultValue="" ref={conclusionRef}>
                 <option value="">— не указано —</option>
                 {conclusions.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -233,10 +250,45 @@ export function DiagnosticsPanel({
                     <Label htmlFor={`area_${area}`} className="text-xs">
                       {area}
                     </Label>
-                    <Input id={`area_${area}`} name={`area_${area}`} type="number" min={1} max={5} />
+                    <Input
+                      id={`area_${area}`}
+                      name={`area_${area}`}
+                      type="number"
+                      min={1}
+                      max={5}
+                      onChange={(e) => {
+                        const v = e.target.valueAsNumber
+                        setAreaScores((prev) => {
+                          const next = { ...prev }
+                          if (Number.isNaN(v)) delete next[area]
+                          else next[area] = v
+                          return next
+                        })
+                      }}
+                    />
                   </div>
                 ))}
               </div>
+              {suggestion === 'onr_suspected' ? (
+                <p className="text-sm text-muted-foreground">
+                  По баллам похоже на ОНР — уровень (I–IV) определите сами, шкал недостаточно для
+                  уровня.
+                </p>
+              ) : suggestion && suggestedLookup ? (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  По баллам похоже на «{suggestedLookup.name}».
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (conclusionRef.current) conclusionRef.current.value = suggestedLookup.code
+                    }}
+                  >
+                    Применить
+                  </Button>
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label htmlFor="conclusion">Уточнение к заключению</Label>
@@ -271,13 +323,28 @@ export function DiagnosticsPanel({
               <Button type="submit" size="sm">
                 Сохранить
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setFormOpen(false)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setFormOpen(false)
+                  setAreaScores({})
+                }}
+              >
                 Отмена
               </Button>
             </div>
           </form>
         ) : (
-          <Button type="button" size="sm" onClick={() => setFormOpen(true)}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setAreaScores({})
+              setFormOpen(true)
+            }}
+          >
             Записать диагностику
           </Button>
         )
