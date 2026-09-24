@@ -3856,6 +3856,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "invitations_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
             foreignKeyName: "invitations_teacher_fk"
             columns: ["teacher_id", "center_id"]
             isOneToOne: false
@@ -3922,6 +3936,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "memberships_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "memberships_teacher_fk"
@@ -4543,10 +4571,6 @@ export type Database = {
           sent_count: number
         }[]
       }
-      link_parent_payer: {
-        Args: { p_payer_id?: string; p_user_id: string }
-        Returns: undefined
-      }
       lesson_slot_conflicts: {
         Args: {
           p_center: string
@@ -4559,6 +4583,10 @@ export type Database = {
           p_teacher: string
         }
         Returns: Json
+      }
+      link_parent_payer: {
+        Args: { p_payer_id?: string; p_user_id: string }
+        Returns: undefined
       }
       link_telegram: {
         Args: { p_chat_id: number; p_code: string }
