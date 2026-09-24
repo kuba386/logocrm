@@ -25,6 +25,17 @@
   `;`, CRLF, BOM для Excel, формульные значения экранируются `'`), браузер
   скачивает Blob (приём 0056). Только CSV — XLSX не нужен ни бухгалтеру,
   ни 1С (решение владельца от 24.09.2026).
+- **Этап 8b, старт: чек-лист prod-контура** — [ADR-010](Decisions/ADR-010-production-checklist.md)
+  и `.github/workflows/deploy-prod.yml`. Только `workflow_dispatch` +
+  текстовое подтверждение + `environment: production` (required reviewer
+  — настраивает владелец). Ref прод-проекта Supabase в файле — заведомо
+  нерабочий placeholder до создания самого проекта (ADR-010 п.1):
+  workflow физически не запустится на реальный прод, пока кто-то не
+  впишет настоящий ref через обычный PR. Всё остальное из промта этапа
+  (новый Supabase-проект Frankfurt, GitHub Environment с секретами,
+  Vercel prod, второй Telegram-бот, n8n prod) — чек-лист в самом ADR,
+  выполняет владелец: агент не имеет доступа ни к одному из этих
+  дашбордов.
 - **`/api/health` и чек-лист наблюдаемости** — `apps/web/app/api/health/route.ts`
   отвечает `{"ok":true}`, когда `invitation_preview` с заведомо
   несуществующим токеном вернула строку `(null, null, false)` — единственная

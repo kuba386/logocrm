@@ -1,0 +1,121 @@
+name: Deploy production
+
+# Катит миграции в прод-проект Supabase (ADR-010). Отличия от
+# deploy-staging.yml — не косметика, а суть этого workflow:
+#
+# 1. Только workflow_dispatch — ни одного автоматического триггера. Прод
+#    не катится сам после зелёного CI, как staging; кто-то должен нажать
+#    кнопку осознанно.
+# 2. Текстовое подтверждение (input `confirm`) — вторая явная преграда
+#    поверх самой кнопки: случайный клик по Run workflow без вдумчивого
+#    заполнения формы её не пройдёт.
+# 3. environment: production — GitHub требует одобрения required
+#    reviewer (владелец настраивает в Settings → Environments →
+#    production, ADR-010 п.2) прежде, чем джоб вообще начнёт выполняться,
+#    даже если его запустил сам владелец.
+# 4. EXPECTED_REF ниже — заведомо нерабочий placeholder. Прод-проект
+#    Supabase на момент написания этого файла ещё не существует (ADR-010
+#    п.1); значение обязано остаться нерабочим, пока кто-то не впишет
+#    сюда настоящий ref через обычный PR — тем же приёмом, что и в
+#    deploy-staging.yml («ref зашит в файл, а не берётся из секрета»):
+#    токен в SUPABASE_ACCESS_TOKEN аккаунтный и способен задеть любой
+#    проект организации, а единственное, что держит его в границах
+#    одного проекта, — сверка с литералом, который меняется только через
+#    ревью кода, не через смену секрета.
+#
+# Только путь через SUPABASE_ACCESS_TOKEN (не три способа, как в
+# deploy-staging.yml) — единственный, который сейчас реально работает,
+# пока открыт supabase/supabase#44210 (пулер отвергает пароль роли
+# postgres после сброса). Остальные пути можно добавить по тому же
+# образцу, если понадобятся.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Впишите "DEPLOY PRODUCTION" заглавными — это не защита, а проверка, что форма заполнена осознанно'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Миграции в production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    # Запуск только с main — та же причина, что у deploy-staging.yml:
+    # без этого workflow_dispatch с произвольной ветки обходит весь путь
+    # db-джоба CI (pgTAP, забор грантов, номера миграций).
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Проверить текстовое подтверждение
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY PRODUCTION" ]; then
+            echo "::error::Поле confirm должно содержать ровно «DEPLOY PRODUCTION» — заполнено «${{ github.event.inputs.confirm }}»."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Собрать привязку к прод-проекту
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # ЗАПОЛНИТЬ ПОСЛЕ СОЗДАНИЯ ПРОД-ПРОЕКТА (ADR-010 п.1) — до тех
+          # пор значение ниже нарочно не совпадает ни с каким настоящим
+          # ref-ом Supabase (те — 20 строчных hex-символов), и шаг ниже
+          # откажет с понятным текстом вместо тихой записи не туда.
+          EXPECTED_REF: "ЗАПОЛНИТЬ_ПОСЛЕ_СОЗДАНИЯ_ПРОД_ПРОЕКТА"
+          POOLER_HOST: "ЗАПОЛНИТЬ_ПОСЛЕ_СОЗДАНИЯ_ПРОД_ПРОЕКТА"
+        run: |
+          set -u
+
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "::error::Нет SUPABASE_ACCESS_TOKEN. Положите его в Settings → Environments → production → Secrets (ADR-010 п.2)."
+            exit 1
+          fi
+
+          if ! printf '%s' "$EXPECTED_REF" | grep -qE '^[a-z0-9]{20}$'; then
+            echo "::error::EXPECTED_REF в этом файле ещё не заполнен настоящим ref-ом прод-проекта (ADR-010 п.1). Правка — обычным PR в этот workflow, не секретом."
+            exit 1
+          fi
+
+          mkdir -p packages/db/supabase/.temp
+          printf '%s' "$EXPECTED_REF" > packages/db/supabase/.temp/project-ref
+          printf 'postgresql://postgres.%s@%s:5432/postgres' "$EXPECTED_REF" "$POOLER_HOST" > packages/db/supabase/.temp/pooler-url
+          echo "Привязка подготовлена: проект $EXPECTED_REF, пулер $POOLER_HOST."
+
+      - name: Что будет применено
+        working-directory: packages/db
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase db push --dry-run --include-all --linked
+
+      - name: Применить миграции
+        id: push
+        working-directory: packages/db
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase db push --include-all --linked
+
+      - name: Состояние после применения
+        if: always()
+        working-directory: packages/db
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase migration list --linked
+
+      - name: Если история миграций разошлась
+        if: failure() && steps.push.outcome == 'failure'
+        run: |
+          echo "::error::История миграций в production разошлась с файлами в репозитории. Смотрите таблицу шага «Состояние после применения». Чинится не правкой базы, а тем, чтобы файл миграции оказался в main — как и в staging."
