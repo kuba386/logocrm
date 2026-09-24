@@ -72,10 +72,9 @@ select is(
   (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.oid::regprocedure::text in (
-        'student_alive(uuid)',
         'clinical_student_visible(uuid)',
-        'set_student_anamnesis(uuid,jsonb,timestamp with time zone)')), 3,
-  'Все три новые функции найдены по имени и сигнатуре (иначе следующая проверка молча схлопнется в пустую)');
+        'set_student_anamnesis(uuid,jsonb,timestamp with time zone)')), 2,
+  'Обе новые функции найдены по имени и сигнатуре (иначе следующая проверка молча схлопнется в пустую)');
 select ok(
   (select bool_and(
        has_function_privilege('authenticated', p.oid, 'EXECUTE')
@@ -84,7 +83,6 @@ select ok(
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.oid::regprocedure::text in (
-        'student_alive(uuid)',
         'clinical_student_visible(uuid)',
         'set_student_anamnesis(uuid,jsonb,timestamp with time zone)')),
   'Гранты новых функций: authenticated execute, anon/public — ничего');

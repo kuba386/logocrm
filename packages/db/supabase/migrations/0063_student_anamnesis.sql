@@ -103,35 +103,7 @@
 -- =============================================================================
 
 
--- 1. student_alive / clinical_student_visible — единый круг ролей для клинических данных ----------
-
--- Отдельно от clinical_student_visible: чистая проверка «ученик существует,
--- своего центра, не архивирован», без роли — нужна там, где обычной роли
--- ещё недостаточно (исключение автора анамнеза, Р10), но существование
--- ученика проверить всё равно необходимо. security definer обязателен:
--- inline exists(select ... from students) прямо в RLS-политике выполнялся
--- бы от вызывающей роли и сам упирался бы в RLS students
--- (students_teacher_read_own — только по primary_teacher_id) — находка CI,
--- не ревью: teacher без прямой связи с учеником не видел вообще ничего,
--- хотя ученик жив и запись его собственная.
-create or replace function public.student_alive(p_student_id uuid)
-  returns boolean
-  language sql
-  stable
-  security definer
-  set search_path = ''
-as $$
-  select exists (
-    select 1 from public.students s
-     where s.id = p_student_id and s.center_id = public.current_center() and s.deleted_at is null
-  );
-$$;
-
-comment on function public.student_alive(uuid) is
-  'Существует и не архивирован, без проверки роли (0063). security definer — обходит RLS students, иначе вызывающая роль без прямой связи с учеником (не primary_teacher_id) не смогла бы даже это проверить. Используется как обязательная обёртка вокруг исключения автора в политиках student_anamnesis.';
-
-revoke all on function public.student_alive(uuid) from public, anon, service_role;
-grant execute on function public.student_alive(uuid) to authenticated;
+-- 1. clinical_student_visible — единый круг ролей для клинических данных ребёнка ------------------
 
 create or replace function public.clinical_student_visible(p_student_id uuid)
   returns boolean
@@ -272,27 +244,33 @@ call public.apply_readonly_guard('student_anamnesis');
 -- дополнительной обёртки обходит не только проверку роли внутри
 -- clinical_student_visible, но и её же проверку «ученик не удалён» —
 -- автор-owner увидел бы анамнез archived-мимо-приложения ученика. Обе
--- ветки заворачиваются в student_alive() (не inline exists — та упёрлась
--- бы в RLS students для teacher без прямой связи с учеником, вторая
--- находка CI); исключение автора снимает только требование роли, не
--- существование ученика.
+-- ветки заворачиваются в общую проверку «ученик жив», исключение автора
+-- снимает только требование роли/clinical_teacher_sees, не существование.
 drop policy if exists student_anamnesis_teacher_read on public.student_anamnesis;
 create policy student_anamnesis_teacher_read on public.student_anamnesis
   for select to authenticated
   using (
     center_id = public.current_center()
-    and public.student_alive(student_id)
+    and exists (
+      select 1 from public.students s
+       where s.id = student_id and s.center_id = public.current_center() and s.deleted_at is null
+    )
     and (public.clinical_student_visible(student_id) or created_by = auth.uid())
   );
 
 -- Р5: restrictive — обязательна для ВСЕХ читателей, включая owner/admin
 -- через permissive tenant_admin (0059 Р14, тот же класс дыры). Исключение
--- автора — то же самое и здесь, иначе restrictive отменит его.
+-- автора — то же самое и здесь, иначе restrictive отменит его; та же
+-- обёртка «ученик жив» — иначе restrictive пропустила бы ровно то, что
+-- должна была ловить (см. комментарий выше).
 drop policy if exists student_anamnesis_visible on public.student_anamnesis;
 create policy student_anamnesis_visible on public.student_anamnesis
   as restrictive for select to authenticated
   using (
-    public.student_alive(student_id)
+    exists (
+      select 1 from public.students s
+       where s.id = student_id and s.center_id = public.current_center() and s.deleted_at is null
+    )
     and (public.clinical_student_visible(student_id) or created_by = auth.uid())
   );
 
