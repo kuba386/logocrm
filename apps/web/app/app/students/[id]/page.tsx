@@ -22,6 +22,7 @@ import {
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
 import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
 import { ArticulationPanel, type ArticulationEntry } from './articulation-panel'
+import { SyllableAssessmentPanel, type SyllableAssessmentEntry } from './syllable-assessment-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
@@ -434,6 +435,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   let articulation: ArticulationEntry | null = null
   const showArticulation = isAdmin || isTeacher
 
+  // Слоговая структура (0066) — ИСТОРИЯ, не профиль (в отличие от анамнеза
+  // и артикуляции): несколько записей на ребёнка, та же видимость.
+  let syllableAssessments: SyllableAssessmentEntry[] = []
+  const showSyllableAssessments = isAdmin || isTeacher
+
   // Дата заметки рендерится в поясе центра — та же дата, что уходит
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
@@ -791,6 +797,33 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  if (showSyllableAssessments) {
+    const { data: syllableRows } = await supabase
+      .from('syllable_assessments')
+      .select('id, date, updated_at, teacher_id, affected_classes, error_types, conclusion')
+      .eq('student_id', id)
+      .is('deleted_at', null)
+      .order('date', { ascending: false })
+
+    const syllableTeacherIds = [
+      ...new Set((syllableRows ?? []).map((s) => s.teacher_id).filter((v): v is string => Boolean(v))),
+    ]
+    const { data: syllableTeacherRows } = syllableTeacherIds.length
+      ? await supabase.from('teachers').select('id, full_name').in('id', syllableTeacherIds)
+      : { data: [] as { id: string; full_name: string }[] }
+    const syllableTeacherNameById = new Map((syllableTeacherRows ?? []).map((t) => [t.id, t.full_name]))
+
+    syllableAssessments = (syllableRows ?? []).map((s) => ({
+      id: s.id,
+      date: s.date,
+      updatedAt: s.updated_at,
+      teacherName: s.teacher_id ? (syllableTeacherNameById.get(s.teacher_id) ?? null) : null,
+      affectedClasses: s.affected_classes ?? [],
+      errorTypes: s.error_types ?? [],
+      conclusion: s.conclusion,
+    }))
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -927,6 +960,18 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           </CardHeader>
           <CardContent>
             <ArticulationPanel studentId={id} entry={articulation} canWrite={canWriteClinical} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showSyllableAssessments ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Слоговая структура</CardTitle>
+            <CardDescription>История обследований. Родителю не показывается.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SyllableAssessmentPanel studentId={id} entries={syllableAssessments} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
       ) : null}

@@ -177,6 +177,78 @@ export async function setArticulation(_prev: ClinicalState, formData: FormData):
   return { message: '', notice: 'Осмотр сохранён' }
 }
 
+// --- Слоговая структура (0066) --------------------------------------------------
+
+const SYLLABLE_CLASS_CODES = Array.from({ length: 14 }, (_, i) => String(i + 1))
+const SYLLABLE_ERROR_CODES = [
+  'omission',
+  'permutation',
+  'addition',
+  'substitution',
+  'cluster_simplification',
+  'perseveration',
+  'anticipation',
+  'contamination',
+]
+
+function checkedCodes(formData: FormData, prefix: string, codes: string[]): string[] {
+  return codes.filter((code) => formData.get(`${prefix}${code}`) === 'on')
+}
+
+export async function recordSyllableAssessment(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('record_syllable_assessment', {
+    p_student_id: studentId,
+    p_date: optional(formData, 'date'),
+    p_affected_classes: checkedCodes(formData, 'class_', SYLLABLE_CLASS_CODES),
+    p_error_types: checkedCodes(formData, 'error_', SYLLABLE_ERROR_CODES),
+    p_conclusion: optional(formData, 'conclusion'),
+  })
+
+  if (error) return toAppError(error, 'Не удалось записать обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование записано' }
+}
+
+// Форма — полный снимок текущей записи (тот же приём, что setArticulation):
+// пустой чекбокс — явная отметка «класс/ошибка не выбраны», не «не
+// трогать» (Р6). conclusion шлётся как есть, включая '' — сентинел очистки
+// (0066 Р16), а не через optional(): тот превратил бы '' в undefined, а
+// update_syllable_assessment трактует undefined как «не трогать», не как
+// «снять» — форма же трогает поле всегда, раз показывает его пользователю.
+export async function updateSyllableAssessment(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const id = String(formData.get('id') ?? '')
+  const expectedUpdatedAt = String(formData.get('expectedUpdatedAt') ?? '')
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('update_syllable_assessment', {
+    p_id: id,
+    p_date: optional(formData, 'date'),
+    p_affected_classes: checkedCodes(formData, 'class_', SYLLABLE_CLASS_CODES),
+    p_error_types: checkedCodes(formData, 'error_', SYLLABLE_ERROR_CODES),
+    p_conclusion: String(formData.get('conclusion') ?? '').trim(),
+    p_expected_updated_at: expectedUpdatedAt,
+  })
+
+  if (error) return toAppError(error, 'Не удалось сохранить обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование сохранено' }
+}
+
+export async function archiveSyllableAssessment(studentId: string, id: string): Promise<ClinicalState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_syllable_assessment', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось убрать запись')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Запись убрана' }
+}
+
 // --- Цели ------------------------------------------------------------------------
 
 export async function createGoal(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
