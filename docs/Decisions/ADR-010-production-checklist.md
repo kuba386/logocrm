@@ -128,10 +128,10 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
       `NEXT_PUBLIC_SUPABASE_URL` = `https://vlsnfuhmozkywbovkazc.supabase.co`,
       `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (публичный ключ прод-проекта),
       `NEXT_PUBLIC_SITE_URL` = `https://logocrm-prod.vercel.app`,
-      `OPENAI_API_KEY` — **заводит владелец руками**: попытка перенести
-      из staging через API дала зашифрованное значение (Vercel не отдаёт
-      секреты даже своему токену), переменная удалена, чтобы ассистент на
-      проде не бил в OpenAI мусорным ключом. `NEXT_PUBLIC_TELEGRAM_BOT` —
+      `OPENAI_API_KEY` — загружен 25.09.2026 из локального файла владельца
+      (первая попытка перенести из staging через API дала зашифрованное
+      значение — Vercel не отдаёт секреты даже своему токену; та
+      переменная была удалена и заведена заново). `NEXT_PUBLIC_TELEGRAM_BOT` —
       имя бота, то же, что на staging (решение «тот же бот», пункт 6).
 - [ ] Supabase Auth прод-проекта → URL Configuration: **Site URL** =
       `https://logocrm-prod.vercel.app`, **Redirect URLs** =
@@ -153,9 +153,18 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
       явно задать `SENTRY_ENVIRONMENT` в переменных прод-окружения
       Vercel); фильтровать Issues по окружению в самом Sentry, второй
       проект не заводить.
-- [ ] n8n: новый (или тот же, с отдельными credentials) инстанс с
-      токеном прод-бота и строкой подключения к прод-Supabase — сценарии
-      те же (`n8n/README.md`), меняются только креды.
+- [x] n8n — **сделано 25.09.2026** тем же инстансом (Railway, проект
+      `dependable-alignment`, режим очереди Primary+Worker,
+      `https://primary-production-1249.up.railway.app`): агент через
+      публичный API n8n (ключ выпущен владельцем на 7 дней) завёл
+      креденшел `Supabase prod (bot_worker)` (Custom Auth: `apikey` =
+      публичный ключ прод-проекта, `Authorization: Bearer` = JWT
+      `bot_worker` прод-проекта) и активные копии `schedule prod`,
+      `watchdog prod`, `poll prod` с прод-адресом Supabase; в коде `poll`
+      staging-JWT `bot_worker` и `anon` заменены на прод, токен бота и
+      ключ OpenAI — общие. Staging-сценарии остались активными: они
+      читают staging-базу и шлют только в тестовые чаты. `whisper`
+      (расшифровка голоса) общий — базы не касается.
 - [x] `apps/tg-bot` на проде — **сделано 25.09.2026** (решение «тот же
       бот», пункт 6): сервис `logocrm` на Railway (проект
       `renewed-nourishment`) переключён агентом через Railway CLI на
