@@ -47,7 +47,7 @@
 | [docs/Backlog.md](docs/Backlog.md) | Пожелания с живых показов логопедам. **Агент сам отсюда в работу ничего не берёт** — архитектор вплетает в этапы |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Keep a Changelog / SemVer |
 | [reports/TEMPLATE.md](reports/TEMPLATE.md) | Шаблон отчёта по этапу — разделы «Что это даёт» и «Отступления от ТЗ» обязательны |
-| [reports/stage-3.md](reports/stage-3.md), [reports/stage-4.md](reports/stage-4.md) | Отчёты по закрытым/частично закрытым этапам — писать/обновлять по ходу, не только в конце |
+| [reports/stage-3.md](reports/stage-3.md), [reports/stage-4.md](reports/stage-4.md) … [reports/stage-8b.md](reports/stage-8b.md) | Отчёты по закрытым/частично закрытым этапам — писать/обновлять по ходу, не только в конце; 8b — prod-контур, пара к [ADR-010](docs/Decisions/ADR-010-production-checklist.md) |
 
 ## Роли приложения (не документы — сквозной контекст)
 
