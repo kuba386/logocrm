@@ -94,6 +94,15 @@ const CHECK_MESSAGES: Record<string, string> = {
   syllable_assessments_affected_classes_check: 'Недопустимый класс слоговой структуры или их слишком много',
   syllable_assessments_error_types_check: 'Недопустимый тип ошибки или их слишком много',
   syllable_assessments_conclusion_check: 'Заключение — не длиннее 2000 символов',
+  prosody_assessments_date_check: 'Дата обследования вне допустимого диапазона',
+  prosody_assessments_tempo_check: 'Недопустимое значение темпа речи',
+  prosody_assessments_rhythm_check: 'Недопустимое значение ритма речи',
+  prosody_assessments_intonation_check: 'Недопустимое значение интонации',
+  prosody_assessments_breathing_check: 'Недопустимое значение речевого дыхания',
+  prosody_assessments_voice_check: 'Недопустимое значение голоса',
+  prosody_assessments_logical_stress_check: 'Недопустимое значение логического ударения',
+  prosody_assessments_conclusion_check: 'Заключение — не длиннее 2000 символов',
+  prosody_assessments_not_empty: 'Заполните хотя бы одно поле обследования',
 }
 
 /**
