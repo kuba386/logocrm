@@ -152,7 +152,10 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
       — прод-деплой Vercel сам проставит `environment=production` (или
       явно задать `SENTRY_ENVIRONMENT` в переменных прод-окружения
       Vercel); фильтровать Issues по окружению в самом Sentry, второй
-      проект не заводить.
+      проект не заводить. **Отложено 25.09.2026** — DSN владелец не
+      передавал; переменные `NEXT_PUBLIC_SENTRY_DSN`/`SENTRY_AUTH_TOKEN`
+      в `logocrm-prod` не заведены. Сделать до первого платящего центра
+      вместе с PITR и доменом (одна граница «прод стал настоящим»).
 - [x] n8n — **сделано 25.09.2026** тем же инстансом (Railway, проект
       `dependable-alignment`, режим очереди Primary+Worker,
       `https://primary-production-1249.up.railway.app`): агент через
@@ -175,7 +178,21 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
       не менялись, `getWebhookInfo` без ошибок. Staging с этого момента
       без входящих команд бота.
 - [ ] UptimeRobot: второй монитор на `/api/health` прод-домена (шаг 4
-      `docs/OBSERVABILITY_SETUP.md`, тот же приём).
+      `docs/OBSERVABILITY_SETUP.md`, тот же приём) — адрес
+      `https://logocrm-prod.vercel.app/api/health`; руками владельца, вместе
+      с Sentry.
+
+### Состояние на 25.09.2026
+
+Прод-контур работает: Supabase `logocrm-prod` со схемой 0001–0065;
+приложение `https://logocrm-prod.vercel.app` (`/api/health` → ok,
+ассистент с ключом OpenAI, публичная запись с JWT `public_booking`,
+имя бота); бот `@logocrm_kg_bot` смотрит в прод; n8n — прод-копии
+`schedule`/`watchdog`/`poll` активны, первые прогоны `poll prod` —
+`success`. Не сделано и отложено до первого платящего центра: PITR,
+домен, Sentry, UptimeRobot. Ключ API n8n, выпущенный для настройки,
+можно отозвать — он больше не нужен. Живая приёмка — регистрация
+центра владельца на прод-адресе.
 
 ### 6. Финальные цены и открытые решения владельца
 
