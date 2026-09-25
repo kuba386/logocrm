@@ -3781,6 +3781,80 @@ export type Database = {
           },
         ]
       }
+      syllable_assessments: {
+        Row: {
+          affected_classes: string[]
+          center_id: string
+          conclusion: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          deleted_at: string | null
+          error_types: string[]
+          id: string
+          student_id: string
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          affected_classes?: string[]
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          error_types?: string[]
+          id?: string
+          student_id: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affected_classes?: string[]
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          error_types?: string[]
+          id?: string
+          student_id?: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "syllable_assessments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "syllable_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "syllable_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "syllable_assessments_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       teacher_rates: {
         Row: {
           center_id: string
@@ -4330,6 +4404,7 @@ export type Database = {
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
+      archive_syllable_assessment: { Args: { p_id: string }; Returns: boolean }
       archive_teacher: { Args: { p_id: string }; Returns: undefined }
       arm_voice_request: {
         Args: { p_chat_id: number; p_token: string }
@@ -5156,6 +5231,17 @@ export type Database = {
         }
         Returns: string
       }
+      record_syllable_assessment: {
+        Args: {
+          p_affected_classes?: string[]
+          p_conclusion?: string
+          p_date?: string
+          p_error_types?: string[]
+          p_student_id: string
+          p_teacher_id?: string
+        }
+        Returns: string
+      }
       refund_calc: { Args: { p_id: string }; Returns: number }
       refund_calc_unchecked: { Args: { p_id: string }; Returns: number }
       refund_subscription: {
@@ -5611,6 +5697,17 @@ export type Database = {
           p_due_on?: string
           p_exercise_ids?: string[]
           p_free_text?: string
+          p_id: string
+        }
+        Returns: undefined
+      }
+      update_syllable_assessment: {
+        Args: {
+          p_affected_classes?: string[]
+          p_conclusion?: string
+          p_date?: string
+          p_error_types?: string[]
+          p_expected_updated_at?: string
           p_id: string
         }
         Returns: undefined
