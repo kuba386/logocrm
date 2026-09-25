@@ -648,6 +648,31 @@ export const syllableAssessmentArchivedSchema = z.object({
   }),
 })
 
+/** Просодика — четвёртый раздел речевой карты, история (0067). */
+export const prosodyAssessmentCreatedSchema = z.object({
+  type: z.literal('prosody_assessment.created'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const prosodyAssessmentUpdatedSchema = z.object({
+  type: z.literal('prosody_assessment.updated'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const prosodyAssessmentArchivedSchema = z.object({
+  type: z.literal('prosody_assessment.archived'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
 export const goalAchievedSchema = z.object({
   type: z.literal('goal.achieved'),
   payload: centerRef.extend({
@@ -946,6 +971,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   syllableAssessmentCreatedSchema,
   syllableAssessmentUpdatedSchema,
   syllableAssessmentArchivedSchema,
+  prosodyAssessmentCreatedSchema,
+  prosodyAssessmentUpdatedSchema,
+  prosodyAssessmentArchivedSchema,
   goalAchievedSchema,
   homeworkAssignedSchema,
   homeworkSubmittedSchema,
