@@ -623,6 +623,31 @@ export const diagnosticCreatedSchema = z.object({
   }),
 })
 
+/** Слоговая структура — третий раздел речевой карты, история (0066). */
+export const syllableAssessmentCreatedSchema = z.object({
+  type: z.literal('syllable_assessment.created'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const syllableAssessmentUpdatedSchema = z.object({
+  type: z.literal('syllable_assessment.updated'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const syllableAssessmentArchivedSchema = z.object({
+  type: z.literal('syllable_assessment.archived'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
 export const goalAchievedSchema = z.object({
   type: z.literal('goal.achieved'),
   payload: centerRef.extend({
@@ -918,6 +943,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   digestDailySchema,
   eventFailedSchema,
   diagnosticCreatedSchema,
+  syllableAssessmentCreatedSchema,
+  syllableAssessmentUpdatedSchema,
+  syllableAssessmentArchivedSchema,
   goalAchievedSchema,
   homeworkAssignedSchema,
   homeworkSubmittedSchema,

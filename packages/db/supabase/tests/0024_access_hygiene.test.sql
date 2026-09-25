@@ -62,7 +62,7 @@ select ok(
       and c.relname in ('lesson_participants', 'audit_log', 'events', 'memberships',
                         'ai_usage', 'lesson_note_goal_scores', 'monthly_reports', 'funnel_events',
                         'booking_requests', 'diagnostic_clinical_forms', 'diagnostic_referrals',
-                        'student_anamnesis', 'student_articulation')),
+                        'student_anamnesis', 'student_articulation', 'syllable_assessments')),
   'Денормализованные и служебные таблицы — только чтение'
 );
 -- 0041: токен диктовки и очередь работ ИИ не видны прикладным ролям вовсе —
