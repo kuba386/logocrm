@@ -2938,6 +2938,92 @@ export type Database = {
           },
         ]
       }
+      prosody_assessments: {
+        Row: {
+          breathing: string | null
+          center_id: string
+          conclusion: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          deleted_at: string | null
+          id: string
+          intonation: string | null
+          logical_stress: string | null
+          rhythm: string | null
+          student_id: string
+          teacher_id: string | null
+          tempo: string | null
+          updated_at: string
+          voice: string | null
+        }
+        Insert: {
+          breathing?: string | null
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          intonation?: string | null
+          logical_stress?: string | null
+          rhythm?: string | null
+          student_id: string
+          teacher_id?: string | null
+          tempo?: string | null
+          updated_at?: string
+          voice?: string | null
+        }
+        Update: {
+          breathing?: string | null
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          intonation?: string | null
+          logical_stress?: string | null
+          rhythm?: string | null
+          student_id?: string
+          teacher_id?: string | null
+          tempo?: string | null
+          updated_at?: string
+          voice?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prosody_assessments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prosody_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "prosody_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "prosody_assessments_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       referral_targets: {
         Row: {
           code: string
@@ -4402,6 +4488,7 @@ export type Database = {
       archive_homework: { Args: { p_id: string }; Returns: boolean }
       archive_lesson_note: { Args: { p_id: string }; Returns: boolean }
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
+      archive_prosody_assessment: { Args: { p_id: string }; Returns: boolean }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       archive_syllable_assessment: { Args: { p_id: string }; Returns: boolean }
@@ -5222,6 +5309,21 @@ export type Database = {
         }
         Returns: string
       }
+      record_prosody_assessment: {
+        Args: {
+          p_breathing?: string
+          p_conclusion?: string
+          p_date?: string
+          p_intonation?: string
+          p_logical_stress?: string
+          p_rhythm?: string
+          p_student_id: string
+          p_teacher_id?: string
+          p_tempo?: string
+          p_voice?: string
+        }
+        Returns: string
+      }
       record_salary_adjustment: {
         Args: {
           p_amount_tiyin: number
@@ -5698,6 +5800,21 @@ export type Database = {
           p_exercise_ids?: string[]
           p_free_text?: string
           p_id: string
+        }
+        Returns: undefined
+      }
+      update_prosody_assessment: {
+        Args: {
+          p_breathing?: string
+          p_conclusion?: string
+          p_date?: string
+          p_expected_updated_at?: string
+          p_id: string
+          p_intonation?: string
+          p_logical_stress?: string
+          p_rhythm?: string
+          p_tempo?: string
+          p_voice?: string
         }
         Returns: undefined
       }
