@@ -517,9 +517,12 @@ reset role;
 select public.tests_claims(null, null);
 update public.students set deleted_at = null where id = 'a0670000-0000-0000-0000-000000000040';
 
--- Единственный сценарий, где restrictive и student_alive в update_ реально
--- что-то решают, — автор-teacher БЕЗ clinical_teacher_sees/primary_teacher_id
--- (ребёнок Б, специалист-назначенный t0067_c — уже автор записи из section 3).
+-- Автор-teacher без clinical_teacher_sees/primary_teacher_id (ребёнок Б,
+-- специалист-назначенный t0067_c — уже автор записи из section 3): с Р10
+-- student_alive — общее предусловие ДО ветвления по ролям, поэтому update_
+-- отбивает 42704 («Ученик не найден»), тем же кодом, что и у owner/admin
+-- (симметрично тесту на deleted_at ребёнка А выше) — не 42501, как было бы
+-- при старой схеме (проверка только внутри ветки teacher).
 select public.tests_claims(null, null);
 update public.students set deleted_at = now() where id = 'a0670000-0000-0000-0000-000000000041';
 select public.tests_claims('a0670000-0000-0000-0000-000000000002','a0670000-0000-0000-0000-0000000000c1');
@@ -530,7 +533,7 @@ select is(
 select throws_ok(
   $q$ select public.update_prosody_assessment((select id from t0067_c), null, null, null, null,
         null, null, null, 'x', now()) $q$,
-  '42501', null, 'update_ бьётся о student_alive в ветке teacher, даже с id на руках и через RPC (не 42704)');
+  '42704', null, 'update_ бьётся о student_alive до ветвления по ролям — 42704, тот же код, что у owner/admin (Р10)');
 reset role;
 select public.tests_claims(null, null);
 update public.students set deleted_at = null where id = 'a0670000-0000-0000-0000-000000000041';
