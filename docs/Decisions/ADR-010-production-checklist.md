@@ -156,9 +156,15 @@ required reviewer (пункт 2). Ref прод-проекта зашит в фа
 - [ ] n8n: новый (или тот же, с отдельными credentials) инстанс с
       токеном прод-бота и строкой подключения к прод-Supabase — сценарии
       те же (`n8n/README.md`), меняются только креды.
-- [ ] `apps/tg-bot` prod-деплой: свой `TELEGRAM_BOT_TOKEN` (второй бот в
-      BotFather — родительский прод-бот не должен обслуживать staging-
-      тесты и наоборот), свой `SUPABASE_BOT_JWT` от прод-проекта.
+- [x] `apps/tg-bot` на проде — **сделано 25.09.2026** (решение «тот же
+      бот», пункт 6): сервис `logocrm` на Railway (проект
+      `renewed-nourishment`) переключён агентом через Railway CLI на
+      прод-Supabase — `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
+      `SUPABASE_BOT_JWT` роли `bot_worker` (выпущен владельцем локально
+      `mint-role-jwt.mjs bot_worker`, файл удалён после загрузки); токен
+      бота `@logocrm_kg_bot` и webhook `https://logocrm-production.up.railway.app/`
+      не менялись, `getWebhookInfo` без ошибок. Staging с этого момента
+      без входящих команд бота.
 - [ ] UptimeRobot: второй монитор на `/api/health` прод-домена (шаг 4
       `docs/OBSERVABILITY_SETUP.md`, тот же приём).
 
