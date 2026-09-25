@@ -68,9 +68,13 @@ insert into public.students (id, center_id, full_name, payer_id) values
 insert into public.groups (id, center_id, name) values
   ('5abc0000-0000-0000-0000-000000000001'::uuid,'5ccccccc-0000-0000-0000-00000000000a','Группа голос');
 
-insert into public.group_students (group_id, student_id, center_id) values
-  ('5abc0000-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000001','5ccccccc-0000-0000-0000-00000000000a'),
-  ('5abc0000-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000002','5ccccccc-0000-0000-0000-00000000000a');
+-- joined_at закреплён явно, не default current_date: starts_at ниже — от
+-- now() с отрицательным интервалом, и CI, стартовавший между 00:00 и
+-- 02:00 UTC, сдвигает starts_at::date на вчера, а joined_at остался бы
+-- today — ребёнок молча выпадает из lesson_participants (0007).
+insert into public.group_students (group_id, student_id, center_id, joined_at) values
+  ('5abc0000-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000001','5ccccccc-0000-0000-0000-00000000000a', current_date - 7),
+  ('5abc0000-0000-0000-0000-000000000001','5eeeeeee-0000-0000-0000-000000000002','5ccccccc-0000-0000-0000-00000000000a', current_date - 7);
 
 insert into public.lessons (id, center_id, teacher_id, group_id, service_id, status, starts_at, ends_at) values
   ('5fffffff-0000-0000-0000-000000000001','5ccccccc-0000-0000-0000-00000000000a','5aaaaaaa-0000-0000-0000-000000000001',

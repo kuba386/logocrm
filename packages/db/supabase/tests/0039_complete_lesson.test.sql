@@ -71,9 +71,14 @@ insert into public.students (id, center_id, full_name, payer_id) values
 insert into public.groups (id, center_id, name, service_id, teacher_id) values
   ('3bcbcbcb-0000-0000-0000-000000000001','3ccccccc-0000-0000-0000-00000000000a','Группа','3bbbbbbb-0000-0000-0000-000000000001','3aaaaaaa-0000-0000-0000-000000000001');
 
-insert into public.group_students (center_id, group_id, student_id) values
-  ('3ccccccc-0000-0000-0000-00000000000a','3bcbcbcb-0000-0000-0000-000000000001','3eeeeeee-0000-0000-0000-000000000001'),
-  ('3ccccccc-0000-0000-0000-00000000000a','3bcbcbcb-0000-0000-0000-000000000001','3eeeeeee-0000-0000-0000-000000000002');
+-- joined_at закреплён явно, не default current_date: занятия ниже берут
+-- starts_at от now() с отрицательным интервалом, и CI, стартовавший между
+-- 00:00 и 02:00 UTC, сдвигает starts_at::date на вчера, а joined_at
+-- остался бы today — «вошёл позже своего же занятия», ребёнок молча
+-- выпадает из lesson_participants (rebuild_lesson_participants, 0007).
+insert into public.group_students (center_id, group_id, student_id, joined_at) values
+  ('3ccccccc-0000-0000-0000-00000000000a','3bcbcbcb-0000-0000-0000-000000000001','3eeeeeee-0000-0000-0000-000000000001', current_date - 7),
+  ('3ccccccc-0000-0000-0000-00000000000a','3bcbcbcb-0000-0000-0000-000000000001','3eeeeeee-0000-0000-0000-000000000002', current_date - 7);
 
 -- Занятие 1 — для happy path и повторного вызова (лист 1). Занятие 2 —
 -- «неудачник»: каждый отрицательный сценарий откатывает его целиком, и
