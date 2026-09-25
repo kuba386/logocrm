@@ -7,6 +7,18 @@
 
 ### Добавлено
 
+- **Этап 8b: prod-контур поднят** — [ADR-010](Decisions/ADR-010-production-checklist.md),
+  [reports/stage-8b.md](../reports/stage-8b.md). Supabase `logocrm-prod`
+  (`ap-south-1` — решение владельца, ref в `deploy-prod.yml` PR #142,
+  схема 0001–0065 первым запуском кнопки с одобрением required reviewer),
+  Vercel `logocrm-prod` → `https://logocrm-prod.vercel.app` (копия
+  staging-проекта, прод-переменные, `/api/health` ok), Telegram-бот
+  `@logocrm_kg_bot` переключён на прод (Railway), n8n — прод-копии
+  `schedule`/`watchdog`/`poll` с прод-креденшелом. Новый скрипт
+  `packages/db/scripts/mint-role-jwt.mjs` — выпуск JWT ролей
+  `bot_worker`/`public_booking` локально у владельца, без передачи
+  секрета. Отложено до первого платящего центра: PITR, домен, Sentry,
+  UptimeRobot.
 - **Артикуляционный аппарат — второй раздел речевой карты** —
   `0065_student_articulation.sql` (Фаза 3.2, по одному разделу за раз).
   Строение/подвижность губ, зубов, прикуса, нёба, языка, уздечки —
