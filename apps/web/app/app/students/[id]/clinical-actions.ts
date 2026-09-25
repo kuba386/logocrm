@@ -249,6 +249,71 @@ export async function archiveSyllableAssessment(studentId: string, id: string): 
   return { message: '', notice: 'Запись убрана' }
 }
 
+// --- Просодика (0067) --------------------------------------------------------
+
+export async function recordProsodyAssessment(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('record_prosody_assessment', {
+    p_student_id: studentId,
+    p_date: optional(formData, 'date'),
+    p_tempo: optional(formData, 'tempo'),
+    p_rhythm: optional(formData, 'rhythm'),
+    p_intonation: optional(formData, 'intonation'),
+    p_breathing: optional(formData, 'breathing'),
+    p_voice: optional(formData, 'voice'),
+    p_logical_stress: optional(formData, 'logicalStress'),
+    p_conclusion: optional(formData, 'conclusion'),
+  })
+
+  if (error) return toAppError(error, 'Не удалось записать обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование записано' }
+}
+
+// Форма — полный снимок текущей записи (тот же приём, что
+// updateSyllableAssessment): '' шлётся как есть на всех семи текстовых
+// полях — сентинел очистки (0067 Р3), а не через optional(): тот превратил
+// бы '' в undefined, а update_prosody_assessment трактует undefined как «не
+// трогать», не как «снять» — форма же трогает поле всегда, раз показывает
+// его пользователю (значение «— не оценено —» шлёт '' явно).
+export async function updateProsodyAssessment(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const id = String(formData.get('id') ?? '')
+  const expectedUpdatedAt = String(formData.get('expectedUpdatedAt') ?? '')
+  const raw = (key: string) => String(formData.get(key) ?? '').trim()
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('update_prosody_assessment', {
+    p_id: id,
+    p_date: optional(formData, 'date'),
+    p_tempo: raw('tempo'),
+    p_rhythm: raw('rhythm'),
+    p_intonation: raw('intonation'),
+    p_breathing: raw('breathing'),
+    p_voice: raw('voice'),
+    p_logical_stress: raw('logicalStress'),
+    p_conclusion: raw('conclusion'),
+    p_expected_updated_at: expectedUpdatedAt,
+  })
+
+  if (error) return toAppError(error, 'Не удалось сохранить обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование сохранено' }
+}
+
+export async function archiveProsodyAssessment(studentId: string, id: string): Promise<ClinicalState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_prosody_assessment', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось убрать запись')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Запись убрана' }
+}
+
 // --- Цели ------------------------------------------------------------------------
 
 export async function createGoal(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {

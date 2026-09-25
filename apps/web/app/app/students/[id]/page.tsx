@@ -23,6 +23,7 @@ import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
 import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
 import { ArticulationPanel, type ArticulationEntry } from './articulation-panel'
 import { SyllableAssessmentPanel, type SyllableAssessmentEntry } from './syllable-assessment-panel'
+import { ProsodyAssessmentPanel, type ProsodyAssessmentEntry } from './prosody-assessment-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
@@ -440,6 +441,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   let syllableAssessments: SyllableAssessmentEntry[] = []
   const showSyllableAssessments = isAdmin || isTeacher
 
+  // Просодика (0067) — тоже ИСТОРИЯ, та же видимость.
+  let prosodyAssessments: ProsodyAssessmentEntry[] = []
+  const showProsodyAssessments = isAdmin || isTeacher
+
   // Дата заметки рендерится в поясе центра — та же дата, что уходит
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
@@ -803,7 +808,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       .select('id, date, updated_at, teacher_id, affected_classes, error_types, conclusion')
       .eq('student_id', id)
       .is('deleted_at', null)
+      // Тай-брейк на created_at — два обследования в один день (0066 Р17)
+      // иначе сортируются недетерминированно (найдено при ревью 0067 Р7).
       .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
 
     const syllableTeacherIds = [
       ...new Set((syllableRows ?? []).map((s) => s.teacher_id).filter((v): v is string => Boolean(v))),
@@ -821,6 +829,38 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
       affectedClasses: s.affected_classes ?? [],
       errorTypes: s.error_types ?? [],
       conclusion: s.conclusion,
+    }))
+  }
+
+  if (showProsodyAssessments) {
+    const { data: prosodyRows } = await supabase
+      .from('prosody_assessments')
+      .select('id, date, updated_at, teacher_id, tempo, rhythm, intonation, breathing, voice, logical_stress, conclusion')
+      .eq('student_id', id)
+      .is('deleted_at', null)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    const prosodyTeacherIds = [
+      ...new Set((prosodyRows ?? []).map((p) => p.teacher_id).filter((v): v is string => Boolean(v))),
+    ]
+    const { data: prosodyTeacherRows } = prosodyTeacherIds.length
+      ? await supabase.from('teachers').select('id, full_name').in('id', prosodyTeacherIds)
+      : { data: [] as { id: string; full_name: string }[] }
+    const prosodyTeacherNameById = new Map((prosodyTeacherRows ?? []).map((t) => [t.id, t.full_name]))
+
+    prosodyAssessments = (prosodyRows ?? []).map((p) => ({
+      id: p.id,
+      date: p.date,
+      updatedAt: p.updated_at,
+      teacherName: p.teacher_id ? (prosodyTeacherNameById.get(p.teacher_id) ?? null) : null,
+      tempo: p.tempo,
+      rhythm: p.rhythm,
+      intonation: p.intonation,
+      breathing: p.breathing,
+      voice: p.voice,
+      logicalStress: p.logical_stress,
+      conclusion: p.conclusion,
     }))
   }
 
@@ -972,6 +1012,18 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           </CardHeader>
           <CardContent>
             <SyllableAssessmentPanel studentId={id} entries={syllableAssessments} canWrite={canWriteClinical} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showProsodyAssessments ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Просодика</CardTitle>
+            <CardDescription>История обследований. Родителю не показывается.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ProsodyAssessmentPanel studentId={id} entries={prosodyAssessments} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
       ) : null}
