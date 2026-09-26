@@ -314,6 +314,88 @@ export async function archiveProsodyAssessment(studentId: string, id: string): P
   return { message: '', notice: 'Запись убрана' }
 }
 
+// --- Чтение-письмо (0068) --------------------------------------------------------
+
+const READING_ERROR_CODES = ['substitution', 'omission', 'permutation', 'guessing', 'repetition', 'stumbling']
+const WRITING_ERROR_CODES = [
+  'acoustic_substitution',
+  'optical_substitution',
+  'omission',
+  'permutation',
+  'word_boundary',
+  'mirror_writing',
+  'agrammatism',
+  'incomplete_elements',
+]
+
+export async function recordReadingWritingAssessment(
+  _prev: ClinicalState,
+  formData: FormData,
+): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('record_reading_writing_assessment', {
+    p_student_id: studentId,
+    p_date: optional(formData, 'date'),
+    p_reading_method: optional(formData, 'readingMethod'),
+    p_reading_pace: optional(formData, 'readingPace'),
+    p_reading_comprehension: optional(formData, 'readingComprehension'),
+    p_reading_errors: checkedCodes(formData, 'readingError_', READING_ERROR_CODES),
+    p_writing_quality: optional(formData, 'writingQuality'),
+    p_writing_errors: checkedCodes(formData, 'writingError_', WRITING_ERROR_CODES),
+    p_conclusion: optional(formData, 'conclusion'),
+  })
+
+  if (error) return toAppError(error, 'Не удалось записать обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование записано' }
+}
+
+// Форма — полный снимок (тот же приём, что setArticulation/updateProsody-
+// Assessment): скаляры шлются как есть, включая '' — сентинел очистки
+// (0068 Р7), не через optional(). Массивы всегда полные (checkedCodes
+// никогда не возвращает undefined) — пустой список чекбоксов шлёт '{}',
+// валидную замену, а не «не трогать».
+export async function updateReadingWritingAssessment(
+  _prev: ClinicalState,
+  formData: FormData,
+): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const id = String(formData.get('id') ?? '')
+  const expectedUpdatedAt = String(formData.get('expectedUpdatedAt') ?? '')
+  const raw = (key: string) => String(formData.get(key) ?? '').trim()
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('update_reading_writing_assessment', {
+    p_id: id,
+    p_date: optional(formData, 'date'),
+    p_reading_method: raw('readingMethod'),
+    p_reading_pace: raw('readingPace'),
+    p_reading_comprehension: raw('readingComprehension'),
+    p_reading_errors: checkedCodes(formData, 'readingError_', READING_ERROR_CODES),
+    p_writing_quality: raw('writingQuality'),
+    p_writing_errors: checkedCodes(formData, 'writingError_', WRITING_ERROR_CODES),
+    p_conclusion: raw('conclusion'),
+    p_expected_updated_at: expectedUpdatedAt,
+  })
+
+  if (error) return toAppError(error, 'Не удалось сохранить обследование')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Обследование сохранено' }
+}
+
+export async function archiveReadingWritingAssessment(studentId: string, id: string): Promise<ClinicalState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_reading_writing_assessment', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось убрать запись')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: 'Запись убрана' }
+}
+
 // --- Цели ------------------------------------------------------------------------
 
 export async function createGoal(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {

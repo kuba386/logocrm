@@ -24,6 +24,7 @@ import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
 import { ArticulationPanel, type ArticulationEntry } from './articulation-panel'
 import { SyllableAssessmentPanel, type SyllableAssessmentEntry } from './syllable-assessment-panel'
 import { ProsodyAssessmentPanel, type ProsodyAssessmentEntry } from './prosody-assessment-panel'
+import { ReadingWritingAssessmentPanel, type ReadingWritingAssessmentEntry } from './reading-writing-assessment-panel'
 import { GoalsPanel, type GoalEntry, type GoalStageOption } from './goals-panel'
 import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homework-panel'
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
@@ -445,6 +446,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   let prosodyAssessments: ProsodyAssessmentEntry[] = []
   const showProsodyAssessments = isAdmin || isTeacher
 
+  // Чтение-письмо (0068) — тоже ИСТОРИЯ, та же видимость.
+  let readingWritingAssessments: ReadingWritingAssessmentEntry[] = []
+  const showReadingWritingAssessments = isAdmin || isTeacher
+
   // Дата заметки рендерится в поясе центра — та же дата, что уходит
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
@@ -864,6 +869,40 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }))
   }
 
+  if (showReadingWritingAssessments) {
+    const { data: rwRows } = await supabase
+      .from('reading_writing_assessments')
+      .select(
+        'id, date, updated_at, teacher_id, reading_method, reading_pace, reading_comprehension, reading_errors, writing_quality, writing_errors, conclusion',
+      )
+      .eq('student_id', id)
+      .is('deleted_at', null)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    const rwTeacherIds = [
+      ...new Set((rwRows ?? []).map((r) => r.teacher_id).filter((v): v is string => Boolean(v))),
+    ]
+    const { data: rwTeacherRows } = rwTeacherIds.length
+      ? await supabase.from('teachers').select('id, full_name').in('id', rwTeacherIds)
+      : { data: [] as { id: string; full_name: string }[] }
+    const rwTeacherNameById = new Map((rwTeacherRows ?? []).map((t) => [t.id, t.full_name]))
+
+    readingWritingAssessments = (rwRows ?? []).map((r) => ({
+      id: r.id,
+      date: r.date,
+      updatedAt: r.updated_at,
+      teacherName: r.teacher_id ? (rwTeacherNameById.get(r.teacher_id) ?? null) : null,
+      readingMethod: r.reading_method,
+      readingPace: r.reading_pace,
+      readingComprehension: r.reading_comprehension,
+      readingErrors: r.reading_errors ?? [],
+      writingQuality: r.writing_quality,
+      writingErrors: r.writing_errors ?? [],
+      conclusion: r.conclusion,
+    }))
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -1024,6 +1063,22 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           </CardHeader>
           <CardContent>
             <ProsodyAssessmentPanel studentId={id} entries={prosodyAssessments} canWrite={canWriteClinical} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showReadingWritingAssessments ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Чтение-письмо</CardTitle>
+            <CardDescription>История обследований. Родителю не показывается.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReadingWritingAssessmentPanel
+              studentId={id}
+              entries={readingWritingAssessments}
+              canWrite={canWriteClinical}
+            />
           </CardContent>
         </Card>
       ) : null}
