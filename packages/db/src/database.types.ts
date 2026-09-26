@@ -3024,6 +3024,92 @@ export type Database = {
           },
         ]
       }
+      reading_writing_assessments: {
+        Row: {
+          center_id: string
+          conclusion: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          deleted_at: string | null
+          id: string
+          reading_comprehension: string | null
+          reading_errors: string[]
+          reading_method: string | null
+          reading_pace: string | null
+          student_id: string
+          teacher_id: string | null
+          updated_at: string
+          writing_errors: string[]
+          writing_quality: string | null
+        }
+        Insert: {
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          reading_comprehension?: string | null
+          reading_errors?: string[]
+          reading_method?: string | null
+          reading_pace?: string | null
+          student_id: string
+          teacher_id?: string | null
+          updated_at?: string
+          writing_errors?: string[]
+          writing_quality?: string | null
+        }
+        Update: {
+          center_id?: string
+          conclusion?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          reading_comprehension?: string | null
+          reading_errors?: string[]
+          reading_method?: string | null
+          reading_pace?: string | null
+          student_id?: string
+          teacher_id?: string | null
+          updated_at?: string
+          writing_errors?: string[]
+          writing_quality?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reading_writing_assessments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reading_writing_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "reading_writing_assessments_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "reading_writing_assessments_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       referral_targets: {
         Row: {
           code: string
@@ -4489,6 +4575,10 @@ export type Database = {
       archive_lesson_note: { Args: { p_id: string }; Returns: boolean }
       archive_payment_source: { Args: { p_id: string }; Returns: undefined }
       archive_prosody_assessment: { Args: { p_id: string }; Returns: boolean }
+      archive_reading_writing_assessment: {
+        Args: { p_id: string }
+        Returns: boolean
+      }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       archive_syllable_assessment: { Args: { p_id: string }; Returns: boolean }
@@ -5324,6 +5414,21 @@ export type Database = {
         }
         Returns: string
       }
+      record_reading_writing_assessment: {
+        Args: {
+          p_conclusion?: string
+          p_date?: string
+          p_reading_comprehension?: string
+          p_reading_errors?: string[]
+          p_reading_method?: string
+          p_reading_pace?: string
+          p_student_id: string
+          p_teacher_id?: string
+          p_writing_errors?: string[]
+          p_writing_quality?: string
+        }
+        Returns: string
+      }
       record_salary_adjustment: {
         Args: {
           p_amount_tiyin: number
@@ -5815,6 +5920,21 @@ export type Database = {
           p_rhythm?: string
           p_tempo?: string
           p_voice?: string
+        }
+        Returns: undefined
+      }
+      update_reading_writing_assessment: {
+        Args: {
+          p_conclusion?: string
+          p_date?: string
+          p_expected_updated_at?: string
+          p_id: string
+          p_reading_comprehension?: string
+          p_reading_errors?: string[]
+          p_reading_method?: string
+          p_reading_pace?: string
+          p_writing_errors?: string[]
+          p_writing_quality?: string
         }
         Returns: undefined
       }

@@ -29,8 +29,8 @@ select set_eq(
             ('lesson_notes'), ('lesson_note_goal_scores'),
             ('diagnostic_clinical_forms'), ('diagnostic_referrals'),
             ('student_anamnesis'), ('student_articulation'), ('syllable_assessments'),
-            ('prosody_assessments') $$,
-  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations, message_templates (0034 — настройка центра), девять клинических таблиц (0036), две junction диагностики (0059), анамнез (0063), артикуляционный аппарат (0065), слоговая структура (0066) и просодика (0067) — ни стойке, ни бухгалтеру не положены, FEATURE_MATRIX сноска ⁵; новая таблица роняет'
+            ('prosody_assessments'), ('reading_writing_assessments') $$,
+  'Таблицы с tenant_admin без решения по новым ролям: attendance_statuses (read_all), invitations, message_templates (0034 — настройка центра), девять клинических таблиц (0036), две junction диагностики (0059), анамнез (0063), артикуляционный аппарат (0065), слоговая структура (0066), просодика (0067) и чтение-письмо (0068) — ни стойке, ни бухгалтеру не положены, FEATURE_MATRIX сноска ⁵; новая таблица роняет'
 );
 select is(
   (select count(*)::int from pg_policies where schemaname = 'public' and policyname like 'tenant_%' and cmd = 'DELETE'),

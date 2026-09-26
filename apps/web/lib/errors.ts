@@ -103,6 +103,16 @@ const CHECK_MESSAGES: Record<string, string> = {
   prosody_assessments_logical_stress_check: 'Недопустимое значение логического ударения',
   prosody_assessments_conclusion_check: 'Заключение — не длиннее 2000 символов',
   prosody_assessments_not_empty: 'Заполните хотя бы одно поле обследования',
+  reading_writing_assessments_date_check: 'Дата обследования вне допустимого диапазона',
+  reading_writing_assessments_reading_method_check: 'Недопустимое значение способа чтения',
+  reading_writing_assessments_reading_pace_check: 'Недопустимое значение темпа чтения',
+  reading_writing_assessments_reading_comprehension_check: 'Недопустимое значение понимания прочитанного',
+  reading_writing_assessments_reading_errors_check: 'Недопустимый тип ошибки чтения или их слишком много',
+  reading_writing_assessments_writing_quality_check: 'Недопустимое значение качества письма',
+  reading_writing_assessments_writing_errors_check: 'Недопустимый тип ошибки письма или их слишком много',
+  reading_writing_assessments_conclusion_check: 'Заключение — не длиннее 2000 символов',
+  reading_writing_assessments_not_empty: 'Заполните хотя бы одно поле обследования',
+  reading_writing_assessments_writing_consistency: 'Письмо не может быть одновременно «в норме» и содержать список ошибок',
 }
 
 /**
