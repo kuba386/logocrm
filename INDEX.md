@@ -48,6 +48,7 @@
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Keep a Changelog / SemVer |
 | [reports/TEMPLATE.md](reports/TEMPLATE.md) | Шаблон отчёта по этапу — разделы «Что это даёт» и «Отступления от ТЗ» обязательны |
 | [reports/stage-3.md](reports/stage-3.md), [reports/stage-4.md](reports/stage-4.md) | Отчёты по закрытым/частично закрытым этапам — писать/обновлять по ходу, не только в конце |
+| [reports/speech-card.md](reports/speech-card.md) | Речевая карта (0063–0068, пять разделов) — не нумерованный этап, отдельный отчёт: что даёт, решения владельца, дефекты, что осталось |
 
 ## Роли приложения (не документы — сквозной контекст)
 
