@@ -498,10 +498,10 @@ select is(
   'Заметка записана, текст обрезан по краям');
 
 select is(
-  (select row(created_by, center_id, teacher_id, source, status, soap)
+  (select row(created_by, center_id, teacher_id, source::text, status::text, soap)
      from public.lesson_notes where lesson_id = '70700000-0000-0000-0000-00000000ff01'),
   row('70700000-0000-0000-0000-000000000002'::uuid, '70700000-0000-0000-0000-0000000000c1'::uuid,
-      '70700000-0000-0000-0000-00000000aa01'::uuid, 'text', 'draft', '{"objective": "Работали над звуком Р"}'::jsonb),
+      '70700000-0000-0000-0000-00000000aa01'::uuid, 'text'::text, 'draft'::text, '{"objective": "Работали над звуком Р"}'::jsonb),
   'created_by — пользователь чата, center_id явно, teacher_id — карточка специалиста, черновик в soap.objective (Р3/Р12)');
 
 select public.bot_arm_action(707002, 'note', '70700000-0000-0000-0000-00000000ff01');
