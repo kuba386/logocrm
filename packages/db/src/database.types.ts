@@ -476,6 +476,77 @@ export type Database = {
           },
         ]
       }
+      bot_pending_actions: {
+        Row: {
+          center_id: string
+          chat_id: number
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          lesson_id: string
+          prompt_message_id: number | null
+          student_id: string | null
+          user_id: string
+        }
+        Insert: {
+          center_id: string
+          chat_id: number
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          kind: string
+          lesson_id: string
+          prompt_message_id?: number | null
+          student_id?: string | null
+          user_id: string
+        }
+        Update: {
+          center_id?: string
+          chat_id?: number
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          lesson_id?: string
+          prompt_message_id?: number | null
+          student_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_pending_actions_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_pending_actions_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "bot_pending_actions_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "bot_pending_actions_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       center_digest_runs: {
         Row: {
           center_id: string
@@ -4658,6 +4729,14 @@ export type Database = {
           starts_at: string
         }[]
       }
+      bot_arm_action: {
+        Args: { p_chat_id: number; p_kind: string; p_lesson_id: string }
+        Returns: Json
+      }
+      bot_assert_writable: {
+        Args: { p_center_id: string; p_user: string }
+        Returns: undefined
+      }
       bot_balance: {
         Args: { p_chat_id: number }
         Returns: {
@@ -4669,16 +4748,52 @@ export type Database = {
           student_id: string
         }[]
       }
+      bot_bind_prompt: {
+        Args: { p_chat_id: number; p_message_id: number }
+        Returns: undefined
+      }
+      bot_lesson_participants: { Args: { p_lesson_id: string }; Returns: Json }
+      bot_lesson_rights: {
+        Args: { p_lesson_id: string; p_user: string }
+        Returns: {
+          alive: boolean
+          center_id: string
+          is_today: boolean
+          may_mark: boolean
+          may_note: boolean
+          started: boolean
+          teacher_id: string
+        }[]
+      }
+      bot_mark_attendance: {
+        Args: { p_chat_id: number; p_status_id: string }
+        Returns: Json
+      }
+      bot_pick_student: {
+        Args: { p_chat_id: number; p_student_id: string }
+        Returns: Json
+      }
       bot_today: {
         Args: { p_chat_id: number }
         Returns: {
+          can_mark: boolean
+          can_note: boolean
           center_id: string
           center_name: string
           lesson_id: string
           starts_at: string
+          starts_local: string
           teacher_name: string
           title: string
         }[]
+      }
+      bot_voice_pending: {
+        Args: { p_lesson_id: string; p_student_id: string }
+        Returns: boolean
+      }
+      bot_write_note: {
+        Args: { p_chat_id: number; p_reply_to?: number; p_text: string }
+        Returns: Json
       }
       calc_lesson_price: {
         Args: { p_lessons: number; p_price_tiyin: number }
@@ -4919,6 +5034,10 @@ export type Database = {
       }
       emit_event: {
         Args: { p_center_id?: string; p_payload?: Json; p_type: string }
+        Returns: number
+      }
+      emit_event_internal: {
+        Args: { p_center_id: string; p_payload: Json; p_type: string }
         Returns: number
       }
       emit_event_platform: {

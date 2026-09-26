@@ -121,7 +121,17 @@ from unnest(array[
   'public.assistant_intents_for(text)',
   'public.center_ai_questions_used(uuid)',
   'public.assistant_questions_reserved(uuid)',
-  'public.diagnostic_set_details(uuid,uuid,text[],jsonb)'
+  'public.diagnostic_set_details(uuid,uuid,text[],jsonb)',
+  'public.emit_event_internal(text,jsonb,uuid)',
+  'public.bot_lesson_rights(uuid,uuid)',
+  'public.bot_assert_writable(uuid,uuid)',
+  'public.bot_voice_pending(uuid,uuid)',
+  'public.bot_lesson_participants(uuid)',
+  'public.bot_arm_action(bigint,text,uuid)',
+  'public.bot_pick_student(bigint,uuid)',
+  'public.bot_mark_attendance(bigint,uuid)',
+  'public.bot_bind_prompt(bigint,bigint)',
+  'public.bot_write_note(bigint,text,bigint)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 

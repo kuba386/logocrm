@@ -76,8 +76,8 @@ select ok(
        and not has_table_privilege('authenticated', c.oid, 'UPDATE'))
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
-      and c.relname in ('lesson_voice_requests', 'ai_jobs')),
-  'lesson_voice_requests и ai_jobs закрыты от authenticated целиком (0041)'
+      and c.relname in ('lesson_voice_requests', 'ai_jobs', 'bot_pending_actions')),
+  'lesson_voice_requests, ai_jobs и bot_pending_actions закрыты от authenticated целиком (0041, 0071)'
 );
 select ok(
   has_table_privilege('service_role', 'public.students', 'DELETE'),
