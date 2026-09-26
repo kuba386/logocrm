@@ -21,24 +21,51 @@ type Row = {
   payerPhone: string | null
   debtTiyin: number
   overdrawnTiyin: number
+  subscriptionOverdueTiyin: number
+  // Плательщик АБОНЕМЕНТА (subscriptions.payer_id на момент продажи), не
+  // текущий payer_id ребёнка — их могли развести (link_parent_payer, 0060).
+  // NULL, если у ребёнка сразу несколько просроченных абонементов разных
+  // плательщиков — тогда автосообщение не пишем никому наугад (0070).
+  subscriptionOverduePayerId: string | null
   lessonsLeft: number | null
   activeSubscriptionId: string | null
   lastLessonAt: string | null
   nextLessonAt: string | null
 }
 
-function problemText(row: Row): { label: string; amount: number | null; tone: 'danger' | 'warning' } {
-  if (row.debtTiyin > 0) return { label: 'Долг', amount: row.debtTiyin, tone: 'danger' }
-  if (row.overdrawnTiyin > 0) return { label: 'Перерасход', amount: row.overdrawnTiyin, tone: 'danger' }
-  return { label: 'Остаток исчерпан', amount: null, tone: 'warning' }
+// Три разных долга не складываются в один (docs/Database.md, «Два слова,
+// два определения»): за занятия без абонемента, перерасход по абонементу и
+// просрочка оплаты САМОГО абонемента (0070) — разные деньги, разные причины
+// написать родителю. «Остаток исчерпан» — не долг, а сигнал «пора продлить»,
+// показывается только когда денежных проблем нет вовсе.
+function problems(row: Row): Array<{ label: string; amount: number | null; tone: 'danger' | 'warning' }> {
+  const list: Array<{ label: string; amount: number | null; tone: 'danger' | 'warning' }> = []
+  if (row.debtTiyin > 0) list.push({ label: 'Долг за занятия', amount: row.debtTiyin, tone: 'danger' })
+  if (row.overdrawnTiyin > 0) list.push({ label: 'Перерасход', amount: row.overdrawnTiyin, tone: 'danger' })
+  if (row.subscriptionOverdueTiyin > 0) {
+    list.push({ label: 'Просрочен платёж за абонемент', amount: row.subscriptionOverdueTiyin, tone: 'danger' })
+  }
+  if (list.length === 0) list.push({ label: 'Остаток исчерпан', amount: null, tone: 'warning' })
+  return list
+}
+
+// Просрочку абонемента упоминаем в сообщении, только если платить по нему
+// должен ТОТ ЖЕ человек, чей это WhatsApp — иначе требование денег уйдёт
+// не тому плательщику (архитектор-ревью 0070, находка №6).
+function subscriptionOverdueAddressable(row: Row): boolean {
+  return row.subscriptionOverdueTiyin > 0 && row.subscriptionOverduePayerId === row.payerId
 }
 
 function whatsappMessage(row: Row): string {
-  if (row.debtTiyin > 0) {
-    return `Здравствуйте! У ${row.studentName} остался долг ${formatSom(row.debtTiyin)} за занятия в LogoCRM. Пожалуйста, оплатите при возможности.`
+  const parts: string[] = []
+  if (row.debtTiyin > 0) parts.push(`долг за занятия ${formatSom(row.debtTiyin)}`)
+  if (row.overdrawnTiyin > 0) parts.push(`перерасход по абонементу ${formatSom(row.overdrawnTiyin)}`)
+  if (subscriptionOverdueAddressable(row)) {
+    parts.push(`просроченный платёж за абонемент ${formatSom(row.subscriptionOverdueTiyin)}`)
   }
-  if (row.overdrawnTiyin > 0) {
-    return `Здравствуйте! У ${row.studentName} перерасход ${formatSom(row.overdrawnTiyin)} — абонемент закончился раньше, чем ожидали.`
+
+  if (parts.length > 0) {
+    return `Здравствуйте! У ${row.studentName} ${parts.join(' и ')} в LogoCRM. Пожалуйста, оплатите при возможности.`
   }
   return `Здравствуйте! У ${row.studentName} закончился абонемент. Хотите продлить?`
 }
@@ -69,16 +96,19 @@ export default async function DebtsPage({
   // принцип на список проблемных балансов.
   const { data: balanceRows } = await supabase
     .from('student_balance')
-    .select('student_id, debt_tiyin, overdrawn_tiyin, lessons_left, active_subscription_id')
+    .select(
+      'student_id, debt_tiyin, overdrawn_tiyin, subscription_overdue_tiyin, subscription_overdue_payer_id, lessons_left, active_subscription_id',
+    )
 
   const problematic = (balanceRows ?? []).filter((row) => {
     const debt = row.debt_tiyin ?? 0
     const overdrawn = row.overdrawn_tiyin ?? 0
+    const subscriptionOverdue = row.subscription_overdue_tiyin ?? 0
     // «Остаток 0» — абонемент активен, но исчерпан: null здесь ambiguous
     // (без абонемента тоже null), поэтому только когда active_subscription_id
     // заполнен — тот же приём, что в BalanceStrip (students/[id]).
     const zeroLeft = row.active_subscription_id !== null && row.lessons_left === 0
-    return debt > 0 || overdrawn > 0 || zeroLeft
+    return debt > 0 || overdrawn > 0 || subscriptionOverdue > 0 || zeroLeft
   })
 
   const studentIds = problematic.map((r) => r.student_id).filter((v): v is string => Boolean(v))
@@ -113,7 +143,16 @@ export default async function DebtsPage({
       .order('starts_at'),
   ])
 
-  const payerIds = [...new Set((students ?? []).map((s) => s.payer_id).filter((v): v is string => Boolean(v)))]
+  // Плательщик студента и плательщик просроченного абонемента — не всегда
+  // один человек (0070, находка №6) — оба набора id нужны в payerById.
+  const payerIds = [
+    ...new Set(
+      [
+        ...(students ?? []).map((s) => s.payer_id),
+        ...problematic.map((r) => r.subscription_overdue_payer_id),
+      ].filter((v): v is string => Boolean(v)),
+    ),
+  ]
   const { data: payers } = payerIds.length
     ? await supabase.from('payers').select('id, full_name, phone').in('id', payerIds)
     : { data: [] }
@@ -141,6 +180,8 @@ export default async function DebtsPage({
       payerPhone: payer?.phone ?? null,
       debtTiyin: r.debt_tiyin ?? 0,
       overdrawnTiyin: r.overdrawn_tiyin ?? 0,
+      subscriptionOverdueTiyin: r.subscription_overdue_tiyin ?? 0,
+      subscriptionOverduePayerId: r.subscription_overdue_payer_id,
       lessonsLeft: r.lessons_left,
       activeSubscriptionId: r.active_subscription_id,
       lastLessonAt: r.student_id ? (lastByStudent.get(r.student_id) ?? null) : null,
@@ -148,15 +189,28 @@ export default async function DebtsPage({
     }
   })
 
-  if (filter === 'debt') rows = rows.filter((r) => r.debtTiyin > 0 || r.overdrawnTiyin > 0)
-  if (filter === 'zero') rows = rows.filter((r) => r.debtTiyin === 0 && r.overdrawnTiyin === 0)
+  if (filter === 'debt') {
+    rows = rows.filter((r) => r.debtTiyin > 0 || r.overdrawnTiyin > 0 || r.subscriptionOverdueTiyin > 0)
+  }
+  if (filter === 'zero') {
+    rows = rows.filter((r) => r.debtTiyin === 0 && r.overdrawnTiyin === 0 && r.subscriptionOverdueTiyin === 0)
+  }
 
   rows.sort((a, b) => {
     if (sort === 'name') return a.studentName.localeCompare(b.studentName, 'ru')
-    return b.debtTiyin + b.overdrawnTiyin - (a.debtTiyin + a.overdrawnTiyin)
+    // Долг за занятия и перерасход — одна и та же «за услугу уже заплатили
+    // меньше, чем она стоила» природа, их можно сложить для сортировки.
+    // Просрочка абонемента — другие деньги (docs/Database.md, «Два слова,
+    // два определения»); сумма с ней дала бы бессмысленный порядок (долг
+    // 500 сом выше просрочки 50 000), поэтому сортируем по максимуму из
+    // двух корзин, а не по общей сумме.
+    const usageA = a.debtTiyin + a.overdrawnTiyin
+    const usageB = b.debtTiyin + b.overdrawnTiyin
+    return Math.max(usageB, b.subscriptionOverdueTiyin) - Math.max(usageA, a.subscriptionOverdueTiyin)
   })
 
   const totalDebt = rows.reduce((sum, r) => sum + r.debtTiyin + r.overdrawnTiyin, 0)
+  const totalSubscriptionOverdue = rows.reduce((sum, r) => sum + r.subscriptionOverdueTiyin, 0)
 
   const filterLink = (value: Filter) => `/app/debts?filter=${value}&sort=${sort}`
   const sortLink = (value: Sort) => `/app/debts?filter=${filter}&sort=${value}`
@@ -167,7 +221,9 @@ export default async function DebtsPage({
         <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
         <p className="text-sm text-muted-foreground">
           {rows.length} {rows.length === 1 ? 'ученик' : 'учеников'}
-          {totalDebt > 0 ? ` · на сумму ${formatSom(totalDebt)}` : ''}
+          {totalDebt > 0 ? ` · долг ${formatSom(totalDebt)}` : ''}
+          {/* Отдельная сумма, не сложенная с долгом за занятия — разные деньги (docs/Database.md). */}
+          {totalSubscriptionOverdue > 0 ? ` · просрочка по абонементам ${formatSom(totalSubscriptionOverdue)}` : ''}
         </p>
         {/* Выгрузка — только can_finance (0058), регистратору не показываем. */}
         {isFinance(role) ? (
@@ -206,8 +262,16 @@ export default async function DebtsPage({
       ) : (
         <div className="space-y-3">
           {rows.map((row) => {
-            const problem = problemText(row)
+            const rowProblems = problems(row)
             const waNumber = whatsappNumber(row.payerPhone)
+            // Просрочка есть, но платить должен не тот, чей контакт на
+            // карточке — молча звать текущего плательщика ребёнка нельзя
+            // (0070, находка №6). subscriptionOverduePayerId = null, если у
+            // ребёнка сразу несколько просроченных абонементов разных
+            // плательщиков — уточнить, кому писать, тогда может только
+            // человек, а не эта карточка.
+            const overdueMismatch = row.subscriptionOverdueTiyin > 0 && !subscriptionOverdueAddressable(row)
+            const overduePayer = row.subscriptionOverduePayerId ? payerById.get(row.subscriptionOverduePayerId) : undefined
             return (
               <Card key={row.studentId}>
                 <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
@@ -219,6 +283,13 @@ export default async function DebtsPage({
                       {row.payerName ?? 'Плательщик не указан'}
                       {row.payerPhone ? ` · ${formatKgPhone(row.payerPhone)}` : ''}
                     </p>
+                    {overdueMismatch ? (
+                      <p className="text-xs text-warning">
+                        Абонемент оформлен на{' '}
+                        {overduePayer ? `${overduePayer.full_name}${overduePayer.phone ? ` · ${formatKgPhone(overduePayer.phone)}` : ''}` : 'другого плательщика'}
+                        — писать текущему плательщику ребёнка про эту сумму нельзя.
+                      </p>
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
                       Последнее: {row.lastLessonAt ? dayInZone(row.lastLessonAt, timeZone) : '—'} · Ближайшее:{' '}
                       {row.nextLessonAt ? dayInZone(row.nextLessonAt, timeZone) : 'не запланировано'}
@@ -226,15 +297,18 @@ export default async function DebtsPage({
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        'rounded px-2 py-1 text-sm font-medium',
-                        problem.tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-warning-bg text-warning',
-                      )}
-                    >
-                      {problem.label}
-                      {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
-                    </span>
+                    {rowProblems.map((problem) => (
+                      <span
+                        key={problem.label}
+                        className={cn(
+                          'rounded px-2 py-1 text-sm font-medium',
+                          problem.tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-warning-bg text-warning',
+                        )}
+                      >
+                        {problem.label}
+                        {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
+                      </span>
+                    ))}
                     {waNumber ? (
                       <a
                         href={`https://wa.me/${waNumber}?text=${encodeURIComponent(whatsappMessage(row))}`}
