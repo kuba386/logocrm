@@ -623,6 +623,40 @@ export const diagnosticCreatedSchema = z.object({
   }),
 })
 
+/** Анамнез — первый раздел речевой карты, профиль, не история (0063). */
+export const anamnesisCreatedSchema = z.object({
+  type: z.literal('anamnesis.created'),
+  payload: centerRef.extend({
+    anamnesis_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const anamnesisUpdatedSchema = z.object({
+  type: z.literal('anamnesis.updated'),
+  payload: centerRef.extend({
+    anamnesis_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+/** Артикуляционный аппарат — второй раздел речевой карты, профиль (0065). */
+export const articulationCreatedSchema = z.object({
+  type: z.literal('articulation.created'),
+  payload: centerRef.extend({
+    articulation_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const articulationUpdatedSchema = z.object({
+  type: z.literal('articulation.updated'),
+  payload: centerRef.extend({
+    articulation_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
 /** Слоговая структура — третий раздел речевой карты, история (0066). */
 export const syllableAssessmentCreatedSchema = z.object({
   type: z.literal('syllable_assessment.created'),
@@ -993,6 +1027,10 @@ export const appEventSchema = z.discriminatedUnion('type', [
   digestDailySchema,
   eventFailedSchema,
   diagnosticCreatedSchema,
+  anamnesisCreatedSchema,
+  anamnesisUpdatedSchema,
+  articulationCreatedSchema,
+  articulationUpdatedSchema,
   syllableAssessmentCreatedSchema,
   syllableAssessmentUpdatedSchema,
   syllableAssessmentArchivedSchema,

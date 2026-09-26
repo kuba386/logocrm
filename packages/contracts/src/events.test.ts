@@ -171,8 +171,16 @@ describe('контракт не расходится с миграциями', (
             // сравнение вовсе — тест был бы зелёным по недосмотру на
             // событии, у которого нет схемы (0045).
             ...line.matchAll(/emit_(?:clinical_event|event(?:_unchecked)?)\(\s*'([a-z_]+\.[a-z_]+)'/g),
+            // `case when … then '<тип>' else '<тип>' end` как первый
+            // аргумент emit_event (0063/0065, set_student_anamnesis/
+            // set_student_articulation: один RPC решает created/updated по
+            // v_exists) — первый регэксп требует литерал сразу после `(` на
+            // ТОЙ ЖЕ строке, а здесь строка с `emit_event(` и строка с
+            // `case when` разные. anamnesis.*/articulation.* прошли мимо
+            // теста ровно так; нашлось не тестом, а ручным ревью контракта.
+            ...line.matchAll(/case when .+ then '([a-z_]+\.[a-z_]+)' else '([a-z_]+\.[a-z_]+)' end/g),
           ])
-          .map((match) => match[1] as string),
+          .flatMap((match) => (match.length > 2 ? [match[1] as string, match[2] as string] : [match[1] as string])),
       ),
   )
 
