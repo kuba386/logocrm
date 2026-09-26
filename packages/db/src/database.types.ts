@@ -4455,6 +4455,8 @@ export type Database = {
           overdrawn_tiyin: number | null
           state: string | null
           student_id: string | null
+          subscription_overdue_payer_id: string | null
+          subscription_overdue_tiyin: number | null
         }
         Relationships: []
       }
@@ -5737,6 +5739,14 @@ export type Database = {
       student_subscription_badge: {
         Args: { p_student_id: string }
         Returns: string
+      }
+      student_subscriptions_overdue: {
+        Args: never
+        Returns: {
+          overdue_tiyin: number
+          payer_id: string
+          student_id: string
+        }[]
       }
       students_brief: {
         Args: never
