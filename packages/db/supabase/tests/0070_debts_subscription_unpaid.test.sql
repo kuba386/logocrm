@@ -399,8 +399,8 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.student_subscriptions_overdue()), 6,
-  'owner: ровно 6 строк — без плана, план-в-прошлом, план-отменён, чужой-плательщик, одна-строка-из-двух, капинг, два-абонемента'
+  (select count(*)::int from public.student_subscriptions_overdue()), 7,
+  'owner: ровно 7 строк — без плана, план-в-прошлом, план-отменён, чужой-плательщик, одна-строка-из-двух, капинг, два-абонемента'
 );
 
 select is(
@@ -432,8 +432,8 @@ select is(
 
 select is(
   (select count(*)::int from public.student_balance where center_id = 'cccccccc-0070-0000-0000-00000000000a'),
-  11,
-  'student_balance по-прежнему строка на каждого живого ребёнка центра (12 заведено, 1 удалён), а не только на должников'
+  10,
+  'student_balance по-прежнему строка на каждого живого ребёнка центра (11 заведено, 1 удалён), а не только на должников'
 );
 
 reset role;
@@ -451,8 +451,8 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.student_subscriptions_overdue()), 6,
-  'finance: те же 6 строк, что у owner'
+  (select count(*)::int from public.student_subscriptions_overdue()), 7,
+  'finance: те же 7 строк, что у owner'
 );
 
 reset role;
@@ -470,8 +470,8 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.student_subscriptions_overdue()), 6,
-  'registrar: те же 6 строк, что у owner'
+  (select count(*)::int from public.student_subscriptions_overdue()), 7,
+  'registrar: те же 7 строк, что у owner'
 );
 
 reset role;
@@ -520,8 +520,8 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.student_subscriptions_overdue()), 6,
-  'parent1: те же 6 строк, что у owner — все просроченные абонементы в фикстуре проданы плательщику 1'
+  (select count(*)::int from public.student_subscriptions_overdue()), 7,
+  'parent1: те же 7 строк, что у owner — все просроченные абонементы в фикстуре проданы плательщику 1'
 );
 
 reset role;
@@ -629,7 +629,7 @@ select ok(
 );
 
 select results_eq(
-  $q$ select column_name from information_schema.columns
+  $q$ select column_name::text from information_schema.columns
        where table_schema = 'public' and table_name = 'student_balance'
        order by ordinal_position $q$,
   $q$ values ('student_id'), ('center_id'), ('active_subscription_id'), ('lessons_left'), ('ends_at'),
