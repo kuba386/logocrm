@@ -98,7 +98,11 @@ begin
       )
       select x.student_id,
              sum(x.amt)::integer,
-             case when count(distinct x.payer_id) = 1 then min(x.payer_id) else null end
+             -- min(uuid) не существует как агрегат — сортируем по тексту;
+             -- это не более чем «взять единственное значение», а не
+             -- содержательный минимум, потому и работает только когда
+             -- count(distinct) = 1 (иначе — null, находка №6 ревью SQL).
+             case when count(distinct x.payer_id) = 1 then min(x.payer_id::text)::uuid else null end
         from per_sub x
        where x.amt > 0
        group by x.student_id;
@@ -145,7 +149,7 @@ begin
       )
       select x.student_id,
              sum(x.amt)::integer,
-             case when count(distinct x.payer_id) = 1 then min(x.payer_id) else null end
+             case when count(distinct x.payer_id) = 1 then min(x.payer_id::text)::uuid else null end
         from per_sub x
        where x.amt > 0
        group by x.student_id;

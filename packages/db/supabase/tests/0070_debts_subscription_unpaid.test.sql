@@ -229,6 +229,12 @@ select public.record_payment('dddddddd-0070-0000-0000-0000000000b1', 40000, 'pay
 
 reset role;
 
+-- reset role не сбрасывает request.jwt.claims (только саму роль) — без этого
+-- следующая строка резолвила бы auth.uid()/role_in() по claims владельца Б
+-- (последний tests_claims выше), а центр А ему не принадлежит:
+-- subscriptions_cancel_installments → installment_plans_cancel_live упал бы
+-- «Недостаточно прав» на update status ниже (CI это отловил в первом прогоне).
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0070-0000-0000-00000000000a');
 
 -- Сырые правки состояния как postgres, вне RLS и вне RPC (0018-тест: любая
 -- правка задним числом нормальному клиенту недоступна — только через
