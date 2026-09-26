@@ -628,13 +628,17 @@ select ok(
   'student_balance остаётся security_invoker после create or replace (0070) — иначе вью читалась бы от владельца, не от вызывающего'
 );
 
-select results_eq(
-  $q$ select column_name::text from information_schema.columns
-       where table_schema = 'public' and table_name = 'student_balance'
-       order by ordinal_position $q$,
-  $q$ values ('student_id'), ('center_id'), ('active_subscription_id'), ('lessons_left'), ('ends_at'),
-             ('debt_tiyin'), ('overdrawn_tiyin'), ('state'), ('subscription_overdue_tiyin'),
-             ('subscription_overdue_payer_id') $q$,
+-- results_eq сравнивает наборы через внутренний EXCEPT — тот падает
+-- «could not determine which collation to use» на sql_identifier против
+-- text-литералов из values(); array_agg + is() сравнивает поэлементно, до
+-- этой развилки не доходит и тем же движением фиксирует ПОРЯДОК колонок.
+select is(
+  (select array_agg(column_name::text order by ordinal_position)
+     from information_schema.columns
+    where table_schema = 'public' and table_name = 'student_balance'),
+  array['student_id', 'center_id', 'active_subscription_id', 'lessons_left', 'ends_at',
+        'debt_tiyin', 'overdrawn_tiyin', 'state', 'subscription_overdue_tiyin',
+        'subscription_overdue_payer_id'],
   'student_balance: порядок колонок — восемь старых (0031), потом две новые в хвосте (0070); следующая миграция, дописывающая колонку не в конец, упадёт здесь, а не на 42P16 в проде'
 );
 
