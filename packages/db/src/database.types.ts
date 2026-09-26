@@ -5744,7 +5744,7 @@ export type Database = {
         Args: never
         Returns: {
           overdue_tiyin: number
-          payer_id: string | null
+          payer_id: string
           student_id: string
         }[]
       }
