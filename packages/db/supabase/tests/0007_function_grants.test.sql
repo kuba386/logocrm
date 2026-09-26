@@ -260,6 +260,7 @@ select set_eq(
     ('students_brief()'),
     ('payers_brief()'),
     ('student_debts()'),
+    ('student_subscriptions_overdue()'),
     ('revenue_facts()'),
     ('month_open_lessons_count(date)'),
     ('create_telegram_link_code()'),
