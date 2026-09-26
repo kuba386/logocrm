@@ -673,6 +673,31 @@ export const prosodyAssessmentArchivedSchema = z.object({
   }),
 })
 
+/** Чтение-письмо — пятый, последний раздел речевой карты, история (0068). */
+export const readingWritingAssessmentCreatedSchema = z.object({
+  type: z.literal('reading_writing_assessment.created'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const readingWritingAssessmentUpdatedSchema = z.object({
+  type: z.literal('reading_writing_assessment.updated'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
+export const readingWritingAssessmentArchivedSchema = z.object({
+  type: z.literal('reading_writing_assessment.archived'),
+  payload: centerRef.extend({
+    assessment_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+  }),
+})
+
 export const goalAchievedSchema = z.object({
   type: z.literal('goal.achieved'),
   payload: centerRef.extend({
@@ -974,6 +999,9 @@ export const appEventSchema = z.discriminatedUnion('type', [
   prosodyAssessmentCreatedSchema,
   prosodyAssessmentUpdatedSchema,
   prosodyAssessmentArchivedSchema,
+  readingWritingAssessmentCreatedSchema,
+  readingWritingAssessmentUpdatedSchema,
+  readingWritingAssessmentArchivedSchema,
   goalAchievedSchema,
   homeworkAssignedSchema,
   homeworkSubmittedSchema,
