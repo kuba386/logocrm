@@ -12,7 +12,7 @@ import {
   handleToday,
   handleVoice,
 } from './commands.ts'
-import { answerCallback, sendMessage, type Update } from './telegram.ts'
+import { answerCallback, sendMessage, setMyCommands, type Update } from './telegram.ts'
 import { RpcError } from './supabase.ts'
 
 /**
@@ -152,4 +152,15 @@ const server = createServer((request, response) => {
 
 server.listen(env.port, () => {
   console.log(`tg-bot слушает :${env.port}`)
+})
+
+// Меню команд — вызов при каждом старте (перезапуски Railway обычны, вызов
+// идемпотентен). Только то, что реально печатают текстом — /start сюда же:
+// новый специалист жмёт его из меню, а не гадает, с чего начать.
+void setMyCommands([
+  { command: 'start', description: 'Привязать аккаунт LogoCRM' },
+  { command: 'today', description: 'Занятия на сегодня' },
+  { command: 'balance', description: 'Остаток по детям' },
+]).catch((error: unknown) => {
+  console.error('Не удалось задать список команд', error)
 })

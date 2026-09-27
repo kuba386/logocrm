@@ -34,6 +34,20 @@ export async function sendMessage(chatId: number, text: string, reply?: Reply): 
 }
 
 /**
+ * Список команд в меню Telegram (иконка «/» рядом с полем ввода) — без
+ * этого вызова список пуст, и специалисту неоткуда узнать про /today и
+ * /balance, кроме как напечатать их вслепую. Вызывается один раз при
+ * старте (idempotent — Telegram просто перезаписывает тот же список).
+ */
+export async function setMyCommands(commands: { command: string; description: string }[]): Promise<void> {
+  await fetch(`https://api.telegram.org/bot${env.botToken}/setMyCommands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commands }),
+  })
+}
+
+/**
  * Убирает «часики» на нажатой кнопке — без этого она висит секунд десять.
  * alert=true — модалка, которую нужно закрыть: для отказов по деньгам и
  * подписке исчезающей плашки мало, человек решит, что кнопка не сработала.
