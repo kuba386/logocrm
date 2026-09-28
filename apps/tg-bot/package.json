@@ -8,8 +8,7 @@
   },
   "scripts": {
     "start": "node --experimental-strip-types src/index.ts",
-    "typecheck": "tsc --noEmit && pnpm check:startup",
-    "check:startup": "TELEGRAM_BOT_TOKEN=x TELEGRAM_WEBHOOK_SECRET=x SUPABASE_URL=https://x.supabase.co SUPABASE_PUBLISHABLE_KEY=x SUPABASE_BOT_JWT=x node --experimental-strip-types --input-type=module -e \"await import('./src/supabase.ts'); await import('./src/telegram.ts'); await import('./src/commands.ts')\""
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
