@@ -18,7 +18,7 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   { type: 'student.absent_streak', placeholders: ['{child}', '{count}'] },
   { type: 'installment.due', placeholders: ['{child}', '{amount}', '{date}'] },
   { type: 'installment.overdue', placeholders: ['{child}', '{amount}', '{date}'] },
-  { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}'] },
+  { type: 'digest.daily', placeholders: ['{date}', '{lessons}', '{low}', '{debt}', '{overdue}', '{payments}'] },
   // {summary} только в telegram — с 0047 то же правило, что у резюме занятия.
   { type: 'report.monthly_ready', placeholders: ['{summary}', '{month}', '{child}'], whatsappPlaceholders: ['{month}', '{child}'] },
   { type: 'homework.assigned', placeholders: ['{child}', '{due}'] },
