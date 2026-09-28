@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { TurnstileField } from '@/components/turnstile-field'
 
 const initialState: InviteState = {}
 
@@ -39,6 +40,8 @@ export function InviteForm({ token }: { token: string }) {
           <Label htmlFor="magic-email">Email</Label>
           <Input id="magic-email" name="email" type="email" autoComplete="email" required />
         </div>
+
+        <TurnstileField />
 
         <FormError message={magicState.error} />
         <FormNotice message={magicState.notice} />
@@ -75,6 +78,8 @@ export function InviteForm({ token }: { token: string }) {
           minLength={6}
         />
       </div>
+
+      <TurnstileField />
 
       <FormError message={state.error} />
       <FormNotice message={signUpState.notice} />

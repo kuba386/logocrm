@@ -241,6 +241,25 @@ export function conflictLabel(conflict: SlotConflict): string {
   }
 }
 
+/**
+ * Ошибки Supabase Auth (регистрация, вход, ссылка на почту). До этого все
+ * они сворачивались в одну фразу — «возможно, email занят», — и настоящая
+ * причина (на проде — капча) терялась: пользователь менял email, а не
+ * ждал виджет. Коды — из `AuthError.code`.
+ */
+export function authErrorMessage(error: { code?: string | null } | null | undefined, fallback: string): string {
+  switch (error?.code) {
+    case 'captcha_failed':
+      return 'Не удалось проверить, что вы не робот. Дождитесь, пока пройдёт проверка над кнопкой, и повторите.'
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+    case 'over_sms_send_rate_limit':
+      return 'Слишком много попыток. Подождите несколько минут и повторите.'
+    default:
+      return fallback
+  }
+}
+
 export function toAppError(error: PostgrestLike | null | undefined, fallback: string): AppError {
   if (!error) return { message: fallback }
 
