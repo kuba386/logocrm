@@ -574,6 +574,7 @@ end if;
 |---|---|---|
 | `students_brief()` | owner, admin, registrar, finance — центр; parent — свои дети; остальным пусто | ученики без `notes`/`custom_fields`/`source`/`gender`; источник строк `student_balance` и экранов бухгалтера. Зеркало RLS `students` для этих ролей: меняешь политику — меняешь здесь |
 | `payers_brief()` | owner, admin, registrar, finance; остальным пусто | плательщики с контактами, без `notes`/`custom_fields` |
+| `student_debt_problems()` / `student_debt_summary(p_top)` | те же и parent — свои дети; teacher и без сессии пусто | единый источник «должника» (0076): список проблемных детей и итоги по корзинам (invoker над `student_balance` и `students_brief()`); открыты `authenticated` |
 | `student_debts()` | те же и parent — свои дети; остальным пусто | долг по отметкам без абонемента, строка на ребёнка; `left join` в `student_balance`. Намеренно не скаляр по uuid: у скалярной формы проверка прав строилась на `not (…)`, а у родителя без `membership.payer_id` сравнение давало NULL — и функция отдавала долг любого ребёнка (найдено ревью написанного кода) |
 | `revenue_facts()` | owner, admin, finance; остальным пусто | списанные отметки проведённых занятий — источник `revenue_by_*` |
 | `month_open_lessons_count(date)` | owner, admin, finance; иначе `42501` | тот же запрос, что в `close_month`: planned, без состава или с неотмеченным участником. `close_month` вызывает её — одна копия условия |
@@ -744,10 +745,24 @@ STABLE (PostgREST исполняет их в read-only транзакции); с
 `SET "request.jwt.claims"` на Supabase запрещён (permission denied) — отката
 через SET-клаузу не существует. Два итога долга не складываются (долг за
 занятия и просрочка по абонементам — разные деньги), «остаток исчерпан» — не
-долг. Список проблемных детей — `student_debt_problems()`; страница
-`/app/debts` пока считает то же на TypeScript (зеркало), а дашборд и
-ассистент считают «должника» по одному `debt_tiyin` — расхождения записаны
-как долг, этой миграцией не закрываются.
+долг. **Единый источник «должника» (0076):** `student_debt_problems()` —
+список проблемных детей (долг за занятия, перерасход, просрочка по абонементу,
+исчерпанный остаток; порядок `sort_tiyin desc, full_name, student_id`) и
+`student_debt_summary(p_top)` — итоги по корзинам, число уникальных детей
+(`debtors_n`) и топ. Обе — `security invoker` над сессионными `student_balance` и
+`students_brief()` (права по роли внутри: owner/admin/registrar/finance — весь
+центр, parent — свои дети, teacher и без сессии — пусто), открыты `authenticated`.
+Их читают `/app/debts`, дашборд админа, ассистент («Должники») и бот `/debts`
+(`bot_debts_center` зовёт тот же агрегат под подменой claims). Итоги считает
+SQL, а не TypeScript по строкам: PostgREST режет ответ по `max_rows` (1000). Не
+выровнено (поимённо, «единого определения» для них нет): `{debt}` утренней сводки
+(`daily_digest` — только `debt_tiyin`, 0073 Р6), колонка «Долг» ассистента в
+`student_info`, `bot_balance` (0033, до 0070), кабинет родителя
+(`dashboard-parent.tsx` — только `debt_tiyin`, просрочку по абонементу родитель
+не видит) и `export_debts()` (0058: `lessons_debt` без перерасхода, «недоплата» —
+другое определение). Долг: `/app/debts` делает
+неограниченные выборки уроков и `.in('id', …)` по всем проблемным детям (при
+сотнях детей — длина URL и `max_rows`).
 
 **Сводка дня и поступления (0073).** Переменная `{payments}` шаблона
 `digest.daily` — «за ДД.ММ: сумма (операций: N)» или «за ДД.ММ: платежей не
@@ -1658,7 +1673,7 @@ readonly-guard как «учёт уже потраченного», на нег�
 
 **Карта «намерение × роль»** — `assistant_intents_for(role)`: ровно те
 намерения, чей источник данных роли читаем (`lessons` — не finance;
-`student_debts()` — can_payments; `cash_by_source` — owner/admin;
+`student_debt_problems()` (0076; раньше `student_debts()`) — can_payments; `cash_by_source` — owner/admin;
 `global_search` — не finance). Из неё собирается список инструментов для
 модели И повторно проверяется намерение при закрытии — пустой ответ RLS
 нельзя выдавать за «данных нет» (0058: исключение вместо пустого файла).

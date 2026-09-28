@@ -2,7 +2,7 @@
 --
 -- Заборы (до любого set role): bot_debts / bot_cash исполняет только
 -- bot_worker; bot_debts_center (подмена claims), center_payments_day и
--- student_debt_problems — никто; внешние функции STABLE, помощник —
+-- (student_debt_problems с 0076 открыта authenticated); внешние функции STABLE, помощник —
 -- VOLATILE; в источнике помощника нет set_config(..., false) и нет
 -- функционального SET "request.jwt.claims" (на Supabase он отвергается).
 -- Главное, что ловит файл:
@@ -49,9 +49,8 @@ select ok(
                    and not has_function_privilege('service_role', f, 'EXECUTE')
                    and not has_function_privilege('public', f, 'EXECUTE'))
      from unnest(array[
-       'public.bot_debts_center(uuid,uuid)', 'public.center_payments_day(uuid,date)',
-       'public.student_debt_problems()']) f),
-  'Помощник подмены claims, center_payments_day и student_debt_problems — ни у одной роли, включая bot_worker и service_role (Р2а)');
+       'public.bot_debts_center(uuid,uuid)', 'public.center_payments_day(uuid,date)']) f),
+  'Помощник подмены claims и center_payments_day — ни у одной роли (student_debt_problems с 0076 открыта authenticated), включая bot_worker и service_role (Р2а)');
 
 select is(
   (select array_agg(p.proname::text order by p.proname) from pg_proc p

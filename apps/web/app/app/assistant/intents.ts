@@ -91,20 +91,36 @@ async function lessonsOn(supabase: Client, date: string, timeZone: string): Prom
 }
 
 async function debtors(supabase: Client, minSom: number): Promise<AssistantAnswer> {
-  const { data: debts } = await supabase.rpc('student_debts')
-  const filtered = (debts ?? []).filter((d) => d.debt_tiyin >= minSom * 100).sort((a, b) => b.debt_tiyin - a.debt_tiyin)
-  // Имена — из тех же definer-источников, что у экранов роли: у finance нет
-  // политик на students/payers (0031), прямой select дал бы прочерки.
-  const [{ data: students }, { data: payers }] = await Promise.all([supabase.rpc('students_brief'), supabase.rpc('payers_brief')])
-  const studentById = new Map((students ?? []).map((s) => [s.id, s]))
-  const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
+  // Один SQL-источник «должника» (student_debt_problems, 0076) — тот же, что у
+  // /app/debts, дашборда и бота /debts: долг за занятия и просрочка по абонементам
+  // раздельными колонками, «остаток исчерпан» без денег в должники не входит.
+  // Порядок и порог — по ключу SQL (максимум двух корзин), не по сумме корзин.
+  const { data: problems, error } = await supabase.rpc('student_debt_problems')
+  // Отказ RPC — не «должников нет»: ошибка уйдёт в состояние ответа ассистента.
+  if (error) throw new Error(error.message)
+  const filtered = (problems ?? []).filter((d) => !d.zero_left && d.sort_tiyin >= minSom * 100)
+  const payers = await supabase.rpc('payers_brief')
+  const payerName = new Map((payers.data ?? []).map((p) => [p.id, p.full_name]))
 
   return {
     title: t('assistant', 'debtors', { threshold: minSom > 0 ? t('assistant', 'debtorsThreshold', { som: minSom }) : '' }),
-    columns: [t('assistant', 'colStudent'), t('assistant', 'colPayer'), t('assistant', 'colDebtSom')],
+    columns: [t('assistant', 'colStudent'), t('assistant', 'colPayer'), t('assistant', 'colDebtSom'), t('assistant', 'colOverdueSom')],
     rows: filtered.map((d) => {
-      const s = d.student_id ? studentById.get(d.student_id) : undefined
-      return [s?.full_name ?? '—', (s?.payer_id && payerName.get(s.payer_id)) || '—', formatSom(d.debt_tiyin)]
+      // Долг за занятия — на текущем плательщике ребёнка; просрочка — на плательщике
+      // АБОНЕМЕНТА, он мог отличаться (link_parent_payer); NULL при просрочке —
+      // абонементы разных плательщиков (0070). Расхождение не прячем.
+      const childPayer = (d.payer_id && payerName.get(d.payer_id)) || '—'
+      const overduePayer = d.overdue_payer_id ? payerName.get(d.overdue_payer_id) || '—' : t('assistant', 'payersDiffer')
+      const payer =
+        d.overdue_tiyin > 0 && d.overdue_payer_id !== d.payer_id
+          ? t('assistant', 'payerOverdueOther', { child: childPayer, overdue: overduePayer })
+          : childPayer
+      return [
+        d.full_name || '—',
+        payer,
+        d.debt_tiyin + d.overdrawn_tiyin > 0 ? formatSom(d.debt_tiyin + d.overdrawn_tiyin) : '—',
+        d.overdue_tiyin > 0 ? formatSom(d.overdue_tiyin) : '—',
+      ]
     }),
     link: { href: '/app/debts', label: t('assistant', 'openScreen') },
   }

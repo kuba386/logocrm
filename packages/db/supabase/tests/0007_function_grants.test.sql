@@ -136,8 +136,7 @@ from unnest(array[
   'public.bot_debts(bigint)',
   'public.bot_cash(bigint)',
   'public.bot_debts_center(uuid,uuid)',
-  'public.center_payments_day(uuid,date)',
-  'public.student_debt_problems()'
+  'public.center_payments_day(uuid,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -319,6 +318,8 @@ select set_eq(
     ('students_brief()'),
     ('payers_brief()'),
     ('student_debts()'),
+    ('student_debt_problems()'),
+    ('student_debt_summary(integer)'),
     ('student_subscriptions_overdue()'),
     ('revenue_facts()'),
     ('month_open_lessons_count(date)'),
