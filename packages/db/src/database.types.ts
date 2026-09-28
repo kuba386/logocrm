@@ -5833,10 +5833,7 @@ export type Database = {
           zero_left: boolean
         }[]
       }
-      student_debt_summary: {
-        Args: { p_top?: number }
-        Returns: Json
-      }
+      student_debt_summary: { Args: { p_top?: number }; Returns: Json }
       student_debts: {
         Args: never
         Returns: {
