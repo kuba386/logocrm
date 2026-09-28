@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { magicLinkSchema, signInSchema } from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
+import { captchaOptions } from '@/lib/captcha'
+import { authErrorMessage } from '@/lib/errors'
 
 export type AuthState = { error?: string; notice?: string }
 
@@ -20,10 +22,13 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword(parsed.data)
+  const { error } = await supabase.auth.signInWithPassword({
+    ...parsed.data,
+    options: captchaOptions(formData),
+  })
 
   if (error) {
-    return { error: 'Неверный email или пароль' }
+    return { error: authErrorMessage(error, 'Неверный email или пароль') }
   }
 
   revalidatePath('/', 'layout')
@@ -44,11 +49,11 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   const supabase = await createClient()
   const { error } = await supabase.auth.signUp({
     ...parsed.data,
-    options: { emailRedirectTo: `${siteUrl()}/auth/callback` },
+    options: { emailRedirectTo: `${siteUrl()}/auth/callback`, ...captchaOptions(formData) },
   })
 
   if (error) {
-    return { error: 'Не удалось зарегистрироваться. Возможно, такой email уже занят.' }
+    return { error: authErrorMessage(error, 'Не удалось зарегистрироваться. Возможно, такой email уже занят.') }
   }
 
   revalidatePath('/', 'layout')
@@ -66,11 +71,11 @@ export async function sendMagicLink(_prev: AuthState, formData: FormData): Promi
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
-    options: { emailRedirectTo: `${siteUrl()}/auth/callback` },
+    options: { emailRedirectTo: `${siteUrl()}/auth/callback`, ...captchaOptions(formData) },
   })
 
   if (error) {
-    return { error: 'Не удалось отправить ссылку. Попробуйте позже.' }
+    return { error: authErrorMessage(error, 'Не удалось отправить ссылку. Попробуйте позже.') }
   }
 
   return { notice: `Ссылка для входа отправлена на ${parsed.data.email}. Проверьте почту.` }

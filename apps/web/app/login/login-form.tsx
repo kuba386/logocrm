@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { TurnstileField } from '@/components/turnstile-field'
 
 const initialState: AuthState = {}
 
@@ -33,6 +34,8 @@ export function LoginForm({ next }: { next: string }) {
           <Input id="magic-email" name="email" type="email" autoComplete="email" required />
         </div>
 
+        <TurnstileField />
+
         <FormError message={magicState.error} />
         <FormNotice message={magicState.notice} />
 
@@ -58,6 +61,8 @@ export function LoginForm({ next }: { next: string }) {
         <Label htmlFor="password">Пароль</Label>
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
       </div>
+
+      <TurnstileField />
 
       <FormError message={passwordState.error ?? signUpState.error} />
 
