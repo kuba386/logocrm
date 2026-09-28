@@ -39,7 +39,15 @@ type PickResult = { kind: ActionKind; student_id: string; student_name: string; 
 type MarkResult = { student_name: string; status_name: string; changed: boolean }
 type NoteResult = { student_name: string; appended: boolean; preview: string }
 
-export const HELP = 'Команды: /today — занятия на сегодня, /balance — остаток по детям.'
+export const HELP =
+  'Команды: /today — занятия на сегодня, /balance — остаток по детям, ' +
+  '/debts — долги по центру, /cash — поступления за сегодня.'
+
+/** Готовый текст по центру — деньги и слова считает база (0072), здесь только отправка. */
+type FinanceRow = { center_name: string; message: string }
+
+/** Лимит Telegram на одно сообщение. */
+const MAX_MESSAGE = 4096
 
 /** Деньги форматирует база (format_som); здесь — только тыйыны из payload. */
 function som(tiyin: number): string {
@@ -139,6 +147,24 @@ export async function handleBalance(chatId: number): Promise<void> {
   })
 
   await sendMessage(chatId, lines.join('\n'))
+}
+
+/**
+ * /debts и /cash — только просмотр (0072). Права и тексты в базе: неподходящая
+ * роль приходит исключением по-русски, а не пустым ответом, который читался бы
+ * как «долгов нет». Центров может быть несколько — сообщение на каждый.
+ */
+async function sendFinance(chatId: number, fn: 'bot_debts' | 'bot_cash'): Promise<void> {
+  const rows = await rpc<FinanceRow[]>(fn, { p_chat_id: chatId })
+  for (const row of rows) await sendMessage(chatId, row.message.slice(0, MAX_MESSAGE))
+}
+
+export function handleDebts(chatId: number): Promise<void> {
+  return sendFinance(chatId, 'bot_debts')
+}
+
+export function handleCash(chatId: number): Promise<void> {
+  return sendFinance(chatId, 'bot_cash')
 }
 
 export async function handleConfirm(chatId: number, payload: string): Promise<string> {

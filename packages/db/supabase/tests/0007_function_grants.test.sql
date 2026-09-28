@@ -131,7 +131,12 @@ from unnest(array[
   'public.bot_pick_student(bigint,uuid)',
   'public.bot_mark_attendance(bigint,uuid)',
   'public.bot_bind_prompt(bigint,bigint)',
-  'public.bot_write_note(bigint,text,bigint)'
+  'public.bot_write_note(bigint,text,bigint)',
+  'public.bot_debts(bigint)',
+  'public.bot_cash(bigint)',
+  'public.bot_debts_center(uuid,uuid)',
+  'public.center_payments_day(uuid,date)',
+  'public.student_debt_problems()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -160,6 +165,50 @@ select set_eq(
         and has_function_privilege('anon', p.oid, 'EXECUTE') $$,
   $$ values ('invitation_preview(text)') $$,
   'anon исполняет только invitation_preview — единственную функцию до входа'
+);
+
+-- Ключ бота — единственная точка входа в контур bot_worker: любая новая
+-- функция с грантом ему должна быть добавлена сюда осознанно (0072, ревью:
+-- внутренний помощник с грантом «стать пользователем» иначе никто не заметит).
+select set_eq(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.prokind in ('f','p')
+        and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+        and has_function_privilege('bot_worker', p.oid, 'EXECUTE') $$,
+  $$ values
+    ('ack_events(bigint[])'),
+    ('ai_job_begin(bigint)'),
+    ('ai_job_fail(bigint,text)'),
+    ('ai_job_finish(bigint)'),
+    ('ai_usage_record(bigint,text,text,integer,integer,integer,text)'),
+    ('ai_write_lesson_note(bigint,jsonb)'),
+    ('arm_voice_request(text,bigint)'),
+    ('bot_arm_action(bigint,text,uuid)'),
+    ('bot_balance(bigint)'),
+    ('bot_bind_prompt(bigint,bigint)'),
+    ('bot_cash(bigint)'),
+    ('bot_debts(bigint)'),
+    ('bot_mark_attendance(bigint,uuid)'),
+    ('bot_pick_student(bigint,uuid)'),
+    ('bot_today(bigint)'),
+    ('bot_write_note(bigint,text,bigint)'),
+    ('claim_events(integer)'),
+    ('confirm_lesson_by_event(bigint,bigint,uuid)'),
+    ('confirm_lesson(bigint,uuid,uuid)'),
+    ('daily_digest()'),
+    ('event_messages(bigint)'),
+    ('fail_events(bigint[],text)'),
+    ('installments_notify()'),
+    ('lesson_reminders()'),
+    ('link_telegram(text,bigint)'),
+    ('notification_begin(bigint,uuid,text,uuid)'),
+    ('notification_finish(uuid,text,text,text)'),
+    ('notification_skip(bigint,text)'),
+    ('release_stale_claims(interval)'),
+    ('report_voice_note(bigint,text,integer)'),
+    ('subscription_reminders()') $$,
+  'bot_worker исполняет ровно перечисленные функции — ни внутренних помощников, ни лишнего'
 );
 
 select set_eq(
