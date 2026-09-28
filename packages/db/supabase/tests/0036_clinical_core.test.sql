@@ -335,7 +335,8 @@ select is((select count(*)::int from public.homework), 1, 'И домашнее �
 select is((select count(*)::int from public.homework_exercises), 1,
   'И состав этого задания — из двух наборов в центре');
 select is((select count(*)::int from public.goal_stages), 7, 'Справочник этапов специалисту нужен');
-select is((select count(*)::int from public.exercise_library), 2,
+-- Считаем строки фикстуры: с 0074 в библиотеке есть ещё платформенные упражнения-данные.
+select is((select count(*)::int from public.exercise_library where title in ('Упражнение платформы', 'Упражнение центра А', 'Упражнение центра Б')), 2,
   'Библиотека: упражнение центра и платформенное, но не упражнение центра Б');
 select throws_ok(
   $q$ insert into public.goals (center_id, student_id, stage_id, title)

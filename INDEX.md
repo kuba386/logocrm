@@ -44,6 +44,7 @@
 
 | Документ | Кто пишет / когда читать |
 |---|---|
+| [docs/Research/exercise-library-analysis.md](docs/Research/exercise-library-analysis.md) | Откуда взят набор общей библиотеки упражнений (0074): что читалось, как считались частоты, что по доказательной базе подтверждено, какие пробелы и что должен проверить логопед |
 | [docs/Backlog.md](docs/Backlog.md) | Пожелания с живых показов логопедам. **Агент сам отсюда в работу ничего не берёт** — архитектор вплетает в этапы |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Keep a Changelog / SemVer |
 | [reports/TEMPLATE.md](reports/TEMPLATE.md) | Шаблон отчёта по этапу — разделы «Что это даёт» и «Отступления от ТЗ» обязательны |
