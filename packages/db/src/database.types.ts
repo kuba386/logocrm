@@ -4754,6 +4754,24 @@ export type Database = {
         Args: { p_chat_id: number; p_message_id: number }
         Returns: undefined
       }
+      bot_cash: {
+        Args: { p_chat_id: number }
+        Returns: {
+          center_name: string
+          message: string
+        }[]
+      }
+      bot_debts: {
+        Args: { p_chat_id: number }
+        Returns: {
+          center_name: string
+          message: string
+        }[]
+      }
+      bot_debts_center: {
+        Args: { p_center: string; p_user: string }
+        Returns: Json
+      }
       bot_lesson_participants: { Args: { p_lesson_id: string }; Returns: Json }
       bot_lesson_rights: {
         Args: { p_lesson_id: string; p_user: string }
@@ -4842,6 +4860,10 @@ export type Database = {
       center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
+      center_payments_day: {
+        Args: { p_center: string; p_day: string }
+        Returns: Json
+      }
       center_plan_name: { Args: { p_center_id: string }; Returns: string }
       center_timezone: { Args: { p_center_id?: string }; Returns: string }
       center_today: { Args: { p_center_id?: string }; Returns: string }
@@ -5793,6 +5815,18 @@ export type Database = {
           conclusion_name: string
           date: string
           student_id: string
+        }[]
+      }
+      student_debt_problems: {
+        Args: never
+        Returns: {
+          debt_tiyin: number
+          full_name: string
+          overdrawn_tiyin: number
+          overdue_tiyin: number
+          sort_tiyin: number
+          student_id: string
+          zero_left: boolean
         }[]
       }
       student_debts: {
