@@ -26,11 +26,14 @@ export async function rpc<T>(name: string, args: Record<string, unknown>): Promi
   return (await response.json()) as T
 }
 
+// Поле и присваивание явно, не параметр-свойство конструктора: бот запускается
+// `node --experimental-strip-types`, а он такой синтаксис не разбирает (падение
+// при старте на Railway, 0071).
 export class RpcError extends Error {
-  constructor(
-    message: string,
-    readonly code?: string,
-  ) {
+  readonly code: string | undefined
+
+  constructor(message: string, code?: string) {
     super(message)
+    this.code = code
   }
 }
