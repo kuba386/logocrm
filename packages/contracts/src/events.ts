@@ -10,7 +10,9 @@ import { invitableRoleSchema, roleSchema } from './dto'
  * Как добавить событие:
  *   1. добавь схему payload ниже;
  *   2. добавь её в appEventSchema (discriminatedUnion по `type`);
- *   3. вызывай emit_event('<type>', payload) в SQL/RPC;
+ *   3. вызывай emit_event('<type>', payload) из тела SECURITY DEFINER-RPC (из
+ *      триггера — emit_event_internal, без сессии — _unchecked/_platform);
+ *      клиентская роль emit_event не исполняет (0075);
  *   4. допиши обработчик в воркере.
  * Событие — свершившийся факт в прошедшем времени: `<сущность>.<действие>`.
  */

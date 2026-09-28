@@ -130,7 +130,7 @@ create policy students_select_teacher on public.students
 | `has_feature(text)`            | включена ли фича в `settings->'features'`                |
 | `switch_center(uuid)`          | смена активного центра (нужен `refreshSession()` после)  |
 | `create_center(text, text)`    | создать центр + membership owner + переключиться на него |
-| `emit_event(text, jsonb)`      | записать событие в outbox                                |
+| `emit_event(text, jsonb)`      | записать событие в outbox — только из тел definer-RPC (0075: клиенту не доступна) |
 | `slugify(text)`                | slug с транслитерацией кириллицы                         |
 
 `role_in`, `is_member`, `my_*` объявлены `security definer` не ради привилегий,
@@ -155,14 +155,21 @@ After-триггер на insert/update/delete пишет `old_data`/`new_data` 
 
 ### `events` + `emit_event(...)`
 
-Transactional outbox. `emit_event` — единственный способ записи; прямой INSERT
-недоступен ролям приложения. Индекс `events_unprocessed_idx` частичный
+Transactional outbox. Событие пишут функции `emit_event` (из тел definer-RPC), `emit_event_internal` (триггеры), `emit_event_unchecked` и `emit_event_platform` (без сессии), `emit_clinical_event`; прямой INSERT
+недоступен ролям приложения. С 0075 сама `emit_event` не исполняется ролью
+`authenticated` (EXECUTE только у владельца) и вызывается только из тел
+`security definer`-функций: раньше любой участник центра мог через PostgREST
+записать системное событие произвольного типа и с произвольным payload. Забор —
+в pgTAP (`0075`): ACL по `aclexplode`, все вызывающие — definer, вью, политики,
+значения по умолчанию и триггеры её не зовут. Табличные права `service_role` на
+`events` (INSERT/UPDATE/DELETE) не тронуты — долг; писать «outbox закрыт от
+`service_role`» нельзя. Индекс `events_unprocessed_idx` частичный
 (`where processed_at is null`), поэтому очередь читается дёшево независимо от
 общего размера таблицы.
 
 У `emit_event` есть третий параметр `p_center_id` — он нужен только вызовам
 изнутри `security definer`-функций (например `create_center`), когда нового
-`center_id` в JWT ещё нет. Из приложения вызывается с двумя аргументами.
+`center_id` в JWT ещё нет. Из приложения не вызывается вовсе (0075).
 
 ## Как добавить миграцию
 
@@ -746,10 +753,10 @@ STABLE (PostgREST исполняет их в read-only транзакции); с
 `digest.daily` — «за ДД.ММ: сумма (операций: N)» или «за ДД.ММ: платежей не
 было», за сутки центра ДО даты сводки. Считается в `event_messages` при
 доставке через `center_payments_day`, а не берётся из payload: `emit_event`
-открыта любой роли центра и проверяет только членство, не тип события —
-цифра из payload подделывалась бы под подписью настоящей сводки (та же дыра
-уже есть у остальных полей события; закрыть её — запретить системные типы
-при `auth.uid() is not null` — отдельная задача). Побочно: `daily_digest`
+была открыта любой роли центра (до 0075) и проверяла только членство, не тип
+события — цифра из payload подделывалась бы под подписью настоящей сводки (дыру закрыла 0075 —
+`emit_event` больше не открыта клиенту; пересчёт при доставке остался защитой в
+глубину: payload собирают definer-RPC, и часть его полей задаёт пользователь). Побочно: `daily_digest`
 не менялась, контракт не менялся. `{debt}` сводки — только `debt_tiyin`
 (без перерасхода и просрочки по абонементам), а `/debts` показывает «долг за
 занятия» = долг + перерасход: расхождение старое, записано как долг.

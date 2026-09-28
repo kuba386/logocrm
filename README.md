@@ -164,7 +164,10 @@ export const appEventSchema = z.discriminatedUnion('type', [
 ])
 ```
 
-2. Публикация из SQL:
+2. Публикация из SQL — только из тела `security definer`-функции (RPC); из триггера —
+   `emit_event_internal` (0071); без сессии — `emit_event_unchecked`/`_platform`.
+   С 0075 клиентская роль `emit_event` не исполняет, и вызов из функции без
+   `security definer` упадёт `permission denied` вместе со всей записью:
 
 ```sql
 perform public.emit_event(
