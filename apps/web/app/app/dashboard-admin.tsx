@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { addDays, dayInZone, isoDayInZone, startOfDayInZone, timeInZone } from '@/lib/timezone'
-import { formatSom } from '@logocrm/core'
+import { debtSummaryLine, debtTopAmountLine, formatSom, parseDebtSummary } from '@logocrm/core'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { t } from '@/lib/messages'
+import { toAppError } from '@/lib/errors'
 
 /**
  * Дашборд администратора: сколько занятий сегодня, у кого заканчивается
@@ -19,10 +20,13 @@ export async function AdminDashboard({
   timeZone,
   finance = true,
   showLessons = true,
+  canOpenDebts = false,
 }: {
   timeZone: string
   finance?: boolean
   showLessons?: boolean
+  /** Ссылка «Все долги →»: тем же условием, что редирект /app/debts (owner/admin). */
+  canOpenDebts?: boolean
 }) {
   const supabase = await createClient()
 
@@ -44,7 +48,7 @@ export async function AdminDashboard({
   const visits = (revenueRows ?? []).reduce((s, r) => s + (r.visits ?? 0), 0)
   const cashTotal = (cashRows ?? []).reduce((s, r) => s + (r.total_tiyin ?? 0), 0)
 
-  const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtRows }] = await Promise.all([
+  const [{ data: lessonRows }, { data: lowBalanceRows }, { data: debtJson, error: debtError }] = await Promise.all([
     showLessons
       ? supabase
           .from('lessons')
@@ -65,15 +69,20 @@ export async function AdminDashboard({
       .lte('lessons_left', 2)
       .neq('state', 'frozen')
       .order('lessons_left'),
-    supabase.from('student_balance').select('student_id, debt_tiyin').gt('debt_tiyin', 0).order('debt_tiyin', { ascending: false }),
+    // Долги — общий SQL-источник (0076): итоги по корзинам и топ считает база, а не
+    // TypeScript по строкам (PostgREST режет ответ по max_rows). «Должник» — тот же,
+    // что на /app/debts, в ассистенте и в боте /debts.
+    supabase.rpc('student_debt_summary', { p_top: 5 }),
   ])
 
   const lessons = lessonRows ?? []
   const lowBalance = lowBalanceRows ?? []
-  const debts = debtRows ?? []
+  const debt = parseDebtSummary(debtJson)
+  // Исчерпанный остаток без денег — не долг: в карточку не попадает.
+  const debtTop = debt.top.filter((row) => !row.zeroLeft)
 
   const studentIds = [
-    ...new Set([...lessons.map((l) => l.student_id).filter((v): v is string => Boolean(v)), ...lowBalance.map((r) => r.student_id).filter((v): v is string => Boolean(v)), ...debts.map((r) => r.student_id).filter((v): v is string => Boolean(v))]),
+    ...new Set([...lessons.map((l) => l.student_id).filter((v): v is string => Boolean(v)), ...lowBalance.map((r) => r.student_id).filter((v): v is string => Boolean(v))]),
   ]
   const teacherIds = [...new Set(lessons.flatMap((l) => [l.teacher_id, l.substitute_teacher_id]).filter((v): v is string => Boolean(v)))]
   const groupIds = [...new Set(lessons.map((l) => l.group_id).filter((v): v is string => Boolean(v)))]
@@ -92,7 +101,6 @@ export async function AdminDashboard({
   const cancelled = lessons.filter((l) => l.status === 'cancelled').length
   const upcoming = lessons.filter((l) => l.status === 'planned').slice(0, 3)
 
-  const debtTotal = debts.reduce((sum, r) => sum + (r.debt_tiyin ?? 0), 0)
 
   return (
     <div className="space-y-6">
@@ -156,24 +164,34 @@ export async function AdminDashboard({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl text-destructive">{debts.length}</CardTitle>
-            <CardDescription>{debts.length > 0 ? `Долги — ${formatSom(debtTotal)}` : 'Долгов нет'}</CardDescription>
+            <CardTitle className="text-3xl text-destructive">{debt.debtorsN}</CardTitle>
+            {/* Отказ RPC (миграция не применена, сбой) — не «Долгов нет». */}
+            <CardDescription>
+              {debtError
+                ? toAppError(debtError, 'Не удалось загрузить долги').message
+                : debt.debtorsN > 0
+                  ? `Долги — ${debtSummaryLine(debt)}`
+                  : 'Долгов нет'}
+            </CardDescription>
           </CardHeader>
-          {debts.length > 0 ? (
+          {debt.debtorsN > 0 ? (
             <CardContent className="space-y-1 text-sm">
-              {debts.slice(0, 5).map((row) => (
+              {debtTop.map((row) => (
                 <Link
-                  key={row.student_id}
-                  href={`/app/students/${row.student_id}`}
+                  key={row.studentId}
+                  href={`/app/students/${row.studentId}`}
                   className="flex justify-between gap-2 hover:underline"
                 >
-                  <span className="truncate">{studentName.get(row.student_id ?? '') ?? '—'}</span>
-                  <span className="shrink-0 text-destructive">{formatSom(row.debt_tiyin ?? 0)}</span>
+                  <span className="truncate">{row.name}</span>
+                  <span className="shrink-0 text-destructive">{debtTopAmountLine(row)}</span>
                 </Link>
               ))}
-              <Link href="/app/debts" className="block pt-1 font-medium text-primary hover:underline">
-                Все долги →
-              </Link>
+              {/* /app/debts открыт owner/admin (страница редиректит остальных). */}
+              {canOpenDebts ? (
+                <Link href="/app/debts" className="block pt-1 font-medium text-primary hover:underline">
+                  Все долги →
+                </Link>
+              ) : null}
             </CardContent>
           ) : null}
         </Card>

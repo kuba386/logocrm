@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { formatKgPhone, formatSom, whatsappNumber } from '@logocrm/core'
+import { formatKgPhone, formatSom, parseDebtSummary, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
+import { toAppError } from '@/lib/errors'
 import { centerTimeZone, dayInZone } from '@/lib/timezone'
 import { isFinance } from '@/lib/roles'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,6 +30,8 @@ type Row = {
   subscriptionOverduePayerId: string | null
   lessonsLeft: number | null
   activeSubscriptionId: string | null
+  // Исчерпанный остаток без денежных проблем — из SQL (0076), не пересчитывается здесь.
+  zeroLeft: boolean
   lastLessonAt: string | null
   nextLessonAt: string | null
 }
@@ -92,26 +95,32 @@ export default async function DebtsPage({
   const timeZone = centerTimeZone(center?.settings)
 
   // Одним запросом на всех, не по одному студенту — «Список за период —
-  // один запрос на диапазон, не N запросов по дням», CLAUDE.md, тот же
-  // принцип на список проблемных балансов.
-  const { data: balanceRows } = await supabase
-    .from('student_balance')
-    .select(
-      'student_id, debt_tiyin, overdrawn_tiyin, subscription_overdue_tiyin, subscription_overdue_payer_id, lessons_left, active_subscription_id',
+  // один запрос на диапазон, не N запросов по дням», CLAUDE.md. Кто «проблемный»
+  // и в каком порядке — решает SQL (student_debt_problems, 0076): тот же источник у
+  // дашборда, ассистента и бота /debts, второй копии правила здесь нет.
+  const [{ data: problemRows, error: problemsError }, { data: summaryJson, error: summaryError }] = await Promise.all([
+    supabase.rpc('student_debt_problems'),
+    // Шапка — итоги SQL, а не reduce по строкам: PostgREST режет ответ по max_rows (1000).
+    supabase.rpc('student_debt_summary', { p_top: 0 }),
+  ])
+  // Отказ RPC (не применена миграция, сбой, таймаут) — не «Долгов нет»: показываем ошибку.
+  const loadError = problemsError ?? summaryError
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
+        <Card>
+          <CardContent className="pt-6 text-sm text-destructive">
+            {toAppError(loadError, 'Не удалось загрузить долги').message}
+          </CardContent>
+        </Card>
+      </div>
     )
+  }
+  const problematic = problemRows ?? []
+  const summary = parseDebtSummary(summaryJson)
 
-  const problematic = (balanceRows ?? []).filter((row) => {
-    const debt = row.debt_tiyin ?? 0
-    const overdrawn = row.overdrawn_tiyin ?? 0
-    const subscriptionOverdue = row.subscription_overdue_tiyin ?? 0
-    // «Остаток 0» — абонемент активен, но исчерпан: null здесь ambiguous
-    // (без абонемента тоже null), поэтому только когда active_subscription_id
-    // заполнен — тот же приём, что в BalanceStrip (students/[id]).
-    const zeroLeft = row.active_subscription_id !== null && row.lessons_left === 0
-    return debt > 0 || overdrawn > 0 || subscriptionOverdue > 0 || zeroLeft
-  })
-
-  const studentIds = problematic.map((r) => r.student_id).filter((v): v is string => Boolean(v))
+  const studentIds = problematic.map((r) => r.student_id)
 
   if (studentIds.length === 0) {
     return (
@@ -126,8 +135,7 @@ export default async function DebtsPage({
 
   const nowIso = new Date().toISOString()
 
-  const [{ data: students }, { data: pastLessons }, { data: futureLessons }] = await Promise.all([
-    supabase.from('students').select('id, full_name, payer_id').in('id', studentIds),
+  const [{ data: pastLessons }, { data: futureLessons }] = await Promise.all([
     supabase
       .from('lesson_participants')
       .select('student_id, starts_at')
@@ -148,8 +156,8 @@ export default async function DebtsPage({
   const payerIds = [
     ...new Set(
       [
-        ...(students ?? []).map((s) => s.payer_id),
-        ...problematic.map((r) => r.subscription_overdue_payer_id),
+        ...problematic.map((r) => r.payer_id),
+        ...problematic.map((r) => r.overdue_payer_id),
       ].filter((v): v is string => Boolean(v)),
     ),
   ]
@@ -157,7 +165,6 @@ export default async function DebtsPage({
     ? await supabase.from('payers').select('id, full_name, phone').in('id', payerIds)
     : { data: [] }
 
-  const studentById = new Map((students ?? []).map((s) => [s.id, s]))
   const payerById = new Map((payers ?? []).map((p) => [p.id, p]))
 
   const lastByStudent = new Map<string, string>()
@@ -170,47 +177,43 @@ export default async function DebtsPage({
   }
 
   let rows: Row[] = problematic.map((r) => {
-    const student = r.student_id ? studentById.get(r.student_id) : undefined
-    const payer = student?.payer_id ? payerById.get(student.payer_id) : undefined
+    const payer = r.payer_id ? payerById.get(r.payer_id) : undefined
     return {
-      studentId: r.student_id ?? '',
-      studentName: student?.full_name ?? '—',
+      studentId: r.student_id,
+      studentName: r.full_name || '—',
       payerId: payer?.id ?? null,
       payerName: payer?.full_name ?? null,
       payerPhone: payer?.phone ?? null,
-      debtTiyin: r.debt_tiyin ?? 0,
-      overdrawnTiyin: r.overdrawn_tiyin ?? 0,
-      subscriptionOverdueTiyin: r.subscription_overdue_tiyin ?? 0,
-      subscriptionOverduePayerId: r.subscription_overdue_payer_id,
-      lessonsLeft: r.lessons_left,
-      activeSubscriptionId: r.active_subscription_id,
-      lastLessonAt: r.student_id ? (lastByStudent.get(r.student_id) ?? null) : null,
-      nextLessonAt: r.student_id ? (nextByStudent.get(r.student_id) ?? null) : null,
+      debtTiyin: r.debt_tiyin,
+      overdrawnTiyin: r.overdrawn_tiyin,
+      subscriptionOverdueTiyin: r.overdue_tiyin,
+      // NULL — «просрочки нет» либо просрочены абонементы разных плательщиков (0070); значимо только при просрочке.
+      subscriptionOverduePayerId: r.overdue_payer_id ?? null,
+      // Генератор типов объявляет колонки table-функции non-null, в рантайме они бывают NULL.
+      lessonsLeft: (r.lessons_left as number | null) ?? null,
+      activeSubscriptionId: (r.active_subscription_id as string | null) ?? null,
+      zeroLeft: r.zero_left,
+      lastLessonAt: lastByStudent.get(r.student_id) ?? null,
+      nextLessonAt: nextByStudent.get(r.student_id) ?? null,
     }
   })
 
-  if (filter === 'debt') {
-    rows = rows.filter((r) => r.debtTiyin > 0 || r.overdrawnTiyin > 0 || r.subscriptionOverdueTiyin > 0)
-  }
-  if (filter === 'zero') {
-    rows = rows.filter((r) => r.debtTiyin === 0 && r.overdrawnTiyin === 0 && r.subscriptionOverdueTiyin === 0)
-  }
+  if (filter === 'debt') rows = rows.filter((r) => !r.zeroLeft)
+  if (filter === 'zero') rows = rows.filter((r) => r.zeroLeft)
 
-  rows.sort((a, b) => {
-    if (sort === 'name') return a.studentName.localeCompare(b.studentName, 'ru')
-    // Долг за занятия и перерасход — одна и та же «за услугу уже заплатили
-    // меньше, чем она стоила» природа, их можно сложить для сортировки.
-    // Просрочка абонемента — другие деньги (docs/Database.md, «Два слова,
-    // два определения»); сумма с ней дала бы бессмысленный порядок (долг
-    // 500 сом выше просрочки 50 000), поэтому сортируем по максимуму из
-    // двух корзин, а не по общей сумме.
-    const usageA = a.debtTiyin + a.overdrawnTiyin
-    const usageB = b.debtTiyin + b.overdrawnTiyin
-    return Math.max(usageB, b.subscriptionOverdueTiyin) - Math.max(usageA, a.subscriptionOverdueTiyin)
-  })
+  // «По сумме» — порядок из SQL (sort_tiyin desc, full_name, student_id): максимум двух
+  // корзин, а не сумма — долг 500 сом не выше просрочки 50 000 (Database.md, «Два слова…»).
+  // Своей копии формулы здесь нет. «По имени» — только представление.
+  if (sort === 'name') rows.sort((a, b) => a.studentName.localeCompare(b.studentName, 'ru'))
 
-  const totalDebt = rows.reduce((sum, r) => sum + r.debtTiyin + r.overdrawnTiyin, 0)
-  const totalSubscriptionOverdue = rows.reduce((sum, r) => sum + r.subscriptionOverdueTiyin, 0)
+  // Шапка — из student_debt_summary (та же цифра, что на дашборде и в боте). Исчерпанный
+  // остаток без денег — не должник: в «Только долги» его нет, в «Только нулевой остаток» — только он.
+  const headerCount =
+    filter === 'debt' ? summary.debtorsN : filter === 'zero' ? summary.zeroN : summary.debtorsN + summary.zeroN
+  const totalDebt = filter === 'zero' ? 0 : summary.usageTiyin
+  const totalSubscriptionOverdue = filter === 'zero' ? 0 : summary.overdueTiyin
+  // PostgREST режет ответ по max_rows: строк может быть больше, чем показано.
+  const truncated = problematic.length >= 1000
 
   const filterLink = (value: Filter) => `/app/debts?filter=${value}&sort=${sort}`
   const sortLink = (value: Sort) => `/app/debts?filter=${filter}&sort=${value}`
@@ -220,11 +223,16 @@ export default async function DebtsPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
         <p className="text-sm text-muted-foreground">
-          {rows.length} {rows.length === 1 ? 'ученик' : 'учеников'}
+          {headerCount} {headerCount === 1 ? 'ученик' : 'учеников'}
           {totalDebt > 0 ? ` · долг ${formatSom(totalDebt)}` : ''}
           {/* Отдельная сумма, не сложенная с долгом за занятия — разные деньги (docs/Database.md). */}
           {totalSubscriptionOverdue > 0 ? ` · просрочка по абонементам ${formatSom(totalSubscriptionOverdue)}` : ''}
         </p>
+        {truncated ? (
+          <p className="text-sm text-destructive">
+            Показаны не все ученики — сервер отдаёт не больше 1000 строк; итоги в шапке считаются по всем.
+          </p>
+        ) : null}
         {/* Выгрузка — только can_finance (0058), регистратору не показываем. */}
         {isFinance(role) ? (
           <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">

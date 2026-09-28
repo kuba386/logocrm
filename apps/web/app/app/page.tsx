@@ -26,7 +26,14 @@ export default async function DashboardPage() {
   // политики 0028 (экран покажет пусто, не чужое), занятия бухгалтеру
   // закрыты 0031 — блок не рендерится, чтобы «0 занятий» не читалось как факт.
   if (role === 'owner' || role === 'admin' || role === 'registrar' || role === 'finance') {
-    return <AdminDashboard timeZone={timeZone} finance={role !== 'registrar'} showLessons={role !== 'finance'} />
+    return (
+      <AdminDashboard
+        timeZone={timeZone}
+        finance={role !== 'registrar'}
+        showLessons={role !== 'finance'}
+        canOpenDebts={role === 'owner' || role === 'admin'}
+      />
+    )
   }
   if (role === 'teacher') return <TeacherDashboard timeZone={timeZone} />
   if (role === 'parent') return <ParentDashboard timeZone={timeZone} />

@@ -101,10 +101,10 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   },
   {
     name: 'debtors',
-    description: 'Кто должен денег за занятия («кто должен», «должники больше 5000»).',
+    description: 'Кто должен денег: за занятия или просрочка платежа по абонементу («кто должен», «должники больше 5000»).',
     parameters: {
       type: 'object',
-      properties: { min_som: { type: 'integer', description: 'Порог долга в сомах, 0 — все должники' } },
+      properties: { min_som: { type: 'integer', description: 'Порог в сомах — по большей из двух сумм (долг за занятия, просрочка абонемента); 0 — все должники' } },
       required: ['min_som'],
       additionalProperties: false,
     },
