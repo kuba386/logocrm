@@ -62,7 +62,7 @@ export async function answerCallback(id: string, text?: string, alert = false): 
 
 export type Update = {
   message?: {
-    chat: { id: number }
+    chat: { id: number; type?: string }
     text?: string
     /** Подпись к фото/файлу — заметкой не становится (0071 Р14). */
     caption?: string

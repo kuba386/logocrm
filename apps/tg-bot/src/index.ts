@@ -4,7 +4,9 @@ import {
   HELP,
   handleArm,
   handleBalance,
+  handleCash,
   handleConfirm,
+  handleDebts,
   handlePick,
   handleStart,
   handleStatus,
@@ -74,6 +76,15 @@ async function handleUpdate(update: Update): Promise<void> {
       if (command === '/start') await handleStart(chatId, argument)
       else if (command === '/today') await handleToday(chatId)
       else if (command === '/balance') await handleBalance(chatId)
+      else if (command === '/debts' || command === '/cash') {
+        // Личность в боте — это чат, а не автор сообщения: в группе список
+        // должников увидели бы все её участники (0072 Р12). База отвергает
+        // отрицательный chat_id сама; эта проверка — чтобы не дойти до неё.
+        if (message.chat.type !== undefined && message.chat.type !== 'private') {
+          await sendMessage(chatId, 'Долги и поступления показываются только в личной переписке с ботом.')
+        } else if (command === '/debts') await handleDebts(chatId)
+        else await handleCash(chatId)
+      }
       else await sendMessage(chatId, HELP)
     } catch (error) {
       // Текст исключения из базы уже по-русски — показываем его, а не «500».
@@ -156,11 +167,14 @@ server.listen(env.port, () => {
 
 // Меню команд — вызов при каждом старте (перезапуски Railway обычны, вызов
 // идемпотентен). Только то, что реально печатают текстом — /start сюда же:
-// новый специалист жмёт его из меню, а не гадает, с чего начать.
+// новый специалист жмёт его из меню, а не гадает, с чего начать. /debts и
+// /cash видны всем: список команд общий на бота, отказ по роли даёт база.
 void setMyCommands([
   { command: 'start', description: 'Привязать аккаунт LogoCRM' },
   { command: 'today', description: 'Занятия на сегодня' },
   { command: 'balance', description: 'Остаток по детям' },
+  { command: 'debts', description: 'Долги по центру' },
+  { command: 'cash', description: 'Поступления за сегодня' },
 ]).catch((error: unknown) => {
   console.error('Не удалось задать список команд', error)
 })
