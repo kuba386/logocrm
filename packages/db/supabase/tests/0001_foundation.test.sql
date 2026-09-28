@@ -97,15 +97,14 @@ select is(
 
 -- 4. emit_event пишет строку в outbox ----------------------------------------
 
+-- С 0075 emit_event закрыта для клиента (EXECUTE только у владельца) — вызов от
+-- владельца функции с claims пользователя, как из тела definer-RPC.
 select public.tests_claims('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-set local role authenticated;
 
 select ok(
   public.emit_event('center.created', '{"hello": "мир"}'::jsonb) > 0,
   'emit_event возвращает id новой строки'
 );
-
-reset role;
 
 select results_eq(
   $q$ select type, center_id, processed_at is null
@@ -172,17 +171,16 @@ reset role;
 
 -- 7. Межтенантная запись в outbox закрыта -------------------------------------
 
+-- С 0075 под authenticated отказ был бы по гранту, а не по членству; проверка
+-- членства (второй рубеж) идёт от владельца функции. Отказ по гранту — 0075.
 select public.tests_claims('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-set local role authenticated;
 
 select throws_ok(
   $q$ select public.emit_event('center.created', '{}'::jsonb, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') $q$,
   '42501',
-  null,
-  'Owner центра А не может писать события в центр Б'
+  'Нет доступа к центру bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+  'Owner центра А не может писать события в центр Б (проверка членства в самой функции)'
 );
-
-reset role;
 
 select * from finish();
 

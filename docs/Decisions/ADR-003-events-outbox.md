@@ -38,7 +38,7 @@ create table events (
 create index events_unprocessed_idx on events (processed_at) where processed_at is null;
 ```
 
-Запись — только через `emit_event(type, payload)`. Чтение — воркером по
+Запись — только через `emit_event(type, payload)` (с 0075 — из тел `security definer`-функций; клиентская роль её не исполняет; из триггеров — `emit_event_internal`, без сессии — `_unchecked`/`_platform`). Чтение — воркером по
 `processed_at is null`, с проставлением `processed_at` после успешной обработки.
 
 Типы событий описаны в `packages/contracts/src/events.ts` как zod-схемы и
