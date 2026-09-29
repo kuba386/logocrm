@@ -4747,6 +4747,18 @@ export type Database = {
           full_name: string
           has_subscription: boolean
           lessons_left: number
+          overdue_tiyin: number
+          student_id: string
+        }[]
+      }
+      bot_balance_center: {
+        Args: { p_center: string; p_user: string }
+        Returns: {
+          debt_tiyin: number
+          full_name: string
+          has_subscription: boolean
+          lessons_left: number
+          overdue_tiyin: number
           student_id: string
         }[]
       }
@@ -5052,6 +5064,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      digest_debt_text: { Args: { p_center: string }; Returns: string }
       emit_clinical_event: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
         Returns: number

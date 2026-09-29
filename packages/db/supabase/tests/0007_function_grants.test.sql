@@ -136,6 +136,8 @@ from unnest(array[
   'public.bot_debts(bigint)',
   'public.bot_cash(bigint)',
   'public.bot_debts_center(uuid,uuid)',
+  'public.bot_balance_center(uuid,uuid)',
+  'public.digest_debt_text(uuid)',
   'public.center_payments_day(uuid,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
