@@ -163,7 +163,7 @@ async function studentInfo(supabase: Client, name: string, timeZone: string, wit
   const ids = students.map((s) => s.id)
   const { data: balances } =
     withMoney && ids.length
-      ? await supabase.from('student_balance').select('student_id, active_subscription_id, lessons_left, ends_at, debt_tiyin, state').in('student_id', ids)
+      ? await supabase.from('student_balance').select('student_id, active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin, subscription_overdue_tiyin, state').in('student_id', ids)
       : { data: [] }
   const balance = new Map((balances ?? []).map((b) => [b.student_id, b]))
 
@@ -185,7 +185,11 @@ async function studentInfo(supabase: Client, name: string, timeZone: string, wit
               : `${b.lessons_left}${b.ends_at ? ` · до ${calendarDate(b.ends_at, timeZone)}` : ''}`
       const next = lessons.get(s.title)
       const status = s.status && s.status !== 'active' ? ` (${statusLabel(s.status)})` : ''
-      const money = withMoney ? [sub, b?.debt_tiyin ? formatSom(b.debt_tiyin) : '—'] : []
+      // Долг за занятия = долг + перерасход, как на /app/debts и в боте (0076); просрочка по абонементу — отдельной корзиной.
+      const usage = (b?.debt_tiyin ?? 0) + (b?.overdrawn_tiyin ?? 0)
+      const overdue = b?.subscription_overdue_tiyin ?? 0
+      const debtCell = [usage > 0 ? formatSom(usage) : null, overdue > 0 ? t('assistant', 'debtOverdue', { som: formatSom(overdue) }) : null].filter(Boolean).join(' · ') || '—'
+      const money = withMoney ? [sub, debtCell] : []
       return [
         `${s.title}${status}`,
         ...money,
