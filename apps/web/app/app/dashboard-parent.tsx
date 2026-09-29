@@ -60,7 +60,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
   const [{ data: balances }, { data: upcoming }] = await Promise.all([
     supabase
       .from('student_balance')
-      .select('student_id, active_subscription_id, lessons_left, debt_tiyin, state')
+      .select('student_id, active_subscription_id, lessons_left, debt_tiyin, overdrawn_tiyin, subscription_overdue_tiyin, state')
       .in('student_id', childIds),
     supabase
       .from('lesson_participants')
@@ -130,6 +130,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
         {(children ?? []).map((child) => {
           const childId = child.id ?? ''
           const balance = balanceByStudent.get(childId)
+          const usageDebt = (balance?.debt_tiyin ?? 0) + (balance?.overdrawn_tiyin ?? 0)
           const total = balance?.active_subscription_id ? totalBySubscription.get(balance.active_subscription_id) : null
           const next = nextByStudent.get(childId)
           const lesson = next ? lessonById.get(next.lessonId) : null
@@ -160,10 +161,16 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
                   <span className="text-muted-foreground">Осталось занятий</span>
                   <span className="font-medium">{balanceLabel}</span>
                 </div>
-                {balance?.debt_tiyin ? (
+                {usageDebt > 0 ? (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Долг</span>
-                    <span className="font-medium text-destructive">{formatSom(balance.debt_tiyin)}</span>
+                    <span className="text-muted-foreground">Долг за занятия</span>
+                    <span className="font-medium text-destructive">{formatSom(usageDebt)}</span>
+                  </div>
+                ) : null}
+                {balance?.subscription_overdue_tiyin ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Просрочен платёж по абонементу</span>
+                    <span className="font-medium text-destructive">{formatSom(balance.subscription_overdue_tiyin)}</span>
                   </div>
                 ) : null}
                 <div className="border-t border-border pt-3">
