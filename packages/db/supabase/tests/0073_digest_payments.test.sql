@@ -187,7 +187,7 @@ insert into t_ev select 'installment', max(id) from public.events where type = '
 
 select is(
   (select message from public.event_messages((select id from t_ev where name = 'digest_2026-06-15')) where recipient_user_id = '73000000-0000-0000-0000-000000000001' limit 1),
-  'Сводка на 15.06.2026: занятий сегодня — 5, заканчивается абонементов — 1, долг — 700,00 сом, просроченных рассрочек — 0. Поступления за 14.06: 440,00 сом (операций: 4).',
+  'Сводка на 15.06.2026: занятий сегодня — 5, заканчивается абонементов — 1, долг — 0,00 сом, просроченных рассрочек — 0. Поступления за 14.06: 440,00 сом (операций: 4).',
   'Вчера: 30 000 + 20 000 − 5 000 возврат − 1 000 корректировка = 440,00 сом, 4 операции; 00:00 вчера входит, 23:59:59 входит');
 select ok(
   (select message not like '%90,00%' and message not like '%70,00%' and message not like '%400,00%' and message not like '%888,00%'

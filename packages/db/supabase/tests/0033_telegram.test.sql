@@ -232,7 +232,7 @@ select is((select count(*)::int from public.bot_today(555003)), 0,
 select is((select count(*)::int from public.bot_balance(555001)), 3, 'Родителю показаны трое его детей');
 select is(
   (select debt_tiyin from public.bot_balance(555001) where student_id = 'eeeeeeee-0000-0000-0000-000000000001'),
-  70000, 'Ребёнок без абонемента: долг числом');
+  70000::bigint, 'Ребёнок без абонемента: долг числом');
 select ok(
   (select not has_subscription from public.bot_balance(555001) where student_id = 'eeeeeeee-0000-0000-0000-000000000001'),
   'У него же has_subscription = false');

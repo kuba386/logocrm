@@ -19,7 +19,9 @@ type BalanceRow = {
   full_name: string
   has_subscription: boolean
   lessons_left: number | null
+  /** Долг за занятия с перерасходом; просрочка по абонементу — отдельно (0077). */
   debt_tiyin: number
+  overdue_tiyin: number
 }
 
 type Participant = { student_id: string; full_name: string; status_name: string | null }
@@ -141,9 +143,10 @@ export async function handleBalance(chatId: number): Promise<void> {
       ? 'абонемента нет'
       : row.lessons_left === null
         ? 'безлимит'
-        : `осталось ${row.lessons_left}`
-    const debt = row.debt_tiyin > 0 ? `, долг ${som(row.debt_tiyin)}` : ''
-    return `${row.full_name}: ${left}${debt}`
+        : `осталось ${Math.max(row.lessons_left, 0)}`
+    const debt = row.debt_tiyin > 0 ? `, долг за занятия ${som(row.debt_tiyin)}` : ''
+    const overdue = row.overdue_tiyin > 0 ? `, просрочка по абонементу ${som(row.overdue_tiyin)}` : ''
+    return `${row.full_name}: ${left}${debt}${overdue}`
   })
 
   await sendMessage(chatId, lines.join('\n'))

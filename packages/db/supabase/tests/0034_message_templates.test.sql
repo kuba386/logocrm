@@ -218,10 +218,13 @@ select set_eq(
   $q$ values ('11111111-1111-1111-1111-111111111111') $q$,
   'Сводка уходит владельцу, а не родителям и не специалисту');
 
+-- С 0077 {debt} считает база по общему определению «должника», а не читает
+-- payload.debt_tiyin (в событии выше лежит 70000): в центре нет ни долга, ни
+-- просрочки, значит «0,00 сом». Числовые случаи — в 0077_*.test.sql.
 select ok(
-  (select message like '%700,00 сом%'
+  (select message like '%долг — 0,00 сом,%' and message not like '%700,00 сом%'
      from public.event_messages((select id from t_ev where name = 'digest'))),
-  'Деньги в сводке форматирует SQL — тыйыны не доезжают до JS');
+  'Деньги в сводке форматирует SQL, {debt} — из базы, а не из payload');
 
 -- Центр правит текст: своя строка перекрывает дефолт платформы.
 insert into public.message_templates (center_id, event_type, channel, text)

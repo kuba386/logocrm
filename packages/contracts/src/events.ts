@@ -597,6 +597,7 @@ export const digestDailySchema = z.object({
     date: z.string(),
     lessons_today: z.number().int().nonnegative(),
     low_balance: z.number().int().nonnegative(),
+    // Пишется daily_digest, но не читается: {debt} считает digest_debt_text (0077).
     debt_tiyin: z.number().int(),
     installments_overdue: z.number().int().nonnegative(),
   }),
