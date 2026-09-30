@@ -5096,6 +5096,10 @@ export type Database = {
           subject_id: string
         }[]
       }
+      exercise_is_specialist_only: {
+        Args: { p_tags: string[] }
+        Returns: boolean
+      }
       export_attendance: {
         Args: { p_from: string; p_to: string }
         Returns: {
