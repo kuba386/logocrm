@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { isSpecialistOnly } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -125,7 +126,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
     supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
     supabase
       .from('exercise_library')
-      .select('id, title, instructions, sound, stage_code')
+      .select('id, title, instructions, sound, stage_code, tags')
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('title'),
@@ -182,7 +183,8 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
     }),
   )
 
-  const exerciseOptions: ExerciseOption[] = (exercises ?? []).map((e) => ({
+  // «только специалист» в ДЗ не даётся — отказ в базе (0081), здесь только не предлагаем.
+  const exerciseOptions: ExerciseOption[] = (exercises ?? []).filter((e) => !isSpecialistOnly(e.tags)).map((e) => ({
     id: e.id,
     title: e.title,
     instructions: e.instructions,

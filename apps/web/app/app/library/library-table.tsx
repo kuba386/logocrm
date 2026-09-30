@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from 'react'
 import { useFormStatus } from 'react-dom'
+import { isSpecialistOnly } from '@logocrm/core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -119,7 +120,10 @@ function ExerciseCard({
               .join(' · ')}
           </p>
         </div>
-        {canAssign ? (
+        {canAssign && isSpecialistOnly(exercise.tags) ? (
+          // Отказ — в базе (0081); здесь только не предлагаем.
+          <p className="text-xs text-muted-foreground">Только для специалиста — в ДЗ не выдаётся</p>
+        ) : canAssign ? (
           <>
             <Button type="button" size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
               Добавить в ДЗ
