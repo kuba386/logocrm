@@ -5830,22 +5830,6 @@ export type Database = {
           student_id: string
         }[]
       }
-      student_debt_problems: {
-        Args: never
-        Returns: {
-          active_subscription_id: string
-          debt_tiyin: number
-          full_name: string
-          lessons_left: number
-          overdrawn_tiyin: number
-          overdue_payer_id: string
-          overdue_tiyin: number
-          payer_id: string
-          sort_tiyin: number
-          student_id: string
-          zero_left: boolean
-        }[]
-      }
       student_debt_page: {
         Args: never
         Returns: {
@@ -5863,6 +5847,22 @@ export type Database = {
           payer_id: string
           payer_name: string
           payer_phone: string
+          sort_tiyin: number
+          student_id: string
+          zero_left: boolean
+        }[]
+      }
+      student_debt_problems: {
+        Args: never
+        Returns: {
+          active_subscription_id: string
+          debt_tiyin: number
+          full_name: string
+          lessons_left: number
+          overdrawn_tiyin: number
+          overdue_payer_id: string
+          overdue_tiyin: number
+          payer_id: string
           sort_tiyin: number
           student_id: string
           zero_left: boolean
