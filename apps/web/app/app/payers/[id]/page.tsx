@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { buttonVariants } from '@/components/ui/button'
 import { statusLabel, studentAge } from '@/lib/students'
 import { isFrontDesk } from '@/lib/roles'
-import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
 
 export const metadata = { title: 'Плательщик — LogoCRM' }
@@ -59,65 +60,54 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="space-y-6">
-      <div>
-        {frontDesk ? (
-          <Link href="/app/payers" className="text-sm text-muted-foreground hover:underline">
-            ← Все плательщики
-          </Link>
-        ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="page-title">{payer.full_name}</h1>
-          {frontDesk ? (
-            <span
-              className={cn(
-                'rounded-full px-2 py-0.5 text-xs',
-                telegramLinked ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground',
-              )}
-            >
+      <PageHeader
+        back={frontDesk ? { href: '/app/payers', label: 'Все плательщики' } : undefined}
+        title={payer.full_name}
+        aside={
+          frontDesk ? (
+            <StatusBadge tone={telegramLinked ? 'success' : 'neutral'}>
               {telegramLinked ? 'Telegram привязан' : 'Telegram не привязан'}
-            </span>
-          ) : null}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {payer.relation ?? 'родитель'} · {formatKgPhone(payer.phone)}
-          {payer.email ? ` · ${payer.email}` : ''}
-        </p>
-      </div>
-
-      {frontDesk ? (
-      <div className="flex flex-wrap gap-2">
-        <a href={`tel:${payer.phone}`} className={buttonVariants({ variant: 'outline' })}>
-          Позвонить
-        </a>
-        {wa ? (
-          <a
-            href={`https://wa.me/${wa}`}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: 'outline' })}
-          >
-            WhatsApp
-          </a>
-        ) : null}
-        {!telegramLinked && wa ? (
-          <a
-            href={`https://wa.me/${wa}?text=${encodeURIComponent(
-              'Здравствуйте! Чтобы получать напоминания о занятиях и остаток абонемента, привяжите Telegram: откройте LogoCRM → раздел Telegram → «Получить код».',
-            )}`}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: 'outline' })}
-          >
-            Пригласить в бот
-          </a>
-        ) : null}
-        <AddStudentDialog
-          teachers={(teachers ?? []).map((t) => ({ id: t.id, fullName: t.full_name }))}
-          presetPayer={{ id: payer.id, fullName: payer.full_name }}
-          label="Добавить ребёнка"
-        />
-      </div>
-      ) : null}
+            </StatusBadge>
+          ) : null
+        }
+        description={[payer.relation ?? 'родитель', formatKgPhone(payer.phone), payer.email].filter(Boolean).join(', ')}
+        actions={
+          frontDesk ? (
+            <>
+              <a href={`tel:${payer.phone}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Позвонить
+              </a>
+              {wa ? (
+                <a
+                  href={`https://wa.me/${wa}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
+                  WhatsApp
+                </a>
+              ) : null}
+              {!telegramLinked && wa ? (
+                <a
+                  href={`https://wa.me/${wa}?text=${encodeURIComponent(
+                    'Здравствуйте! Чтобы получать напоминания о занятиях и остаток абонемента, привяжите Telegram: откройте LogoCRM → раздел Telegram → «Получить код».',
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
+                  Пригласить в бот
+                </a>
+              ) : null}
+              <AddStudentDialog
+                teachers={(teachers ?? []).map((t) => ({ id: t.id, fullName: t.full_name }))}
+                presetPayer={{ id: payer.id, fullName: payer.full_name }}
+                label="Добавить ребёнка"
+              />
+            </>
+          ) : null
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -134,7 +124,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                       {child.full_name}
                     </Link>
                     <p className="text-sm text-muted-foreground">
-                      {studentAge(child.birth_date)} · {statusLabel(child.status)}
+                      {studentAge(child.birth_date)}, {statusLabel(child.status).toLowerCase()}
                     </p>
                   </div>
                 </li>

@@ -8,10 +8,10 @@ import type { CatalogState } from '@/app/app/settings/services/actions'
 
 const initial: CatalogState = { message: '' }
 
-function SaveButton({ label }: { label: string }) {
+function SaveButton({ label, variant }: { label: string; variant: 'default' | 'outline' | 'ghost' }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" size="sm" disabled={pending}>
+    <Button type="submit" size="sm" variant={variant} disabled={pending}>
       {pending ? 'Сохраняем…' : label}
     </Button>
   )
@@ -25,19 +25,30 @@ export function CatalogForm({
   action,
   children,
   label = 'Сохранить',
+  variant = 'default',
+  confirm,
 }: {
   action: (state: CatalogState, formData: FormData) => Promise<CatalogState>
   children: React.ReactNode
   label?: string
+  variant?: 'default' | 'outline' | 'ghost'
+  /** Вопрос перед необратимым для пользователя действием («Вывести из группы?»). */
+  confirm?: string
 }) {
   const [state, formAction] = useActionState(action, initial)
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form
+      action={formAction}
+      className="space-y-3"
+      onSubmit={(event) => {
+        if (confirm && !window.confirm(confirm)) event.preventDefault()
+      }}
+    >
       {children}
       <FormError message={state.message || undefined} />
       <FormNotice message={state.notice} />
-      <SaveButton label={label} />
+      <SaveButton label={label} variant={variant} />
     </form>
   )
 }
