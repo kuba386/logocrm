@@ -10,8 +10,8 @@
 --   Р1. Инвариант — в триггере homework_exercises_check_center_refs (0036, других
 --       определений нет), а не в assign_homework/update_homework/complete_lesson:
 --       все пути записи проходят через него.
---   Р2. Проверяется НОВАЯ выдача: insert, смена exercise_id, смена center_id,
---       возврат строки из архива. Строка ДЗ, выданная до того, как у
+--   Р2. Проверяется НОВАЯ выдача: insert, смена exercise_id, center_id или
+--       homework_id (перенос в другое ДЗ), возврат строки из архива. Строка ДЗ, выданная до того, как у
 --       упражнения появился тег, остаётся; её можно мягко удалить. То же условие
 --       теперь и у старой проверки «упражнение живо и своё/платформенное» — это
 --       чинит 0074 Р5: мягкое удаление строки ДЗ с удалённым упражнением
@@ -69,6 +69,7 @@ begin
   if tg_op = 'UPDATE'
      and new.exercise_id is not distinct from old.exercise_id
      and new.center_id is not distinct from old.center_id
+     and new.homework_id is not distinct from old.homework_id
      and not (old.deleted_at is not null and new.deleted_at is null) then
     return new;
   end if;

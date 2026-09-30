@@ -8,7 +8,8 @@
 --   - чужое упражнение с тегом — 42704 без названия (название не утекает);
 --   - выданное до тега остаётся и мягко удаляется; строка с удалённым
 --     упражнением тоже мягко удаляется (0074 Р5);
---   - смена center_id проверяется; у функции EXECUTE ни у кого.
+--   - смена center_id и перенос в другое ДЗ проверяются; удалённое упражнение
+--     в новую выдачу не попадает; у функции EXECUTE ни у кого.
 -- reset role не сбрасывает request.jwt.claims — tests_claims() явно.
 
 begin;
@@ -16,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(16);
+select plan(18);
 
 select is_empty(
   $$ select a.grantee::regrole::text
@@ -33,7 +34,7 @@ select is_empty(
          (array['Только Специалист'],                  true),
          (array['  только специалист  '],              true),
          (array[E'\tтолько специалист\n'],             true),
-         (array[E' только специалист'],           false),
+         (array[E'\u00a0только специалист'],           false),
          (array['дом', 'только специалист', 'зеркало'], true),
          ('{}'::text[],                                false),
          (null::text[],                                false),
@@ -175,12 +176,26 @@ select is(
 select throws_ok(
   $q$ update public.homework_exercises set deleted_at = null
        where exercise_id = '81000000-0000-0000-0000-0000000000f3' $q$,
-  '23514', null, 'Возврат из архива строки с тегом — новая выдача, отказ');
+  '23514', 'Упражнение «Позже с тегом 0081» — только для специалиста: в домашнее задание его не дают',
+  'Возврат из архива строки с тегом — новая выдача, отказ');
 
 select throws_ok(
   $q$ update public.homework_exercises set exercise_id = '81000000-0000-0000-0000-0000000000f2'
        where homework_id = (select id from t_hw where name = 'ok') $q$,
-  '23514', null, 'Смена exercise_id на «только специалист» — отказ');
+  '23514', 'Упражнение «Кабинетное 0081» — только для специалиста: в домашнее задание его не дают',
+  'Смена exercise_id на «только специалист» — отказ');
+
+select throws_ok(
+  $q$ update public.homework_exercises set homework_id = (select id from t_hw where name = 'ok')
+       where exercise_id = '81000000-0000-0000-0000-0000000000f3' $q$,
+  '23514', 'Упражнение «Позже с тегом 0081» — только для специалиста: в домашнее задание его не дают',
+  'Перенос строки в другое ДЗ — тоже новая выдача, отказ');
+
+select throws_ok(
+  $q$ insert into public.homework_exercises (homework_id, exercise_id, center_id)
+      values ((select id from t_hw where name = 'ok'), '81000000-0000-0000-0000-0000000000f4',
+              '81000000-0000-0000-0000-0000000000c1') $q$,
+  '42704', 'Упражнение не найдено в этом центре', 'Удалённое упражнение в новую выдачу по-прежнему не попадает');
 
 select throws_ok(
   $q$ update public.homework_exercises set center_id = '81000000-0000-0000-0000-0000000000c2'
