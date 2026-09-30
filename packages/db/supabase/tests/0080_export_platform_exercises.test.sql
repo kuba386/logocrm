@@ -89,6 +89,8 @@ insert into public.homework_exercises (homework_id, exercise_id, center_id, dele
 -- Удаления — после ссылок: удалённое ДЗ и удалённая платформенная строка всё равно в архиве.
 update public.homework set deleted_at = now() where id = '80000000-0000-0000-0000-000000000102';
 update public.exercise_library set deleted_at = now() where id = '80000000-0000-0000-0000-0000000000b4';
+-- Неактивное платформенное (снято с показа, 0074 Р5) — тоже в архиве, раз на него есть ссылка.
+update public.exercise_library set is_active = false where id = '80000000-0000-0000-0000-0000000000b1';
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
@@ -125,7 +127,7 @@ select set_eq(
   $$ select (e ->> 'id')::uuid from t_exp, jsonb_array_elements(data) e where who = 'A' and tbl = 'exercise_library' $$,
   $$ values ('80000000-0000-0000-0000-0000000000f1'::uuid), ('80000000-0000-0000-0000-0000000000b1'),
             ('80000000-0000-0000-0000-0000000000b4'), ('80000000-0000-0000-0000-0000000000b5') $$,
-  'Центр А: своё упражнение + платформенные из его ДЗ (включая удалённые ДЗ и удалённую платформенную строку); без чужих и без платформы без ссылок');
+  'Центр А: своё упражнение + платформенные из его ДЗ (включая удалённые ДЗ, удалённую и неактивную платформенные строки); без чужих и без платформы без ссылок');
 
 select is(
   (select jsonb_array_length(data) from t_exp where who = 'A' and tbl = 'exercise_library'), 4,

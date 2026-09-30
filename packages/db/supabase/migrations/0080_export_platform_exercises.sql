@@ -10,7 +10,8 @@
 --   Р1. Какие строки — одна функция export_center_predicate(p_table): её зовут и
 --       export_center_table (файл), и record_center_export (счётчик в
 --       center.exported). Дублировать case нельзя — файл и журнал разъехались бы
---       снова. Предикат опирается на алиас t и параметр $1 (центр).
+--       снова. Предикат опирается на алиас t и параметр $1 (центр) и
+--       подставляется в format аргументом через %s, не склейкой шаблона.
 --   Р2. Для exercise_library: свои строки ИЛИ (center_id is null И id из
 --       homework_exercises этого центра). Явное center_id is null — чтобы даже
 --       битая ссылка на упражнение чужого центра не вытащила чужую строку.
@@ -19,8 +20,9 @@
 --   Р3. Другие таблицы не затронуты: nullable center_id в export_center_tables()
 --       только у exercise_library и message_templates; на message_templates
 --       никто не ссылается (центр перекрывает дефолт по event_type/channel).
---   Р4. Платформенные строки в файле — те же, что owner/admin и так читают
---       через RLS 0036; данных детей в них нет.
+--   Р4. Платформенные строки — данные платформы, данных детей в них нет.
+--       Живые owner/admin и так читают через RLS 0036; удалённые RLS скрывает,
+--       а выгрузка отдаёт (архив целиком, как для строк центра).
 --   Р5. export_center_table и record_center_export переизданы от 0056 (других
 --       определений нет); отличия — только строка execute format и comment.
 --
@@ -72,9 +74,8 @@ begin
   -- p_table проверен по allow-list выше; format(%I) — вторым рубежом
   -- против инъекции, не единственным.
   execute format(
-    'select coalesce(jsonb_agg(to_jsonb(t)), ''[]''::jsonb) from public.%I t where '
-      || public.export_center_predicate(p_table),
-    p_table
+    'select coalesce(jsonb_agg(to_jsonb(t)), ''[]''::jsonb) from public.%I t where %s',
+    p_table, public.export_center_predicate(p_table)
   ) into v_result using v_center;
 
   return v_result;
@@ -109,8 +110,8 @@ begin
   end if;
 
   for v_table in select table_name from public.export_center_tables() loop
-    execute format('select count(*) from public.%I t where ' || public.export_center_predicate(v_table.table_name),
-                   v_table.table_name)
+    execute format('select count(*) from public.%I t where %s',
+                   v_table.table_name, public.export_center_predicate(v_table.table_name))
       into v_n using v_center;
     v_counts := v_counts || jsonb_build_object(v_table.table_name, v_n);
   end loop;
