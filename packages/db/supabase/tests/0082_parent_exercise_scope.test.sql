@@ -177,9 +177,10 @@ select is((select count(*)::int from t_lib where who = 'parent1'
 
 select public.tests_claims('82000000-0000-0000-0000-000000000006', '82000000-0000-0000-0000-0000000000c1');
 set local role authenticated;
-select lives_ok(
-  $q$ select he.id, e.title from public.homework_exercises he join public.exercise_library e on e.id = he.exercise_id $q$,
-  'Родитель читает ДЗ с названиями одним join — без infinite recursion в политиках');
+select set_eq(
+  $q$ select e.id from public.homework_exercises he join public.exercise_library e on e.id = he.exercise_id $q$,
+  $$ values ('82000000-0000-0000-0000-0000000000f1'::uuid), ('82000000-0000-0000-0000-0000000000b1') $$,
+  'Родитель читает ДЗ с названиями одним join — без recursion, и строки те самые (методичка f7 в join не попадает)');
 reset role;
 select public.tests_claims(null, null);
 
@@ -198,8 +199,10 @@ select set_eq($$ select id from t_lib where who = 'teacherP' $$, $$ select id fr
 select is((select count(*)::int from t_lib where who in ('registrar', 'finance')), 0,
   'Регистратор и бухгалтер — ничего, как раньше');
 
-select is((select coalesce(sum(n), 0)::int from t_misc where who in ('owner', 'teacher', 'teacherP', 'registrar')), 0,
-  'parent_exercise_ids не родителю — пусто');
+select is(
+  (select count(*)::int from t_misc
+    where who in ('owner', 'admin', 'teacher', 'teacherP', 'registrar', 'finance', 'parent0') and n = 0),
+  7, 'parent_exercise_ids пуст для каждой не-родительской роли и для родителя без payer_id — по отдельности');
 
 select is((select n from t_misc where who = 'parent1'), 2,
   'parent_exercise_ids родителю — ровно его упражнения');

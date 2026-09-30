@@ -20,7 +20,8 @@
 --       любого статуса ДЗ. Упражнение «только специалист» (0081) родителю не
 --       отдаётся даже из ДЗ, выданного до тега: смысл тега — методичка не для
 --       родителя.
---   Р4. registrar/finance — по-прежнему ничего (clinical_role_allowed).
+--   Р4. registrar/finance — по-прежнему ничего. Список ролей теперь и здесь, не
+--       только в clinical_role_allowed (0036 называл её единственным местом).
 --
 -- Записано, не чинится: web родителя названий упражнений в ДЗ не показывает
 -- вовсе (students/[id]/page.tsx, ветка parent: exerciseTitles: []) — отдельная
@@ -36,8 +37,14 @@ create function public.parent_exercise_ids()
 as $$
 declare
   v_center uuid := public.current_center();
+  v_payer  uuid;
 begin
   if auth.uid() is null or v_center is null or coalesce(public.my_role(), '') <> 'parent' then
+    return;
+  end if;
+  -- Отдельным if: payer_id = NULL в предикате дал бы NULL, а не отказ.
+  v_payer := public.my_payer_id();
+  if v_payer is null then
     return;
   end if;
 
@@ -45,11 +52,14 @@ begin
     select distinct he.exercise_id
       from public.homework_exercises he
       join public.homework h on h.id = he.homework_id and h.center_id = he.center_id
+      -- Плательщик один раз, join по students_payer_idx — не parent_of_student на
+      -- каждую строку ДЗ центра. Условия те же: свой плательщик, ребёнок не удалён.
+      join public.students s on s.id = h.student_id and s.center_id = h.center_id
+                            and s.payer_id = v_payer and s.deleted_at is null
       join public.exercise_library e on e.id = he.exercise_id
      where he.center_id = v_center
        and he.deleted_at is null
        and h.deleted_at is null
-       and public.parent_of_student(h.student_id)
        and not public.exercise_is_specialist_only(e.tags);
 end;
 $$;
