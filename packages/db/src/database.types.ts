@@ -5410,6 +5410,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      parent_exercise_ids: { Args: never; Returns: string[] }
       parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
       pay_installment: {
