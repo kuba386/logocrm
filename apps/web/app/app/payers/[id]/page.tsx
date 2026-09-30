@@ -66,7 +66,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           </Link>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{payer.full_name}</h1>
+          <h1 className="page-title">{payer.full_name}</h1>
           {frontDesk ? (
             <span
               className={cn(

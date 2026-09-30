@@ -88,7 +88,8 @@ const config: Config = {
         'modal-max-width': '540px',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-text)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         'headline-lg': ['24px', { lineHeight: '36px', letterSpacing: '-0.015em', fontWeight: '600' }],

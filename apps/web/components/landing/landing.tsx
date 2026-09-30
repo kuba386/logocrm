@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
-import { display, text } from './fonts'
 import s from './landing.module.css'
 
 // Этапы — сид goal_stages (0036): тот же порядок и те же названия, что видит логопед.
@@ -73,7 +72,7 @@ const PLANS = [
 
 export function Landing() {
   return (
-    <div className={`${s.page} ${display.variable} ${text.variable}`}>
+    <div className={s.page}>
       <header className={s.header}>
         <Link href="/" className={s.wordmark}>
           LogoCRM

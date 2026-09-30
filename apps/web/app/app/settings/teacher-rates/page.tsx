@@ -56,7 +56,7 @@ export default async function TeacherRatesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('teacherRates', 'title')}</h1>
+        <h1 className="page-title">{t('teacherRates', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('teacherRates', 'subtitle')}</p>
       </div>
 

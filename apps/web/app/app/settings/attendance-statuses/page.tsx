@@ -116,7 +116,7 @@ export default async function AttendanceStatusesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Статусы посещения</h1>
+        <h1 className="page-title">Статусы посещения</h1>
         <p className="text-sm text-muted-foreground">
           Кнопки в панели отметки — отсюда. Галочки решают, что происходит с абонементом и уведомлениями;
           уже поставленные отметки они не пересчитывают.

@@ -196,7 +196,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
     <div className="mx-auto max-w-3xl p-6">
       <Back />
       <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Провести занятие</h1>
+        <h1 className="page-title">Провести занятие</h1>
         <p className="text-sm text-muted-foreground">
           {service?.name ? `${service.name} · ` : ''}
           {when}

@@ -96,7 +96,7 @@ export default async function DebtsPage({
   if (loadError) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
+        <h1 className="page-title">Долги</h1>
         <Card>
           <CardContent className="pt-6 text-sm text-destructive">
             {toAppError(loadError, 'Не удалось загрузить долги').message}
@@ -111,7 +111,7 @@ export default async function DebtsPage({
   if (problematic.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
+        <h1 className="page-title">Долги</h1>
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">Долгов нет.</CardContent>
         </Card>
@@ -165,7 +165,7 @@ export default async function DebtsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
+        <h1 className="page-title">Долги</h1>
         <p className="text-sm text-muted-foreground">
           {headerCount} {headerCount === 1 ? 'ученик' : 'учеников'}
           {totalDebt > 0 ? ` · долг ${formatSom(totalDebt)}` : ''}

@@ -914,7 +914,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           ← Все ученики
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{student.fullName}</h1>
+          <h1 className="page-title">{student.fullName}</h1>
           <span
             className={cn(
               'rounded-full px-2 py-0.5 text-xs',

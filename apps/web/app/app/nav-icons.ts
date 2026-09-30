@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Contact,
   Download,
+  Filter,
   GraduationCap,
   Inbox,
   Landmark,
@@ -38,4 +39,6 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   '/app/bookings': Inbox,
   '/app/telegram': Send,
   '/app/settings/staff': Settings,
+  '/app/settings/teacher-rates': Settings,
+  '/app/funnel': Filter,
 }

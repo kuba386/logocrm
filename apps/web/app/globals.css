@@ -4,24 +4,25 @@
 
 @layer base {
   :root {
-    /* Material 3, вытащено из партии экранов Stitch 2026-09-10 — docs/Design/DESIGN.md */
-    --background: 18 100% 98%;
-    --foreground: 24 9% 11%;
+    /* Палитра «тетради» — та же, что на лендинге (components/landing): прохладная бумага,
+       чернила вместо чёрного, бирюза действия из Material 3 (DESIGN.md) сохранена. */
+    --background: 210 38% 97%;
+    --foreground: 228 44% 20%;
     --card: 0 0% 100%;
-    --card-foreground: 24 9% 11%;
-    --primary: 175 77% 26%;
+    --card-foreground: 228 44% 20%;
+    --primary: 173 77% 26%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 167 55% 83%;
-    --secondary-foreground: 170 25% 34%;
-    --muted: 20 55% 96%;
-    --muted-foreground: 169 8% 26%;
-    --accent: 20 55% 96%;
-    --accent-foreground: 24 9% 11%;
+    --secondary: 170 38% 88%;
+    --secondary-foreground: 173 78% 20%;
+    --muted: 213 38% 94%;
+    --muted-foreground: 222 15% 40%;
+    --accent: 213 38% 94%;
+    --accent-foreground: 228 44% 20%;
     --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 100%;
-    --border: 165 10% 76%;
-    --input: 165 10% 76%;
-    --ring: 175 100% 18%;
+    --border: 211 35% 85%;
+    --input: 211 35% 80%;
+    --ring: 173 77% 26%;
     --radius: 0.5rem;
 
     /* Статусы — из бейджей на макетах, не из ролей Material 3. */
@@ -77,6 +78,12 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .page-title {
+    @apply font-display text-2xl font-medium leading-tight tracking-tight;
   }
 }
