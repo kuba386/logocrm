@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { centerTimeZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
-import { STUDENT_STATUS_CLASSES, statusLabel, studentAge, type FunnelStage } from '@/lib/students'
+import { STUDENT_STATUS_TONES, statusLabel, studentAge, type FunnelStage } from '@/lib/students'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { FunnelStageWidget } from './funnel-stage-widget'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { StudentForm, type StudentFormValues } from './student-form'
@@ -907,123 +909,107 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }))
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/app/students" className="text-sm text-muted-foreground hover:underline">
-          ← Все ученики
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="page-title">{student.fullName}</h1>
-          <span
-            className={cn(
-              'rounded-full px-2 py-0.5 text-xs',
-              STUDENT_STATUS_CLASSES[student.status] ?? 'bg-muted text-muted-foreground',
-            )}
-          >
-            {statusLabel(student.status)}
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {studentAge(student.birthDate)}
-          {teacherName ? ` · специалист: ${teacherName}` : ' · специалист не назначен'}
-        </p>
-        {(isAdmin || isRegistrar) && 'funnel_stage' in base && base.funnel_stage ? (
-          <div className="mt-2">
-            <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
-          </div>
-        ) : null}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Данные</CardTitle>
-          <CardDescription>
-            {isAdmin ? 'Изменения сохраняются сразу.' : 'Редактирование доступно администратору центра.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StudentForm student={student} teachers={teacherOptions} canEdit={isAdmin} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Плательщик</CardTitle>
-          <CardDescription>
-            {payer ? 'Контакты для связи с семьёй.' : 'Контакты видны администратору центра.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="font-medium">{payerName ?? '—'}</p>
-
-          {payer ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {payer.relation ?? 'родитель'} · {formatKgPhone(payer.phone)}
-                {payer.email ? ` · ${payer.email}` : ''}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <a href={`tel:${payer.phone}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                  Позвонить
-                </a>
-                {waNumber ? (
-                  <a
-                    href={`https://wa.me/${waNumber}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                  >
-                    WhatsApp
-                  </a>
-                ) : null}
-                {isAdmin ? (
-                  <Link
-                    href={`/app/payers/${payer.id}`}
-                    className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                  >
-                    Карточка плательщика
-                  </Link>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {subscriptionsSection ? (
+  // Порядок разделов — по тому, зачем роль открывает карточку: специалист —
+  // вести занятия, стойка — абонементы и контакты, родитель — прогресс.
+  const sectionBlocks: Record<string, { label: string; show: boolean; node: React.ReactNode }> = {
+    subscriptions: {
+      label: 'Абонементы',
+      show: Boolean(subscriptionsSection || subscriptionBadge),
+      node: subscriptionsSection ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{subscriptionsSection.canManage ? 'Абонементы и посещения' : 'Абонементы'}</CardTitle>
+              <CardDescription>
+                {subscriptionsSection.canManage
+                  ? 'Продажа, заморозка, возврат — доступны только администратору.'
+                  : 'Оплачено, состояние и график рассрочки — те же данные, что видит центр.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SubscriptionsPanel studentId={id} {...subscriptionsSection} />
+            </CardContent>
+          </Card>
+        ) : subscriptionBadge ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Абонемент</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StatusBadge tone={subscriptionBadge === 'нет' ? 'danger' : 'neutral'}>{subscriptionBadge}</StatusBadge>
+            </CardContent>
+          </Card>
+        ) : null,
+    },
+    data: {
+      label: 'Данные',
+      show: true,
+      node: (
         <Card>
           <CardHeader>
-            <CardTitle>{subscriptionsSection.canManage ? 'Абонементы и посещения' : 'Абонементы'}</CardTitle>
+            <CardTitle>Данные</CardTitle>
             <CardDescription>
-              {subscriptionsSection.canManage
-                ? 'Продажа, заморозка, возврат — доступны только администратору.'
-                : 'Оплачено, состояние и график рассрочки — те же данные, что видит центр.'}
+              {isAdmin ? 'Изменения сохраняются сразу.' : 'Редактирование доступно администратору центра.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SubscriptionsPanel studentId={id} {...subscriptionsSection} />
+            <StudentForm student={student} teachers={teacherOptions} canEdit={isAdmin} />
           </CardContent>
         </Card>
-      ) : subscriptionBadge ? (
+      ),
+    },
+    payer: {
+      label: 'Плательщик',
+      show: true,
+      node: (
         <Card>
           <CardHeader>
-            <CardTitle>Абонемент</CardTitle>
+            <CardTitle>Плательщик</CardTitle>
+            <CardDescription>
+              {payer ? 'Контакты для связи с семьёй.' : 'Контакты видны администратору центра.'}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <span
-              className={cn(
-                'rounded px-2 py-0.5 text-sm font-medium',
-                subscriptionBadge === 'нет' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground',
-              )}
-            >
-              {subscriptionBadge}
-            </span>
+          <CardContent className="space-y-3">
+            <p className="font-medium">{payerName ?? '—'}</p>
+
+            {payer ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {payer.relation ?? 'родитель'} · {formatKgPhone(payer.phone)}
+                  {payer.email ? ` · ${payer.email}` : ''}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <a href={`tel:${payer.phone}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                    Позвонить
+                  </a>
+                  {waNumber ? (
+                    <a
+                      href={`https://wa.me/${waNumber}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    >
+                      WhatsApp
+                    </a>
+                  ) : null}
+                  {isAdmin ? (
+                    <Link
+                      href={`/app/payers/${payer.id}`}
+                      className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                    >
+                      Карточка плательщика
+                    </Link>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
           </CardContent>
         </Card>
-      ) : null}
-
-      {showAnamnesis ? (
+      ),
+    },
+    anamnesis: {
+      label: 'Анамнез',
+      show: showAnamnesis,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>Анамнез</CardTitle>
@@ -1033,9 +1019,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <AnamnesisPanel studentId={id} entry={anamnesis} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
-      ) : null}
-
-      {showArticulation ? (
+      
+      ),
+    },
+    articulation: {
+      label: 'Артикуляция',
+      show: showArticulation,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>Артикуляционный аппарат</CardTitle>
@@ -1045,9 +1035,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <ArticulationPanel studentId={id} entry={articulation} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
-      ) : null}
-
-      {showSyllableAssessments ? (
+      
+      ),
+    },
+    syllables: {
+      label: 'Слоговая структура',
+      show: showSyllableAssessments,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>Слоговая структура</CardTitle>
@@ -1057,9 +1051,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <SyllableAssessmentPanel studentId={id} entries={syllableAssessments} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
-      ) : null}
-
-      {showProsodyAssessments ? (
+      
+      ),
+    },
+    prosody: {
+      label: 'Просодика',
+      show: showProsodyAssessments,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>Просодика</CardTitle>
@@ -1069,9 +1067,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <ProsodyAssessmentPanel studentId={id} entries={prosodyAssessments} canWrite={canWriteClinical} />
           </CardContent>
         </Card>
-      ) : null}
-
-      {showReadingWritingAssessments ? (
+      
+      ),
+    },
+    readingWriting: {
+      label: 'Чтение-письмо',
+      show: showReadingWritingAssessments,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>Чтение-письмо</CardTitle>
@@ -1085,103 +1087,127 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             />
           </CardContent>
         </Card>
-      ) : null}
-
-      {clinicalSection ? (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Диагностика</CardTitle>
-              <CardDescription>Карта звуков и речевые области.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DiagnosticsPanel
-                studentId={id}
-                entries={clinicalSection.diagnostics}
-                canWrite={canWriteClinical}
-                conclusions={conclusionLookup}
-                forms={formLookup}
-                referralTargets={referralLookup}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Цели</CardTitle>
-              <CardDescription>Прогресс по звукам и этапам работы.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <GoalsPanel
-                studentId={id}
-                goals={clinicalSection.goals}
-                stages={clinicalSection.stages}
-                canWrite={canWriteClinical}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Домашние задания</CardTitle>
-              <CardDescription>Выдача, сдача и фидбек.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <HomeworkPanel
-                studentId={id}
-                homework={clinicalSection.homework}
-                exercises={clinicalSection.exercises}
-                canWrite={canWriteClinical}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Заметки занятий</CardTitle>
-              <CardDescription>
-                {isParent
-                  ? 'Резюме занятий от специалиста.'
-                  : 'Черновики из голосовых и текстовые заметки. Родитель видит резюме только после утверждения.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <NotesPanel
-                studentId={id}
-                notes={clinicalSection.notes}
-                canWrite={canWriteClinical}
-                timeZone={clinicalTimeZone}
-              />
-            </CardContent>
-          </Card>
-
-          {initialReportMonth ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Отчёт за месяц</CardTitle>
-                <CardDescription>
-                  {isParent
-                    ? 'Посещения, динамика целей и резюме занятий за месяц.'
-                    : 'Собирается из посещений, оценок целей и утверждённых резюме. Родителю уходит в Telegram.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <MonthlyReportPanel
-                  studentId={id}
-                  months={reportMonths}
-                  initialMonth={initialReportMonth}
-                  initialReport={(initialReport as unknown as MonthlyReport | null) ?? null}
-                  canSend={canWriteClinical}
-                  canResend={isAdmin}
-                  timeZone={clinicalTimeZone}
-                />
-              </CardContent>
-            </Card>
-          ) : null}
-        </>
-      ) : null}
-
-      {isAdmin ? (
+      
+      ),
+    },
+    diagnostics: {
+      label: 'Диагностика',
+      show: Boolean(clinicalSection),
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Диагностика</CardTitle>
+            <CardDescription>Карта звуков и речевые области.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DiagnosticsPanel
+              studentId={id}
+              entries={clinicalSection!.diagnostics}
+              canWrite={canWriteClinical}
+              conclusions={conclusionLookup}
+              forms={formLookup}
+              referralTargets={referralLookup}
+            />
+          </CardContent>
+        </Card>
+      ),
+    },
+    goals: {
+      label: 'Цели',
+      show: Boolean(clinicalSection),
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Цели</CardTitle>
+            <CardDescription>Прогресс по звукам и этапам работы.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <GoalsPanel
+              studentId={id}
+              goals={clinicalSection!.goals}
+              stages={clinicalSection!.stages}
+              canWrite={canWriteClinical}
+            />
+          </CardContent>
+        </Card>
+      ),
+    },
+    homework: {
+      label: 'ДЗ',
+      show: Boolean(clinicalSection),
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Домашние задания</CardTitle>
+            <CardDescription>Выдача, сдача и фидбек.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <HomeworkPanel
+              studentId={id}
+              homework={clinicalSection!.homework}
+              exercises={clinicalSection!.exercises}
+              canWrite={canWriteClinical}
+            />
+          </CardContent>
+        </Card>
+      ),
+    },
+    notes: {
+      label: 'Заметки',
+      show: Boolean(clinicalSection),
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Заметки занятий</CardTitle>
+            <CardDescription>
+              {isParent
+                ? 'Резюме занятий от специалиста.'
+                : 'Черновики из голосовых и текстовые заметки. Родитель видит резюме только после утверждения.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <NotesPanel
+              studentId={id}
+              notes={clinicalSection!.notes}
+              canWrite={canWriteClinical}
+              timeZone={clinicalTimeZone}
+            />
+          </CardContent>
+        </Card>
+      ),
+    },
+    report: {
+      label: 'Отчёт за месяц',
+      show: Boolean(clinicalSection && initialReportMonth),
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Отчёт за месяц</CardTitle>
+            <CardDescription>
+              {isParent
+                ? 'Посещения, динамика целей и резюме занятий за месяц.'
+                : 'Собирается из посещений, оценок целей и утверждённых резюме. Родителю уходит в Telegram.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyReportPanel
+              studentId={id}
+              months={reportMonths}
+              initialMonth={initialReportMonth!}
+              initialReport={(initialReport as unknown as MonthlyReport | null) ?? null}
+              canSend={canWriteClinical}
+              canResend={isAdmin}
+              timeZone={clinicalTimeZone}
+            />
+          </CardContent>
+        </Card>
+          
+      ),
+    },
+    history: {
+      label: 'История',
+      show: isAdmin,
+      node: (
         <Card>
           <CardHeader>
             <CardTitle>История</CardTitle>
@@ -1193,7 +1219,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 {history.map((entry) => (
                   <li key={entry.id} className="flex gap-3">
                     <span className="text-muted-foreground">
-                      {new Date(entry.at).toLocaleString('ru-RU')}
+                      {formatInTimeZone(entry.at, clinicalTimeZone, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <span>
                       {entry.action === 'INSERT' ? 'Создана' : entry.action === 'UPDATE' ? 'Изменена' : 'Удалена'}
@@ -1206,7 +1232,58 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             )}
           </CardContent>
         </Card>
+      
+      ),
+    },
+  }
+
+  const sectionOrder = isTeacher
+    ? ['goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'subscriptions', 'payer', 'data']
+    : isParent
+      ? ['report', 'goals', 'homework', 'notes', 'subscriptions', 'data', 'payer']
+      : ['subscriptions', 'payer', 'data', 'goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'history']
+  const sections = sectionOrder
+    .map((key) => ({ id: key, ...sectionBlocks[key]! }))
+    .filter((section) => section.show)
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <PageHeader
+          back={{ href: '/app/students', label: 'Все ученики' }}
+          title={student.fullName}
+          aside={
+            <StatusBadge tone={STUDENT_STATUS_TONES[student.status] ?? 'neutral'}>{statusLabel(student.status)}</StatusBadge>
+          }
+          description={`${studentAge(student.birthDate)}, ${teacherName ? `специалист: ${teacherName}` : 'специалист не назначен'}`}
+        />
+        {(isAdmin || isRegistrar) && 'funnel_stage' in base && base.funnel_stage ? (
+          <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
+        ) : null}
+      </div>
+
+      {sections.length > 3 ? (
+        <nav
+          aria-label="Разделы карточки"
+          className="-mx-6 flex gap-1 overflow-x-auto border-y border-border bg-background/95 px-6 py-2 backdrop-blur sm:sticky sm:top-0 sm:z-10 sm:mx-0 sm:rounded-lg sm:border sm:px-2"
+        >
+          {sections.map((section) => (
+            <a
+              key={section.id}
+              href={`#${section.id}`}
+              className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              {section.label}
+            </a>
+          ))}
+        </nav>
       ) : null}
+
+      {sections.map((section) => (
+        <section key={section.id} id={section.id} className="scroll-mt-20">
+          {section.node}
+        </section>
+      ))}
     </div>
   )
 }

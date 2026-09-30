@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
+import { CatalogRow } from '@/components/ui/catalog-row'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { toSom } from '@logocrm/core'
 import { saveService } from './actions'
 
@@ -71,9 +74,15 @@ export default async function ServicesPage() {
           <CardTitle>Список</CardTitle>
           <CardDescription>Всего: {services?.length ?? 0}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {(services ?? []).map((service) => (
-            <div key={service.id} className="rounded-md border border-border p-3">
+        <CardContent>
+          <ul className="divide-y divide-border">
+            {(services ?? []).map((service) => (
+              <CatalogRow
+                key={service.id}
+                title={service.name}
+                meta={`${service.duration_min} мин, ${service.kind === 'group' ? 'групповое' : 'индивидуальное'}${service.default_price_tiyin === null ? '' : `, ${toSom(service.default_price_tiyin)} сом`}`}
+                badge={service.is_active ? null : <StatusBadge>Не используется</StatusBadge>}
+              >
               <CatalogForm action={saveService}>
                 <input type="hidden" name="id" value={service.id} />
                 <div className="grid gap-3 sm:grid-cols-4">
@@ -118,11 +127,10 @@ export default async function ServicesPage() {
                   </label>
                 </div>
               </CatalogForm>
-            </div>
+            </CatalogRow>
           ))}
-          {(services ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Услуг пока нет.</p>
-          ) : null}
+          </ul>
+          {(services ?? []).length === 0 ? <EmptyState title="Услуг пока нет" description="Добавьте первый — форма выше." /> : null}
         </CardContent>
       </Card>
     </div>

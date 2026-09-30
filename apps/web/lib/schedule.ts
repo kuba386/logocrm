@@ -44,3 +44,43 @@ function minutesFromDayStart(iso: string, timeZone: string): number {
   const [hours, minutes] = hhmm.split(':').map(Number)
   return (hours! - DAY_START_HOUR) * 60 + minutes!
 }
+
+/**
+ * Дорожки для одновременных занятий: пересекающиеся по времени блоки
+ * делят ширину колонки, а не ложатся друг на друга. Группа пересечений
+ * (кластер) получает столько дорожек, сколько занятий в нём идёт разом.
+ */
+export function overlapLanes(
+  items: { id: string; startsAt: string; endsAt: string }[],
+): Map<string, { lane: number; lanes: number }> {
+  const sorted = items
+    .map((item) => ({ id: item.id, start: Date.parse(item.startsAt), end: Date.parse(item.endsAt) }))
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+
+  const result = new Map<string, { lane: number; lanes: number }>()
+  let cluster: { id: string; lane: number }[] = []
+  let laneEnds: number[] = []
+  let clusterEnd = -Infinity
+
+  const flush = () => {
+    for (const entry of cluster) result.set(entry.id, { lane: entry.lane, lanes: laneEnds.length })
+    cluster = []
+    laneEnds = []
+  }
+
+  for (const item of sorted) {
+    if (cluster.length > 0 && item.start >= clusterEnd) flush()
+    let lane = laneEnds.findIndex((end) => end <= item.start)
+    if (lane === -1) {
+      lane = laneEnds.length
+      laneEnds.push(item.end)
+    } else {
+      laneEnds[lane] = item.end
+    }
+    cluster.push({ id: item.id, lane })
+    clusterEnd = cluster.length === 1 ? item.end : Math.max(clusterEnd, item.end)
+  }
+  flush()
+
+  return result
+}

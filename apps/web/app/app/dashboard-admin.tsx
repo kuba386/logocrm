@@ -5,6 +5,7 @@ import { debtSummaryLine, debtTopAmountLine, formatSom, parseDebtSummary } from 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { t } from '@/lib/messages'
 import { toAppError } from '@/lib/errors'
+import { PageHeader } from '@/components/ui/page-header'
 
 /**
  * Дашборд администратора: сколько занятий сегодня, у кого заканчивается
@@ -99,15 +100,13 @@ export async function AdminDashboard({
 
   const done = lessons.filter((l) => l.status === 'done').length
   const cancelled = lessons.filter((l) => l.status === 'cancelled').length
-  const upcoming = lessons.filter((l) => l.status === 'planned').slice(0, 3)
+  const upcomingAll = lessons.filter((l) => l.status === 'planned' && l.starts_at >= new Date().toISOString())
+  const upcoming = upcomingAll.slice(0, 6)
 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-title">Дашборд</h1>
-        <p className="text-sm text-muted-foreground">{dayInZone(new Date(), timeZone)}, сегодня</p>
-      </div>
+      <PageHeader title="Дашборд" description={`${dayInZone(new Date(), timeZone)}, сегодня`} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         {showLessons ? (
@@ -115,11 +114,14 @@ export async function AdminDashboard({
             <CardHeader>
               <CardTitle className="text-3xl">{lessons.length}</CardTitle>
               <CardDescription>
-                Занятий сегодня{lessons.length > 0 ? ` · проведено ${done}, отменено ${cancelled}` : ''}
+                {lessons.length === 0
+                  ? 'Сегодня занятий нет'
+                  : `Занятий сегодня: проведено ${done}, отменено ${cancelled}`}
               </CardDescription>
             </CardHeader>
             {upcoming.length > 0 ? (
               <CardContent className="space-y-1 text-sm">
+                <p className="pb-1 text-xs text-muted-foreground">Дальше сегодня</p>
                 {upcoming.map((lesson) => {
                   const effectiveTeacher = lesson.substitute_teacher_id ?? lesson.teacher_id
                   const title = lesson.group_id
@@ -136,6 +138,9 @@ export async function AdminDashboard({
                     </p>
                   )
                 })}
+                <Link href="/app/schedule" className="block pt-1 font-medium text-primary hover:underline">
+                  {upcomingAll.length > upcoming.length ? `Ещё ${upcomingAll.length - upcoming.length} в расписании` : 'Расписание'}
+                </Link>
               </CardContent>
             ) : null}
           </Card>
@@ -164,7 +169,7 @@ export async function AdminDashboard({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl text-destructive">{debt.debtorsN}</CardTitle>
+            <CardTitle className={debt.debtorsN > 0 ? 'text-3xl text-destructive' : 'text-3xl'}>{debt.debtorsN}</CardTitle>
             {/* Отказ RPC (миграция не применена, сбой) — не «Долгов нет». */}
             <CardDescription>
               {debtError
@@ -197,12 +202,6 @@ export async function AdminDashboard({
         </Card>
       </div>
 
-      {showLessons && lessons.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6 text-sm text-muted-foreground">На сегодня занятий не запланировано.</CardContent>
-        </Card>
-      ) : null}
-
       <div className="grid gap-4 sm:grid-cols-3">
         {finance ? (
           <>
@@ -210,8 +209,9 @@ export async function AdminDashboard({
               <CardHeader>
                 <CardTitle className="text-3xl">{formatSom(revenue)}</CardTitle>
                 <CardDescription>
-                  {t('dashboard', 'revenueMonth')} · {t('dashboard', 'revenueHint')}
-                  {visits > 0 ? ` · посещений ${visits}` : ''}
+                  {t('dashboard', 'revenueMonth')}
+                  {visits > 0 ? `, посещений ${visits}` : ''}
+                  <span className="block text-xs">{t('dashboard', 'revenueHint')}</span>
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -219,7 +219,8 @@ export async function AdminDashboard({
               <CardHeader>
                 <CardTitle className="text-3xl">{formatSom(cashTotal)}</CardTitle>
                 <CardDescription>
-                  {t('dashboard', 'cashMonth')} · {t('dashboard', 'cashHint')}
+                  {t('dashboard', 'cashMonth')}
+                  <span className="block text-xs">{t('dashboard', 'cashHint')}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-sm">

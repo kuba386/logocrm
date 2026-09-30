@@ -5,8 +5,9 @@ import { useMemo, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
-import { STUDENT_STATUS_CLASSES, statusLabel, studentAge } from '@/lib/students'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { STUDENT_STATUS_TONES, statusLabel, studentAge } from '@/lib/students'
 import { formatKgPhone, normalizeKgPhone } from '@logocrm/core'
 
 export type StudentRowView = {
@@ -115,32 +116,38 @@ export function StudentsTable({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {students.length === 0 ? 'Учеников пока нет.' : 'Никто не подошёл под фильтры.'}
-        </p>
+        <EmptyState
+          title={students.length === 0 ? 'Учеников пока нет' : 'Никто не подошёл под фильтры'}
+          description={students.length === 0 ? undefined : 'Сбросьте фильтры или поищите по-другому.'}
+        />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>ФИО</TableHead>
-              <TableHead>Возраст</TableHead>
-              <TableHead>Специалист</TableHead>
-              <TableHead>Плательщик</TableHead>
+              <TableHead className="hidden md:table-cell">Возраст</TableHead>
+              <TableHead className="hidden sm:table-cell">Специалист</TableHead>
+              <TableHead className="hidden lg:table-cell">Плательщик</TableHead>
               <TableHead>Статус</TableHead>
-              {conclusionOptions.length > 0 ? <TableHead>Заключение</TableHead> : null}
+              {conclusionOptions.length > 0 ? <TableHead className="hidden xl:table-cell">Заключение</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((student) => (
               <TableRow key={student.id}>
-                <TableCell className="font-medium">
-                  <Link href={`/app/students/${student.id}`} className="hover:underline">
+                <TableCell>
+                  <Link href={`/app/students/${student.id}`} className="font-medium hover:underline">
                     {student.fullName}
                   </Link>
+                  {/* На узком экране колонки скрыты — главное из них под именем. */}
+                  <span className="block text-xs text-muted-foreground md:hidden">
+                    {studentAge(student.birthDate)}
+                    <span className="sm:hidden">{student.teacherName ? `, ${student.teacherName}` : ''}</span>
+                  </span>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{studentAge(student.birthDate)}</TableCell>
-                <TableCell>{student.teacherName ?? '—'}</TableCell>
-                <TableCell>
+                <TableCell className="hidden text-muted-foreground md:table-cell">{studentAge(student.birthDate)}</TableCell>
+                <TableCell className="hidden sm:table-cell">{student.teacherName ?? '—'}</TableCell>
+                <TableCell className="hidden lg:table-cell">
                   <span>{student.payerName ?? '—'}</span>
                   {canSeeContacts && student.payerPhone ? (
                     <span className="block text-xs text-muted-foreground">
@@ -149,17 +156,14 @@ export function StudentsTable({
                   ) : null}
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={cn(
-                      'inline-block rounded-full px-2 py-0.5 text-xs',
-                      STUDENT_STATUS_CLASSES[student.status] ?? 'bg-muted text-muted-foreground',
-                    )}
-                  >
+                  <StatusBadge tone={STUDENT_STATUS_TONES[student.status] ?? 'neutral'}>
                     {statusLabel(student.status)}
-                  </span>
+                  </StatusBadge>
                 </TableCell>
                 {conclusionOptions.length > 0 ? (
-                  <TableCell className="text-sm text-muted-foreground">{student.conclusionName ?? '—'}</TableCell>
+                  <TableCell className="hidden text-sm text-muted-foreground xl:table-cell">
+                    {student.conclusionName ?? '—'}
+                  </TableCell>
                 ) : null}
               </TableRow>
             ))}

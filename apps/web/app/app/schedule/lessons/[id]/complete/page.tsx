@@ -2,10 +2,10 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { isSpecialistOnly } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
-import { buttonVariants } from '@/components/ui/button'
+import { ChevronLeft } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
-import { dayInZone, timeInZone, centerTimeZone } from '@/lib/timezone'
+import { calendarDay, dayInZone, timeInZone, centerTimeZone } from '@/lib/timezone'
 import { studentAge } from '@/lib/students'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { CompleteLessonForm, type StudentEntry, type ExerciseOption } from './complete-lesson-form'
@@ -14,15 +14,19 @@ export const metadata = { title: 'Провести занятие — LogoCRM' }
 
 function Back() {
   return (
-    <Link href="/app/schedule" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'mb-4')}>
-      ← К расписанию
+    <Link
+      href="/app/schedule"
+      className="-ml-1 inline-flex items-center gap-0.5 rounded-md text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ChevronLeft className="size-4" />
+      К расписанию
     </Link>
   )
 }
 
 function Message({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-2xl p-6">
+    <div className="mx-auto max-w-2xl space-y-4">
       <Back />
       <Card>
         <CardHeader>
@@ -193,15 +197,12 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
   }))
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <Back />
-      <div className="mb-6 space-y-1">
-        <h1 className="page-title">Провести занятие</h1>
-        <p className="text-sm text-muted-foreground">
-          {service?.name ? `${service.name} · ` : ''}
-          {when}
-        </p>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <PageHeader
+        back={{ href: '/app/schedule', label: 'К расписанию' }}
+        title="Провести занятие"
+        description={service?.name ? `${service.name}, ${when}` : when}
+      />
       <CompleteLessonForm
         lessonId={lessonId}
         students={students_}
@@ -234,7 +235,7 @@ async function renderDone(
   const nameById = new Map((students ?? []).map((s) => [s.id, s.full_name]))
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
+    <div className="mx-auto max-w-2xl space-y-4">
       <Back />
       <Card>
         <CardHeader>
@@ -285,7 +286,7 @@ async function renderDone(
                 {(homework ?? []).map((h, i) => (
                   <li key={i}>
                     {nameById.get(h.student_id) ?? 'Ученик'}: {h.free_text || '—'}
-                    {h.due_on ? ` (до ${h.due_on})` : ''}
+                    {h.due_on ? ` (до ${calendarDay(h.due_on)})` : ''}
                   </li>
                 ))}
               </ul>

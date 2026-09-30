@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CatalogForm } from '@/components/ui/catalog-form'
+import { CatalogRow } from '@/components/ui/catalog-row'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { saveRoom } from '../services/actions'
 
 export const metadata = { title: 'Кабинеты — LogoCRM' }
@@ -58,9 +61,15 @@ export default async function RoomsPage() {
           <CardTitle>Список</CardTitle>
           <CardDescription>Всего: {rooms?.length ?? 0}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {(rooms ?? []).map((room) => (
-            <div key={room.id} className="rounded-md border border-border p-3">
+        <CardContent>
+          <ul className="divide-y divide-border">
+            {(rooms ?? []).map((room) => (
+              <CatalogRow
+                key={room.id}
+                title={room.name}
+                meta={`Мест: ${room.capacity}`}
+                badge={room.is_active ? null : <StatusBadge>Не используется</StatusBadge>}
+              >
               <CatalogForm action={saveRoom}>
                 <input type="hidden" name="id" value={room.id} />
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -84,11 +93,10 @@ export default async function RoomsPage() {
                   </label>
                 </div>
               </CatalogForm>
-            </div>
+            </CatalogRow>
           ))}
-          {(rooms ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Кабинетов пока нет.</p>
-          ) : null}
+          </ul>
+          {(rooms ?? []).length === 0 ? <EmptyState title="Кабинетов пока нет" description="Добавьте первый — форма выше." /> : null}
         </CardContent>
       </Card>
     </div>

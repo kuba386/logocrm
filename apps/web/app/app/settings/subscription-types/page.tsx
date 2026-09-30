@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
+import { CatalogRow } from '@/components/ui/catalog-row'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { CatalogAction } from '@/components/ui/catalog-action'
 import { saveSubscriptionType, archiveSubscriptionType, restoreSubscriptionType } from './actions'
 
@@ -158,25 +161,34 @@ export default async function SubscriptionTypesPage() {
           <CardTitle>Список</CardTitle>
           <CardDescription>Всего: {rows.length}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {rows.map((type) => (
-            <div key={type.id} className="space-y-3 rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">
-                {KIND_LABELS[type.kind] ?? type.kind}
-                {type.kind === 'lessons' && type.lessons_count ? ` · ${type.lessons_count} занятий` : ''}
-                {type.kind === 'period' && type.period_days ? ` · ${type.period_days} дней` : ''}
-                {!type.is_active ? ' · неактивен' : ''}
-              </p>
-              <CatalogForm action={saveSubscriptionType}>
-                <input type="hidden" name="id" value={type.id} />
-                <TypeFields type={type} services={serviceOptions} idSuffix={type.id} />
-              </CatalogForm>
-              <div className="flex justify-end border-t border-border pt-3">
-                <CatalogAction id={type.id} action={archiveSubscriptionType} label="В архив" />
-              </div>
-            </div>
-          ))}
-          {rows.length === 0 ? <p className="text-sm text-muted-foreground">Типов пока нет.</p> : null}
+        <CardContent>
+          <ul className="divide-y divide-border">
+            {rows.map((type) => (
+              <CatalogRow
+                key={type.id}
+                title={type.name}
+                meta={[
+                  KIND_LABELS[type.kind] ?? type.kind,
+                  type.kind === 'lessons' && type.lessons_count ? `${type.lessons_count} занятий` : null,
+                  type.kind === 'period' && type.period_days ? `${type.period_days} дней` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
+                badge={type.is_active ? null : <StatusBadge>Не продаётся</StatusBadge>}
+              >
+                <div className="space-y-3">
+                  <CatalogForm action={saveSubscriptionType}>
+                    <input type="hidden" name="id" value={type.id} />
+                    <TypeFields type={type} services={serviceOptions} idSuffix={type.id} />
+                  </CatalogForm>
+                  <div className="flex justify-end border-t border-border pt-3">
+                    <CatalogAction id={type.id} action={archiveSubscriptionType} label="В архив" />
+                  </div>
+                </div>
+              </CatalogRow>
+            ))}
+          </ul>
+          {rows.length === 0 ? <EmptyState title="Типов пока нет" description="Добавьте первый — форма выше." /> : null}
         </CardContent>
       </Card>
 
@@ -198,8 +210,8 @@ export default async function SubscriptionTypesPage() {
                   <p className="font-medium">{type.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {KIND_LABELS[type.kind] ?? type.kind}
-                    {type.kind === 'lessons' && type.lessons_count ? ` · ${type.lessons_count} занятий` : ''}
-                    {type.kind === 'period' && type.period_days ? ` · ${type.period_days} дней` : ''}
+                    {type.kind === 'lessons' && type.lessons_count ? `, ${type.lessons_count} занятий` : ''}
+                    {type.kind === 'period' && type.period_days ? `, ${type.period_days} дней` : ''}
                   </p>
                 </div>
                 <CatalogAction id={type.id} action={restoreSubscriptionType} label="Восстановить" />

@@ -6,6 +6,8 @@ import { centerTimeZone, dayInZone, formatInTimeZone, isoDayInZone } from '@/lib
 import { label, t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
+import { PeriodNav } from '@/components/ui/period-nav'
+import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export const metadata = { title: 'Моя зарплата — LogoCRM' }
@@ -16,12 +18,6 @@ function shiftMonth(month: string, delta: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
 }
 
-function monthLabel(first: string): string {
-  const raw = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
-    new Date(`${first}T12:00:00Z`),
-  )
-  return raw.charAt(0).toUpperCase() + raw.slice(1)
-}
 
 function calendarDate(day: string, timeZone: string): string {
   return formatInTimeZone(`${day}T12:00:00Z`, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -69,15 +65,13 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
         <p className="text-sm text-muted-foreground">{t('mySalary', 'subtitle')}</p>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <Link href={`/app/my-salary?month=${shiftMonth(month, -1)}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-          {t('finance', 'prevMonth')}
-        </Link>
-        <span className="font-medium">{monthLabel(first)}</span>
-        <Link href={`/app/my-salary?month=${shiftMonth(month, 1)}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-          {t('finance', 'nextMonth')}
-        </Link>
-      </div>
+      <PeriodNav
+        label={monthLabel(first)}
+        prev={`/app/my-salary?month=${shiftMonth(month, -1)}`}
+        next={`/app/my-salary?month=${shiftMonth(month, 1)}`}
+        prevLabel="Предыдущий месяц"
+        nextLabel="Следующий месяц"
+      />
 
       {!teacherId || !mine ? (
         <p className="text-sm text-muted-foreground">{t('mySalary', 'noCard')}</p>

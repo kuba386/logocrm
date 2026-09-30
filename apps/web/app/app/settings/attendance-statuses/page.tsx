@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
+import { CatalogRow } from '@/components/ui/catalog-row'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { CatalogAction } from '@/components/ui/catalog-action'
 import { cn } from '@/lib/utils'
 import { ATTENDANCE_COLORS, attendanceStatusClasses } from '@/lib/attendance'
@@ -139,31 +142,36 @@ export default async function AttendanceStatusesPage() {
           <CardTitle>Список</CardTitle>
           <CardDescription>Всего: {rows.length}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {rows.map((status) => (
-            <div key={status.id} className="space-y-3 rounded-md border border-border p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={cn('rounded px-2 py-0.5 text-xs font-medium', attendanceStatusClasses(status.color).badge)}>
-                  {status.name}
-                </span>
-                <span className="text-xs text-muted-foreground">{status.code}</span>
-                {status.is_default ? <span className="text-xs text-muted-foreground">· по умолчанию</span> : null}
-              </div>
-              <CatalogForm action={saveAttendanceStatus}>
-                <input type="hidden" name="id" value={status.id} />
-                <StatusFields status={status} idSuffix={status.id} />
-              </CatalogForm>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-                {status.is_default ? (
-                  <span />
-                ) : (
-                  <CatalogAction id={status.id} action={setDefaultAttendanceStatus} label="Сделать по умолчанию" />
-                )}
-                <CatalogAction id={status.id} action={archiveAttendanceStatus} label="В архив" />
-              </div>
-            </div>
-          ))}
-          {rows.length === 0 ? <p className="text-sm text-muted-foreground">Статусов пока нет.</p> : null}
+        <CardContent>
+          <ul className="divide-y divide-border">
+            {rows.map((status) => (
+              <CatalogRow
+                key={status.id}
+                title={
+                  <span className={cn('rounded px-2 py-0.5 text-sm font-medium', attendanceStatusClasses(status.color).badge)}>
+                    {status.name}
+                  </span>
+                }
+                badge={status.is_default ? <StatusBadge tone="primary">По умолчанию</StatusBadge> : null}
+              >
+                <div className="space-y-3">
+                  <CatalogForm action={saveAttendanceStatus}>
+                    <input type="hidden" name="id" value={status.id} />
+                    <StatusFields status={status} idSuffix={status.id} />
+                  </CatalogForm>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                    {status.is_default ? (
+                      <span />
+                    ) : (
+                      <CatalogAction id={status.id} action={setDefaultAttendanceStatus} label="Сделать по умолчанию" />
+                    )}
+                    <CatalogAction id={status.id} action={archiveAttendanceStatus} label="В архив" />
+                  </div>
+                </div>
+              </CatalogRow>
+            ))}
+          </ul>
+          {rows.length === 0 ? <EmptyState title="Статусов пока нет" description="Добавьте первый — форма выше." /> : null}
         </CardContent>
       </Card>
 
