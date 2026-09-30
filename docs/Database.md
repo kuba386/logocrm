@@ -575,6 +575,7 @@ end if;
 | `students_brief()` | owner, admin, registrar, finance — центр; parent — свои дети; остальным пусто | ученики без `notes`/`custom_fields`/`source`/`gender`; источник строк `student_balance` и экранов бухгалтера. Зеркало RLS `students` для этих ролей: меняешь политику — меняешь здесь |
 | `payers_brief()` | owner, admin, registrar, finance; остальным пусто | плательщики с контактами, без `notes`/`custom_fields` |
 | `student_debt_problems()` / `student_debt_summary(p_top)` | те же и parent — свои дети; teacher и без сессии пусто | единый источник «должника» (0076): список проблемных детей и итоги по корзинам (invoker над `student_balance` и `students_brief()`); открыты `authenticated` |
+| `student_debt_page()` | owner/admin/registrar — всё; finance — без дат занятий; parent — свои дети без контактов; teacher и без сессии пусто | страница `/app/debts` одним запросом (0078): строки `student_debt_problems()` + контакты `payers_brief()` + последнее/ближайшее занятие; invoker, открыта `authenticated` |
 | `student_debts()` | те же и parent — свои дети; остальным пусто | долг по отметкам без абонемента, строка на ребёнка; `left join` в `student_balance`. Намеренно не скаляр по uuid: у скалярной формы проверка прав строилась на `not (…)`, а у родителя без `membership.payer_id` сравнение давало NULL — и функция отдавала долг любого ребёнка (найдено ревью написанного кода) |
 | `revenue_facts()` | owner, admin, finance; остальным пусто | списанные отметки проведённых занятий — источник `revenue_by_*` |
 | `month_open_lessons_count(date)` | owner, admin, finance; иначе `42501` | тот же запрос, что в `close_month`: planned, без состава или с неотмеченным участником. `close_month` вызывает её — одна копия условия |
@@ -771,9 +772,12 @@ SQL, а не TypeScript по строкам: PostgREST режет ответ п�
 Выровнены
 TypeScript-читатели над `student_balance`: кабинет родителя
 (`dashboard-parent.tsx` — «Долг за занятия» = долг + перерасход и отдельная строка
-про просрочку по абонементу) и колонка «Долг» ассистента в `student_info`. Долг: `/app/debts` делает
-неограниченные выборки уроков и `.in('id', …)` по всем проблемным детям (при
-сотнях детей — длина URL и `max_rows`).
+про просрочку по абонементу) и колонка «Долг» ассистента в `student_info`. `/app/debts` читает всё
+одним вызовом `student_debt_page()` (0078, invoker): строки `student_debt_problems()`,
+контакты из `payers_brief()` (удалённый плательщик — без контакта, `payer_id` сырой),
+последнее занятие (начавшееся, не отменённое, не удалённое) и ближайшее (planned).
+Finance получает строки без дат занятий (ему закрыт `lesson_participants`), parent —
+свои дети без контактов. Раньше страница добирала уроки без лимита и `.in(ids)`.
 
 **Сводка дня и поступления (0073).** Переменная `{payments}` шаблона
 `digest.daily` — «за ДД.ММ: сумма (операций: N)» или «за ДД.ММ: платежей не

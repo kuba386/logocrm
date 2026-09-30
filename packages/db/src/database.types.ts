@@ -5846,6 +5846,28 @@ export type Database = {
           zero_left: boolean
         }[]
       }
+      student_debt_page: {
+        Args: never
+        Returns: {
+          active_subscription_id: string
+          debt_tiyin: number
+          full_name: string
+          last_lesson_at: string
+          lessons_left: number
+          next_lesson_at: string
+          overdrawn_tiyin: number
+          overdue_payer_id: string
+          overdue_payer_name: string
+          overdue_payer_phone: string
+          overdue_tiyin: number
+          payer_id: string
+          payer_name: string
+          payer_phone: string
+          sort_tiyin: number
+          student_id: string
+          zero_left: boolean
+        }[]
+      }
       student_debt_summary: { Args: { p_top?: number }; Returns: Json }
       student_debts: {
         Args: never

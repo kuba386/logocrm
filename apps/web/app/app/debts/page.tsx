@@ -28,6 +28,8 @@ type Row = {
   // NULL, если у ребёнка сразу несколько просроченных абонементов разных
   // плательщиков — тогда автосообщение не пишем никому наугад (0070).
   subscriptionOverduePayerId: string | null
+  overduePayerName: string | null
+  overduePayerPhone: string | null
   lessonsLeft: number | null
   activeSubscriptionId: string | null
   // Исчерпанный остаток без денежных проблем — из SQL (0076), не пересчитывается здесь.
@@ -94,12 +96,12 @@ export default async function DebtsPage({
   const { data: center } = await supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle()
   const timeZone = centerTimeZone(center?.settings)
 
-  // Одним запросом на всех, не по одному студенту — «Список за период —
-  // один запрос на диапазон, не N запросов по дням», CLAUDE.md. Кто «проблемный»
-  // и в каком порядке — решает SQL (student_debt_problems, 0076): тот же источник у
-  // дашборда, ассистента и бота /debts, второй копии правила здесь нет.
+  // Одним запросом на всех (0078): строки student_debt_problems (0076 — тот же источник у
+  // дашборда, ассистента и бота /debts), контакты плательщиков и последнее/ближайшее занятие
+  // собирает SQL. Без .in(ids): сотни uuid в URL упирались в его длину, а прошлые уроки без
+  // лимита резались по max_rows.
   const [{ data: problemRows, error: problemsError }, { data: summaryJson, error: summaryError }] = await Promise.all([
-    supabase.rpc('student_debt_problems'),
+    supabase.rpc('student_debt_page'),
     // Шапка — итоги SQL, а не reduce по строкам: PostgREST режет ответ по max_rows (1000).
     supabase.rpc('student_debt_summary', { p_top: 0 }),
   ])
@@ -120,9 +122,7 @@ export default async function DebtsPage({
   const problematic = problemRows ?? []
   const summary = parseDebtSummary(summaryJson)
 
-  const studentIds = problematic.map((r) => r.student_id)
-
-  if (studentIds.length === 0) {
+  if (problematic.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Долги</h1>
@@ -133,70 +133,28 @@ export default async function DebtsPage({
     )
   }
 
-  const nowIso = new Date().toISOString()
-
-  const [{ data: pastLessons }, { data: futureLessons }] = await Promise.all([
-    supabase
-      .from('lesson_participants')
-      .select('student_id, starts_at')
-      .in('student_id', studentIds)
-      .lt('starts_at', nowIso)
-      .order('starts_at', { ascending: false }),
-    supabase
-      .from('lesson_participants')
-      .select('student_id, starts_at')
-      .in('student_id', studentIds)
-      .eq('status', 'planned')
-      .gte('starts_at', nowIso)
-      .order('starts_at'),
-  ])
-
-  // Плательщик студента и плательщик просроченного абонемента — не всегда
-  // один человек (0070, находка №6) — оба набора id нужны в payerById.
-  const payerIds = [
-    ...new Set(
-      [
-        ...problematic.map((r) => r.payer_id),
-        ...problematic.map((r) => r.overdue_payer_id),
-      ].filter((v): v is string => Boolean(v)),
-    ),
-  ]
-  const { data: payers } = payerIds.length
-    ? await supabase.from('payers').select('id, full_name, phone').in('id', payerIds)
-    : { data: [] }
-
-  const payerById = new Map((payers ?? []).map((p) => [p.id, p]))
-
-  const lastByStudent = new Map<string, string>()
-  for (const row of pastLessons ?? []) {
-    if (row.student_id && !lastByStudent.has(row.student_id)) lastByStudent.set(row.student_id, row.starts_at)
-  }
-  const nextByStudent = new Map<string, string>()
-  for (const row of futureLessons ?? []) {
-    if (row.student_id && !nextByStudent.has(row.student_id)) nextByStudent.set(row.student_id, row.starts_at)
-  }
-
-  let rows: Row[] = problematic.map((r) => {
-    const payer = r.payer_id ? payerById.get(r.payer_id) : undefined
-    return {
-      studentId: r.student_id,
-      studentName: r.full_name || '—',
-      payerId: payer?.id ?? null,
-      payerName: payer?.full_name ?? null,
-      payerPhone: payer?.phone ?? null,
-      debtTiyin: r.debt_tiyin,
-      overdrawnTiyin: r.overdrawn_tiyin,
-      subscriptionOverdueTiyin: r.overdue_tiyin,
-      // NULL — «просрочки нет» либо просрочены абонементы разных плательщиков (0070); значимо только при просрочке.
-      subscriptionOverduePayerId: r.overdue_payer_id ?? null,
-      // Генератор типов объявляет колонки table-функции non-null, в рантайме они бывают NULL.
-      lessonsLeft: (r.lessons_left as number | null) ?? null,
-      activeSubscriptionId: (r.active_subscription_id as string | null) ?? null,
-      zeroLeft: r.zero_left,
-      lastLessonAt: lastByStudent.get(r.student_id) ?? null,
-      nextLessonAt: nextByStudent.get(r.student_id) ?? null,
-    }
-  })
+  // Генератор типов объявляет колонки table-функции non-null, в рантайме они бывают NULL.
+  let rows: Row[] = problematic.map((r) => ({
+    studentId: r.student_id,
+    studentName: r.full_name || '—',
+    // payer_id сырой (0078 Р3): сравнивается с плательщиком просрочки. Контакт есть, только
+    // если плательщик виден и не удалён — payer_name не NULL.
+    payerId: (r.payer_id as string | null) ?? null,
+    payerName: (r.payer_name as string | null) ?? null,
+    payerPhone: (r.payer_phone as string | null) ?? null,
+    debtTiyin: r.debt_tiyin,
+    overdrawnTiyin: r.overdrawn_tiyin,
+    subscriptionOverdueTiyin: r.overdue_tiyin,
+    // NULL — «просрочки нет» либо просрочены абонементы разных плательщиков (0070); значимо только при просрочке.
+    subscriptionOverduePayerId: (r.overdue_payer_id as string | null) ?? null,
+    overduePayerName: (r.overdue_payer_name as string | null) ?? null,
+    overduePayerPhone: (r.overdue_payer_phone as string | null) ?? null,
+    lessonsLeft: (r.lessons_left as number | null) ?? null,
+    activeSubscriptionId: (r.active_subscription_id as string | null) ?? null,
+    zeroLeft: r.zero_left,
+    lastLessonAt: (r.last_lesson_at as string | null) ?? null,
+    nextLessonAt: (r.next_lesson_at as string | null) ?? null,
+  }))
 
   if (filter === 'debt') rows = rows.filter((r) => !r.zeroLeft)
   if (filter === 'zero') rows = rows.filter((r) => r.zeroLeft)
@@ -279,7 +237,6 @@ export default async function DebtsPage({
             // плательщиков — уточнить, кому писать, тогда может только
             // человек, а не эта карточка.
             const overdueMismatch = row.subscriptionOverdueTiyin > 0 && !subscriptionOverdueAddressable(row)
-            const overduePayer = row.subscriptionOverduePayerId ? payerById.get(row.subscriptionOverduePayerId) : undefined
             return (
               <Card key={row.studentId}>
                 <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
@@ -294,7 +251,9 @@ export default async function DebtsPage({
                     {overdueMismatch ? (
                       <p className="text-xs text-warning">
                         Абонемент оформлен на{' '}
-                        {overduePayer ? `${overduePayer.full_name}${overduePayer.phone ? ` · ${formatKgPhone(overduePayer.phone)}` : ''}` : 'другого плательщика'}
+                        {row.overduePayerName
+                          ? `${row.overduePayerName}${row.overduePayerPhone ? ` · ${formatKgPhone(row.overduePayerPhone)}` : ''}`
+                          : 'другого плательщика'}
                         — писать текущему плательщику ребёнка про эту сумму нельзя.
                       </p>
                     ) : null}
