@@ -58,7 +58,12 @@ function problems(row: Row): Array<{ label: string; amount: number | null; tone:
 // должен ТОТ ЖЕ человек, чей это WhatsApp — иначе требование денег уйдёт
 // не тому плательщику (архитектор-ревью 0070, находка №6).
 function subscriptionOverdueAddressable(row: Row): boolean {
-  return row.subscriptionOverdueTiyin > 0 && row.subscriptionOverduePayerId === row.payerId
+  // NULL === NULL — не совпадение: NULL у просрочки значит «плательщиков несколько» (0070).
+  return (
+    row.subscriptionOverdueTiyin > 0 &&
+    row.payerId !== null &&
+    row.subscriptionOverduePayerId === row.payerId
+  )
 }
 
 function whatsappMessage(row: Row): string {

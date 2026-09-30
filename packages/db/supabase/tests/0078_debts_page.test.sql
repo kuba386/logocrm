@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(20);
+select plan(21);
 
 
 -- 1. Каталог --------------------------------------------------------------------------------------
@@ -158,14 +158,16 @@ reset role;
 select public.tests_claims(null, null);
 
 
--- ee01: прошлое посещённое ff01 (-2 дня) — «последнее». Отменённое и удалённое позже него и
--- будущие отменённое/удалённое раньше planned ff13 (+1 день) не должны победить.
+-- ee01: прошлое посещённое ff01 (-2 дня) — «последнее». Отменённое (-1 день) и удалённое
+-- (-12 часов) позже него и будущие отменённое/удалённое раньше planned ff13 (+1 день) не должны победить.
+-- ee03: ff16 идёт прямо сейчас — это «последнее», а не «ближайшее» (0078 Р4).
 insert into public.lessons (id, center_id, teacher_id, service_id, student_id, status, starts_at, ends_at, deleted_at) values
   ('78000000-0000-0000-0000-00000000ff11','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','cancelled', date_trunc('hour', now()) - interval '1 day',  date_trunc('hour', now()) - interval '1 day'  + interval '45 minutes', null),
   ('78000000-0000-0000-0000-00000000ff12','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','planned',   date_trunc('hour', now()) - interval '12 hours', date_trunc('hour', now()) - interval '12 hours' + interval '45 minutes', now()),
   ('78000000-0000-0000-0000-00000000ff13','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','planned',   date_trunc('hour', now()) + interval '1 day',  date_trunc('hour', now()) + interval '1 day'  + interval '45 minutes', null),
   ('78000000-0000-0000-0000-00000000ff14','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','cancelled', date_trunc('hour', now()) + interval '12 hours', date_trunc('hour', now()) + interval '12 hours' + interval '45 minutes', null),
-  ('78000000-0000-0000-0000-00000000ff15','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','planned',   date_trunc('hour', now()) + interval '6 hours',  date_trunc('hour', now()) + interval '6 hours'  + interval '45 minutes', now());
+  ('78000000-0000-0000-0000-00000000ff15','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb01','78000000-0000-0000-0000-00000000ee01','planned',   date_trunc('hour', now()) + interval '6 hours',  date_trunc('hour', now()) + interval '6 hours'  + interval '45 minutes', now()),
+  ('78000000-0000-0000-0000-00000000ff16','78000000-0000-0000-0000-0000000000c1','78000000-0000-0000-0000-00000000aa01','78000000-0000-0000-0000-00000000bb03','78000000-0000-0000-0000-00000000ee03','planned',   now() - interval '10 minutes', now() + interval '35 minutes', null);
 
 -- Снимки под сессией каждой роли; утверждения — потом, от postgres.
 create temporary table t_page (
@@ -183,14 +185,14 @@ begin
   perform public.tests_claims(p_user, p_center);
   execute 'set local role authenticated';
   insert into t_page
-    select p_who, row_number() over (), x.student_id, x.payer_id, x.payer_name, x.payer_phone,
+    select p_who, x.ordinality, x.student_id, x.payer_id, x.payer_name, x.payer_phone,
            x.debt_tiyin, x.overdrawn_tiyin, x.overdue_tiyin, x.overdue_payer_id, x.overdue_payer_name,
            x.zero_left, x.sort_tiyin, x.last_lesson_at, x.next_lesson_at
-      from public.student_debt_page() x;
+      from public.student_debt_page() with ordinality as x;
   if p_who = 'owner' then
     insert into t_prob
-      select row_number() over (), y.student_id, y.debt_tiyin, y.overdrawn_tiyin, y.overdue_tiyin, y.zero_left, y.sort_tiyin
-        from public.student_debt_problems() y;
+      select y.ordinality, y.student_id, y.debt_tiyin, y.overdrawn_tiyin, y.overdue_tiyin, y.zero_left, y.sort_tiyin
+        from public.student_debt_problems() with ordinality as y;
   end if;
   execute 'reset role';
   perform public.tests_claims(null, null);
@@ -233,7 +235,12 @@ select is((select count(*)::int from t_page where who = 'owner'
 select is(
   (select last_lesson_at from t_page where who = 'owner' and student_id = '78000000-0000-0000-0000-00000000ee01'),
   date_trunc('hour', now()) - interval '2 days',
-  'Последнее — посещённое 2 дня назад: отменённое вчера и удалённое сегодня не считаются');
+  'Последнее — посещённое 2 дня назад: отменённое сутки назад и удалённое 12 часов назад не считаются');
+
+select is(
+  (select (last_lesson_at = now() - interval '10 minutes') and next_lesson_at is null
+     from t_page where who = 'owner' and student_id = '78000000-0000-0000-0000-00000000ee03'),
+  true, 'Идущее сейчас занятие — «последнее», а не «ближайшее»');
 
 select is(
   (select next_lesson_at from t_page where who = 'owner' and student_id = '78000000-0000-0000-0000-00000000ee01'),
@@ -287,7 +294,8 @@ select set_eq(
   'Родитель — только свои дети');
 
 select ok(
-  (select bool_and(payer_name is null and payer_phone is null and overdue_payer_name is null)
+  (select count(*) > 0
+          and bool_and(payer_name is null and payer_phone is null and overdue_payer_name is null)
           and bool_or(last_lesson_at is not null)
      from t_page where who = 'parent'),
   'Родителю контакты не отдаются (payers_brief ему пуст), даты своих детей — да');
