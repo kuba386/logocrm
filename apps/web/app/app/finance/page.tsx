@@ -7,6 +7,8 @@ import { canPayments, isFinance } from '@/lib/roles'
 import { label, t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
+import { PeriodNav } from '@/components/ui/period-nav'
+import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm } from './finance-forms'
@@ -30,13 +32,6 @@ function shiftMonth(month: string, delta: number): string {
 }
 
 /** «сентябрь 2026 г.» — полдень UTC, чтобы пояс не сдвинул месяц. */
-function monthLabel(first: string): string {
-  const raw = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
-    new Date(`${first}T12:00:00Z`),
-  )
-  // «сентябрь 2026 г.» → «Сентябрь 2026 г.»: CSS capitalize сделал бы и «Г.».
-  return raw.charAt(0).toUpperCase() + raw.slice(1)
-}
 
 function calendarDate(day: string, timeZone: string): string {
   return formatInTimeZone(`${day}T12:00:00Z`, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -127,15 +122,13 @@ export default async function FinancePage({
           ))}
         </nav>
         {tab !== 'installments' ? (
-          <div className="flex items-center gap-2 text-sm">
-            <Link href={`/app/finance?tab=${tab}&month=${shiftMonth(month, -1)}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              {t('finance', 'prevMonth')}
-            </Link>
-            <span className="font-medium">{monthLabel(first)}</span>
-            <Link href={`/app/finance?tab=${tab}&month=${shiftMonth(month, 1)}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-              {t('finance', 'nextMonth')}
-            </Link>
-          </div>
+          <PeriodNav
+            label={monthLabel(first)}
+            prev={`/app/finance?tab=${tab}&month=${shiftMonth(month, -1)}`}
+            next={`/app/finance?tab=${tab}&month=${shiftMonth(month, 1)}`}
+            prevLabel="Предыдущий месяц"
+            nextLabel="Следующий месяц"
+          />
         ) : null}
       </div>
 
