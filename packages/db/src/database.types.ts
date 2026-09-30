@@ -5127,6 +5127,7 @@ export type Database = {
       }
       export_center_info: { Args: never; Returns: Json }
       export_center_lookups: { Args: never; Returns: Json }
+      export_center_predicate: { Args: { p_table: string }; Returns: string }
       export_center_table: { Args: { p_table: string }; Returns: Json }
       export_center_tables: {
         Args: never

@@ -1532,7 +1532,13 @@ WhatsApp.
 `export_center_table(p_table)` — по одной таблице за вызов, не
 `jsonb_object_agg` по всему центру разом (упёрлось бы в
 `statement_timeout` у центра с историей за пару лет); веб собирает файл,
-обходя `export_center_tables()`. `export_center_audit(from, to)` —
+обходя `export_center_tables()`. Какие строки — `export_center_predicate(p_table)`
+(0080, без грантов): для `exercise_library` это ещё платформенные упражнения
+(`center_id is null`), на которые ссылаются `homework_exercises` центра, включая
+удалённые, — иначе в архиве ДЗ висели бы ссылки без названий. Тем же предикатом
+`record_center_export` считает строки в `center.exported`, так что счётчик
+совпадает с файлом. При будущем импорте архива такие строки нужно пропускать.
+`export_center_audit(from, to)` —
 `audit_log` отдельно, за диапазон дат, с вычеркнутыми строками по
 `invitations`/`lesson_voice_requests` (их `old_data`/`new_data` несут те
 же секреты, что и сами таблицы). Ни у одной функции нет параметра
