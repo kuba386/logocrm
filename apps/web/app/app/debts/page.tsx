@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { formatKgPhone, formatSom, parseDebtSummary, whatsappNumber } from '@logocrm/core'
+import {
+  debtWhatsappMessage,
+  formatKgPhone,
+  formatSom,
+  parseDebtSummary,
+  subscriptionOverdueAddressable,
+  whatsappNumber,
+} from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 import { centerTimeZone, dayInZone } from '@/lib/timezone'
@@ -50,27 +57,6 @@ function problems(row: Row): Array<{ label: string; amount: number | null; tone:
   }
   if (list.length === 0) list.push({ label: 'Остаток исчерпан', amount: null, tone: 'warning' })
   return list
-}
-
-// Просрочку абонемента упоминаем в сообщении, только если платить по нему
-// должен ТОТ ЖЕ человек, чей это WhatsApp — иначе требование денег уйдёт
-// не тому плательщику (архитектор-ревью 0070, находка №6).
-function subscriptionOverdueAddressable(row: Row): boolean {
-  return row.subscriptionOverdueTiyin > 0 && row.subscriptionOverduePayerId === row.payerId
-}
-
-function whatsappMessage(row: Row): string {
-  const parts: string[] = []
-  if (row.debtTiyin > 0) parts.push(`долг за занятия ${formatSom(row.debtTiyin)}`)
-  if (row.overdrawnTiyin > 0) parts.push(`перерасход по абонементу ${formatSom(row.overdrawnTiyin)}`)
-  if (subscriptionOverdueAddressable(row)) {
-    parts.push(`просроченный платёж за абонемент ${formatSom(row.subscriptionOverdueTiyin)}`)
-  }
-
-  if (parts.length > 0) {
-    return `Здравствуйте! У ${row.studentName} ${parts.join(' и ')} в LogoCRM. Пожалуйста, оплатите при возможности.`
-  }
-  return `Здравствуйте! У ${row.studentName} закончился абонемент. Хотите продлить?`
 }
 
 export default async function DebtsPage({
@@ -272,6 +258,8 @@ export default async function DebtsPage({
           {rows.map((row) => {
             const rowProblems = problems(row)
             const waNumber = whatsappNumber(row.payerPhone)
+            // null — сказать текущему плательщику нечего (только чужая просрочка): кнопки нет.
+            const waText = debtWhatsappMessage(row)
             // Просрочка есть, но платить должен не тот, чей контакт на
             // карточке — молча звать текущего плательщика ребёнка нельзя
             // (0070, находка №6). subscriptionOverduePayerId = null, если у
@@ -317,9 +305,9 @@ export default async function DebtsPage({
                         {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
                       </span>
                     ))}
-                    {waNumber ? (
+                    {waNumber && waText ? (
                       <a
-                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(whatsappMessage(row))}`}
+                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`}
                         target="_blank"
                         rel="noreferrer"
                         className={buttonVariants({ variant: 'outline', size: 'sm' })}
