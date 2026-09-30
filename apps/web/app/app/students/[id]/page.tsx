@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { formatKgPhone, whatsappNumber } from '@logocrm/core'
+import { formatKgPhone, isSpecialistOnly, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
@@ -586,7 +586,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         .order('assigned_at', { ascending: false }),
       supabase
         .from('exercise_library')
-        .select('id, title, sound')
+        .select('id, title, sound, tags')
         .eq('is_active', true)
         .is('deleted_at', null)
         .order('title'),
@@ -732,7 +732,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
           .map((exerciseId) => exerciseTitleById.get(exerciseId))
           .filter((t): t is string => Boolean(t)),
       })),
-      exercises: (exerciseRows ?? []).map((e) => ({ id: e.id, title: e.title, sound: e.sound })),
+      // «только специалист» в ДЗ не даётся — отказ в базе (0081), здесь только не предлагаем.
+      // Названия уже выданных (exerciseTitleById) — из полного списка.
+      exercises: (exerciseRows ?? [])
+        .filter((e) => !isSpecialistOnly(e.tags))
+        .map((e) => ({ id: e.id, title: e.title, sound: e.sound })),
       notes: (noteRows ?? []).map((n) => ({
         id: n.id,
         lessonId: n.lesson_id,
