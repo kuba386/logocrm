@@ -47,7 +47,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
         : `К карточке «${payer.full_name}» пока не привязан ни один ребёнок — администратор добавит детей на карточке ученика.`
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Мои дети</h1>
+        <h1 className="page-title">Мои дети</h1>
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">{text}</CardContent>
         </Card>
@@ -124,7 +124,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Мои дети</h1>
+      <h1 className="page-title">Мои дети</h1>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {(children ?? []).map((child) => {

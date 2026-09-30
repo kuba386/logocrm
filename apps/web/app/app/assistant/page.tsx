@@ -26,7 +26,7 @@ export default async function AssistantPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('assistant', 'title')}</h1>
+        <h1 className="page-title">{t('assistant', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('assistant', 'subtitle')}</p>
       </div>
       {configured ? <AssistantForm quota={quota} intents={intents} /> : <FormNotice message={t('assistant', 'notConfigured')} />}

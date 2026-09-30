@@ -4,40 +4,36 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
-/**
- * Разделы настроек. До этого из шапки вела одна ссылка — на сотрудников,
- * а кабинеты и услуги существовали только по прямому адресу.
- */
-const SECTIONS = [
-  { href: '/app/settings/staff', label: 'Сотрудники' },
-  { href: '/app/settings/rooms', label: 'Кабинеты' },
-  { href: '/app/settings/services', label: 'Услуги' },
-  { href: '/app/settings/attendance-statuses', label: 'Статусы посещения' },
-  { href: '/app/settings/subscription-types', label: 'Типы абонементов' },
-  { href: '/app/settings/teacher-rates', label: 'Ставки' },
-  { href: '/app/settings/notifications', label: 'Уведомления' },
-  { href: '/app/settings/plan', label: 'Тариф' },
-]
+export type SettingsSection = { href: string; label: string }
 
-export function SettingsNav() {
+export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
   const pathname = usePathname()
 
+  if (sections.length < 2) return null
+
   return (
-    <nav className="flex flex-wrap gap-1 border-b border-border">
-      {SECTIONS.map((section) => (
-        <Link
-          key={section.href}
-          href={section.href}
-          className={cn(
-            'border-b-2 px-3 pb-2 text-sm font-medium transition-colors',
-            pathname.startsWith(section.href)
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {section.label}
-        </Link>
-      ))}
+    <nav
+      aria-label="Разделы настроек"
+      className="-mx-6 flex gap-1 overflow-x-auto border-b border-border px-6 sm:mx-0 sm:flex-wrap sm:px-0"
+    >
+      {sections.map((section) => {
+        const active = pathname.startsWith(section.href)
+        return (
+          <Link
+            key={section.href}
+            href={section.href}
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'shrink-0 whitespace-nowrap border-b-2 px-3 pb-2 text-sm font-medium transition-colors',
+              active
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {section.label}
+          </Link>
+        )
+      })}
     </nav>
   )
 }

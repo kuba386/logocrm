@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ICONS } from './nav-icons'
+import { isActiveLink } from './sidebar-nav'
 
 /**
  * Только для teacher/parent (layout.tsx решает, кому показывать) — у них
@@ -19,7 +20,7 @@ export function BottomTabs({ links }: { links: { href: string; label: string }[]
     <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card sm:hidden">
       {links.map((link) => {
         const Icon = NAV_ICONS[link.href]
-        const active = link.href === '/app' ? pathname === link.href : pathname === link.href || pathname.startsWith(`${link.href}/`)
+        const active = isActiveLink(pathname, link.href)
         return (
           <Link
             key={link.href}

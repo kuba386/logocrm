@@ -101,7 +101,7 @@ export default async function FinancePage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('finance', 'title')}</h1>
+        <h1 className="page-title">{t('finance', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('finance', 'subtitle')}</p>
         {/* Выгрузка — только can_finance (0058): регистратор экран видит, файлы не выносит. */}
         {isFinance(role) ? (

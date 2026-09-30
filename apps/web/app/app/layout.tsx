@@ -7,7 +7,7 @@ import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
 import { cn } from '@/lib/utils'
 import { MobileNav } from '@/app/app/mobile-nav'
-import { SidebarNav } from '@/app/app/sidebar-nav'
+import { SidebarNav, type NavGroup } from '@/app/app/sidebar-nav'
 import { BottomTabs } from '@/app/app/bottom-tabs'
 import { PlanBanner } from '@/app/app/plan-banner'
 import { GlobalSearch } from '@/app/app/global-search'
@@ -80,39 +80,53 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const canSeeContacts = isAdmin || role === 'registrar'
   const timeZone = centerTimeZone(center?.settings)
 
-  const navLinks = [
-    { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
-    { href: '/app/students', label: 'Ученики', show: true },
-    { href: '/app/library', label: 'Библиотека', show: role === 'teacher' || isAdmin },
-    { href: '/app/payers', label: 'Плательщики', show: payments },
-    { href: '/app/groups', label: 'Группы', show: frontDesk },
-    { href: '/app/debts', label: 'Долги', show: payments },
-    { href: '/app/finance', label: 'Финансы', show: payments },
-    { href: '/app/salary', label: 'Зарплата', show: finance },
-    // Выгрузки — тем же, кому положены деньги (can_finance, 0058); регистратор
-    // видит /app/finance, но файлы не выносит — решение владельца 24.09.2026.
-    { href: '/app/reports', label: 'Отчёты', show: finance },
-    // Ассистент (0064) — всем сотрудникам (В3); гейт по роли — assistant_begin.
-    { href: '/app/assistant', label: 'Ассистент', show: role !== 'parent' },
-    { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
-    { href: '/app/notifications', label: 'Уведомления', show: isAdmin },
-    { href: '/app/funnel', label: 'Воронка', show: isAdmin },
-    { href: '/app/bookings', label: 'Заявки', show: frontDesk },
-    // Telegram привязывает каждый себе сам — в том числе родитель и
-    // специалист, которым настройки центра не показываются.
-    { href: '/app/telegram', label: 'Telegram', show: true },
-    { href: '/app/settings/staff', label: 'Настройки', show: isAdmin || finance },
-    { href: '/admin', label: 'Платформа', show: Boolean(isPlatformAdmin) },
-  ].filter((link) => link.show)
+  // Пункт показан только тем, кого страница пускает (редиректы в page.tsx):
+  // мёртвый пункт хуже отсутствующего. Отказ всё равно приходит из базы.
+  const settingsHref = isAdmin ? '/app/settings/staff' : finance ? '/app/settings/teacher-rates' : null
+  const groups: NavGroup[] = [
+    {
+      links: [
+        { href: '/app', label: 'Дашборд', show: true },
+        { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
+        { href: '/app/students', label: 'Ученики', show: true },
+        { href: '/app/groups', label: 'Группы', show: isAdmin },
+        { href: '/app/bookings', label: 'Заявки', show: frontDesk },
+        { href: '/app/library', label: 'Библиотека', show: role === 'teacher' || isAdmin },
+      ],
+    },
+    {
+      label: 'Деньги',
+      links: [
+        { href: '/app/payers', label: 'Плательщики', show: isAdmin },
+        { href: '/app/debts', label: 'Долги', show: isAdmin },
+        { href: '/app/finance', label: 'Финансы', show: payments },
+        { href: '/app/salary', label: 'Зарплата', show: finance },
+        { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
+        // Выгрузки — тем же, кому положены деньги (can_finance, 0058); регистратор
+        // видит /app/finance, но файлы не выносит — решение владельца 24.09.2026.
+        { href: '/app/reports', label: 'Отчёты', show: finance },
+      ],
+    },
+    {
+      label: 'Центр',
+      links: [
+        // Ассистент (0064) — всем сотрудникам (В3); гейт по роли — assistant_begin.
+        { href: '/app/assistant', label: 'Ассистент', show: role !== 'parent' },
+        { href: '/app/notifications', label: 'Журнал отправок', show: isAdmin },
+        { href: '/app/funnel', label: 'Воронка', show: isAdmin },
+        // Telegram привязывает каждый себе сам — в том числе родитель и
+        // специалист, которым настройки центра не показываются.
+        { href: '/app/telegram', label: 'Telegram', show: true },
+        { href: settingsHref ?? '', label: 'Настройки', show: settingsHref !== null },
+        { href: '/admin', label: 'Платформа', show: Boolean(isPlatformAdmin) },
+      ],
+    },
+  ]
+    .map((group) => ({ ...group, links: group.links.filter((link) => link.show) }))
+    .filter((group) => group.links.length > 0)
 
   // Нижние вкладки (Stitch: specialist-day-mobile.png, parent-cabinet-mobile.png)
-  // только там, где разделов мало — у admin/finance/registrar их 5-7,
-  // в таб-бар не влезут, им гамбургер. «Отметки» из макетов не заведена:
-  // у отметки посещения нет отдельного роута (она в расписании,
-  // docs/Roadmap/stages.md этап 4). «Задания» — теперь /app/library
-  // (этап 7a). Дашборд ролей — уже отдельная страница с своим
-  // содержимым (dashboard-teacher.tsx/dashboard-parent.tsx), не дубль
-  // расписания, поэтому явная вкладка на него, хотя в макете её нет.
+  // только там, где разделов мало; остальное — в меню.
   const bottomTabs =
     role === 'teacher'
       ? [
@@ -130,91 +144,57 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           ]
         : null
 
-  const menuLinks = bottomTabs
-    ? navLinks.filter((link) => !bottomTabs.some((tab) => tab.href === link.href))
-    : navLinks
+  const planLabel = limits ? limits.planName : center?.plan ? `тариф ${center.plan}` : null
+  const centerHeader = (
+    <Link href="/app" className="block min-w-0 leading-tight">
+      <span className="block truncate font-display text-sm font-medium">{center?.name ?? 'LogoCRM'}</span>
+      <span className="block truncate text-xs text-muted-foreground">
+        {roleLabel(role)}
+        {planLabel ? `, ${planLabel}` : ''}
+      </span>
+    </Link>
+  )
+  const accountActions = (
+    <>
+      {(centersCount ?? 0) > 1 ? (
+        <Link href="/select-center" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+          Сменить центр
+        </Link>
+      ) : null}
+      <form action={signOut}>
+        <Button type="submit" variant="outline" size="sm" className="w-full">
+          Выйти
+        </Button>
+      </form>
+    </>
+  )
 
   return (
     <div className="flex min-h-screen">
       {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card sm:flex">
-        <Link href="/app" className="block border-b border-border p-4 leading-tight">
-          <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
-          <span className="block text-xs text-muted-foreground">
-            {roleLabel(role)}
-            {limits ? ` · ${limits.planName}` : center?.plan ? ` · тариф ${center.plan}` : ''}
-          </span>
-        </Link>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-card sm:flex">
+        <div className="border-b border-border p-4">{centerHeader}</div>
 
         {canSearch ? <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} /> : null}
 
-        <SidebarNav links={navLinks} />
+        <SidebarNav groups={groups} />
 
-        <div className="flex flex-col gap-2 border-t border-border p-3">
-          {(centersCount ?? 0) > 1 ? (
-            <Link
-              href="/select-center"
-              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-            >
-              Сменить центр
-            </Link>
-          ) : null}
-
-          <form action={signOut}>
-            <Button type="submit" variant="outline" size="sm" className="w-full">
-              Выйти
-            </Button>
-          </form>
-        </div>
+        <div className="flex flex-col gap-2 border-t border-border p-3">{accountActions}</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Мобильный/планшетный хедер: сайдбар выше скрыт, здесь гамбургер. */}
-        <header className="relative border-b border-border bg-card sm:hidden">
-          <div className="container flex h-16 items-center justify-between gap-4">
-            <Link href="/app" className="leading-tight">
-              <span className="block font-semibold">{center?.name ?? 'LogoCRM'}</span>
-              <span className="block text-xs text-muted-foreground">
-                {roleLabel(role)}
-                {limits ? ` · ${limits.planName}` : center?.plan ? ` · тариф ${center.plan}` : ''}
-              </span>
-            </Link>
-
-            <div className="flex items-center gap-2">
-              {(centersCount ?? 0) > 1 ? (
-                <Link
-                  href="/select-center"
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  Сменить центр
-                </Link>
-              ) : null}
-
-              <form action={signOut}>
-                <Button type="submit" variant="outline" size="sm">
-                  Выйти
-                </Button>
-              </form>
-
-              {/* Вкладки внизу не заменяют меню целиком: разделы, которых в
-                  них нет (Telegram у родителя и специалиста, Библиотека у
-                  родителя), остаются в гамбургере — иначе привязать бота с
-                  телефона неоткуда. */}
-              {menuLinks.length > 0 ? <MobileNav links={menuLinks} /> : null}
-            </div>
+        <header className="sticky top-0 z-30 border-b border-border bg-card sm:hidden">
+          <div className="container flex h-14 items-center gap-2">
+            <MobileNav groups={groups} header={centerHeader} footer={accountActions} />
+            {centerHeader}
           </div>
+          {/* Поиск — второй строкой той же шапки: в первой места нет. */}
+          {canSearch ? <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} compact /> : null}
         </header>
-
-        {/* Мобильный поиск — строкой под хедером: в самом хедере места нет. */}
-        {canSearch ? (
-          <div className="border-b border-border bg-card sm:hidden">
-            <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} compact />
-          </div>
-        ) : null}
 
         <PlanBanner limits={limits} />
 
-        <main className={cn('container flex-1 py-8', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
+        <main className={cn('container flex-1 py-6 sm:py-8', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
           {children}
         </main>
 

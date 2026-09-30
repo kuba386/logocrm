@@ -136,7 +136,7 @@ export default async function SubscriptionTypesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Типы абонементов</h1>
+        <h1 className="page-title">Типы абонементов</h1>
         <p className="text-sm text-muted-foreground">
           Что администратор продаёт на карточке ученика. Цена — в сомах, в базе хранится в тыйынах.
         </p>

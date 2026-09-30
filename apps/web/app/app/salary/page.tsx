@@ -77,7 +77,7 @@ export default async function SalaryPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('salary', 'title')}</h1>
+        <h1 className="page-title">{t('salary', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('salary', 'subtitle')}</p>
         <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">
           {t('reports', 'title')} →
