@@ -7,6 +7,7 @@ export {
   type DebtSummary,
   type DebtTopRow,
 } from './debt-summary'
+export { debtWhatsappMessage, subscriptionOverdueAddressable, type DebtMessageRow } from './debt-message'
 export { ageYears, ageParts, ageLabel, type Age } from './age'
 export {
   generateSeriesDates,
