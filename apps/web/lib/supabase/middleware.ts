@@ -40,7 +40,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  const isPublic = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+  // '/' — лендинг для гостей; только точное совпадение, иначе публичным стал бы весь сайт.
+  const isPublic =
+    pathname === '/' || PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
 
   if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone()
