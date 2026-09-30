@@ -322,6 +322,7 @@ select set_eq(
     ('student_debts()'),
     ('student_debt_problems()'),
     ('student_debt_summary(integer)'),
+    ('student_debt_page()'),
     ('student_subscriptions_overdue()'),
     ('revenue_facts()'),
     ('month_open_lessons_count(date)'),

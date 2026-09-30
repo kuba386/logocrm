@@ -2,8 +2,9 @@ import { formatSom } from './money'
 
 /**
  * Выбор текста WhatsApp для карточки /app/debts. Денег не считает: все суммы и
- * признак zeroLeft — поля RPC student_debt_problems (0076), здесь только выбор
- * фразы. Вынесено из страницы, чтобы покрыть Vitest.
+ * признак zeroLeft — поля RPC student_debt_page (0078; строки — из
+ * student_debt_problems, 0076), здесь только выбор фразы. Вынесено из
+ * страницы, чтобы покрыть Vitest.
  */
 export type DebtMessageRow = {
   studentName: string
