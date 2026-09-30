@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
 import { AddStudentDialog } from './add-student-dialog'
 import { StudentsTable, type StudentRowView } from './students-table'
 
@@ -126,26 +127,20 @@ export default async function StudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="page-title">Ученики</h1>
-          <p className="text-sm text-muted-foreground">
-            {isAdmin
-              ? 'Контакты родителей — на карточке плательщика.'
-              : isFinance
-                ? 'Ученики центра: ФИО, статус, специалист, плательщик — без заметок.'
-                : 'Вам видны дети, закреплённые за вами.'}
-          </p>
-        </div>
-        {isAdmin ? <AddStudentDialog teachers={teacherOptions} /> : null}
-      </div>
+      <PageHeader
+        title="Ученики"
+        description={`Всего: ${students.length}. ${
+          isAdmin
+            ? 'Контакты родителей — на карточке плательщика.'
+            : isFinance
+              ? 'ФИО, статус, специалист и плательщик — без заметок.'
+              : 'Здесь дети, закреплённые за вами.'
+        }`}
+        actions={isAdmin ? <AddStudentDialog teachers={teacherOptions} /> : null}
+      />
 
       <Card>
-        <CardHeader>
-          <CardTitle>Список</CardTitle>
-          <CardDescription>Всего: {students.length}</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {conclusionsError ? (
             <p role="alert" className="mb-3 text-sm text-destructive">
               {conclusionsError}

@@ -20,6 +20,12 @@ export const STUDENT_STATUS_CLASSES: Record<string, string> = {
   archived: 'bg-muted text-muted-foreground line-through',
 }
 
+export const STUDENT_STATUS_TONES: Record<string, 'primary' | 'neutral' | 'warning'> = {
+  active: 'primary',
+  paused: 'warning',
+  archived: 'neutral',
+}
+
 export function statusLabel(status: string | null | undefined): string {
   if (!status) return '—'
   return STUDENT_STATUS_LABELS[status] ?? status

@@ -33,6 +33,14 @@ export function dayInZone(iso: string | Date, timeZone: string): string {
   return formatInTimeZone(iso, timeZone, { day: 'numeric', month: 'long' })
 }
 
+/**
+ * «5 октября» для даты без времени (ГГГГ-ММ-ДД из колонки date): пояс не
+ * нужен — это уже календарный день, полдень UTC не даёт ему съехать.
+ */
+export function calendarDay(day: string, options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' }): string {
+  return formatInTimeZone(`${day.slice(0, 10)}T12:00:00Z`, 'UTC', options)
+}
+
 /** Календарный день ГГГГ-ММ-ДД в поясе центра. */
 export function isoDayInZone(iso: string | Date, timeZone: string): string {
   const date = iso instanceof Date ? iso : new Date(iso)
