@@ -1,5 +1,6 @@
 'use client'
 
+import { calendarDay } from '@/lib/timezone'
 import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -141,7 +142,7 @@ export function ArticulationPanel({
           {entry.collectedAt ? (
             <div>
               <dt className="text-muted-foreground">Дата осмотра</dt>
-              <dd>{entry.collectedAt}</dd>
+              <dd>{calendarDay(entry.collectedAt, { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
             </div>
           ) : null}
           {ARRAY_FIELDS.filter((f) => (entry[f.name] as string[] | null)?.length).map((f) => (

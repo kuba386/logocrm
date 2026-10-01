@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { label, t } from '@/lib/messages'
-import { formatInTimeZone } from '@/lib/timezone'
+import { formatInTimeZone, monthLabel } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { ConfirmForm, RejectForm } from './claim-forms'
 import { CreateCenterForm } from './create-center-form'
@@ -262,7 +262,7 @@ export default async function AdminPage() {
                 <TableBody>
                   {summary.revenue.map((row) => (
                     <TableRow key={row.month}>
-                      <TableCell>{row.month}</TableCell>
+                      <TableCell>{/^\d{4}-\d{2}/.test(row.month) ? monthLabel(`${row.month.slice(0, 7)}-01`) : row.month}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.count}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatSom(row.total_tiyin)}</TableCell>
                     </TableRow>

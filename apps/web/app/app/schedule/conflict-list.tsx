@@ -1,6 +1,7 @@
 'use client'
 
 import { conflictLabel, type AppError } from '@/lib/errors'
+import { calendarDay } from '@/lib/timezone'
 
 /**
  * Единственный способ показать накладку. Разбор ошибки живёт в lib/errors.ts,
@@ -22,7 +23,7 @@ export function ConflictList({ error }: { error: AppError }) {
         <ul className="space-y-1 text-xs">
           {error.conflicts.map((day) => (
             <li key={`${day.day}-${day.starts_at}`}>
-              <span className="font-medium">{new Date(day.starts_at).toLocaleDateString('ru-RU')}</span>
+              <span className="font-medium">{calendarDay(day.day)}</span>
               {': '}
               {day.conflicts.map((conflict) => conflictLabel(conflict)).join('; ')}
             </li>

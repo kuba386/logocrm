@@ -214,7 +214,7 @@ export function MonthlyReportPanel({
             disabled={pending || (alreadySent && (!canResend || !confirmResend))}
             onClick={send}
           >
-            {pending ? 'Отправляю…' : alreadySent ? 'Отправить повторно' : 'Отправить родителю'}
+            {pending ? 'Отправляем…' : alreadySent ? 'Отправить повторно' : 'Отправить родителю'}
           </Button>
         </div>
       ) : null}

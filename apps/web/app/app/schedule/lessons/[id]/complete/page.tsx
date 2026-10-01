@@ -124,7 +124,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
     supabase.from('students').select('id, full_name, birth_date').in('id', studentIds),
     supabase
       .from('attendance_statuses')
-      .select('id, code, name, is_default')
+      .select('id, code, name, color, is_default')
       .is('deleted_at', null)
       .order('sort'),
     supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
@@ -206,7 +206,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
       <CompleteLessonForm
         lessonId={lessonId}
         students={students_}
-        attendanceStatuses={(attendanceStatuses ?? []).map((s) => ({ code: s.code, name: s.name }))}
+        attendanceStatuses={(attendanceStatuses ?? []).map((s) => ({ code: s.code, name: s.name, color: s.color }))}
         exercises={exerciseOptions}
         botName={process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? null}
       />

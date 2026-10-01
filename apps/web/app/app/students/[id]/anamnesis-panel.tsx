@@ -1,5 +1,6 @@
 'use client'
 
+import { calendarDay } from '@/lib/timezone'
 import { useActionState, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,7 +80,7 @@ export function AnamnesisPanel({
           {entry.collectedAt ? (
             <div>
               <dt className="text-muted-foreground">Дата сбора</dt>
-              <dd>{entry.collectedAt}</dd>
+              <dd>{calendarDay(entry.collectedAt, { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
             </div>
           ) : null}
           {TEXT_FIELDS.filter((f) => entry[f.name]).map((f) => (

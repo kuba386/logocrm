@@ -1,5 +1,6 @@
 'use client'
 
+import { calendarDay } from '@/lib/timezone'
 import { useActionState, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -60,7 +61,7 @@ function GoalCard({
           <p className="font-medium">{goal.title}</p>
           <p className="text-xs text-muted-foreground">
             {[goal.stageTitle, goal.sound ? `звук «${goal.sound}»` : goal.area].filter(Boolean).join(' · ')}
-            {goal.targetDate ? ` · срок ${new Date(goal.targetDate).toLocaleDateString('ru-RU')}` : ''}
+            {goal.targetDate ? `, срок ${calendarDay(goal.targetDate)}` : ''}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -81,7 +82,7 @@ function GoalCard({
           <ul className="mt-1 space-y-0.5">
             {goal.progress.map((p) => (
               <li key={p.id}>
-                {new Date(p.date).toLocaleDateString('ru-RU')} — {p.score}
+                {calendarDay(p.date)} — {p.score}
                 {p.note ? ` (${p.note})` : ''}
               </li>
             ))}

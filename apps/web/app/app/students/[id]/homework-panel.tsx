@@ -1,5 +1,6 @@
 'use client'
 
+import { calendarDay } from '@/lib/timezone'
 import { useActionState, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -69,7 +70,7 @@ function HomeworkCard({
         </span>
       </div>
       {homework.dueOn ? (
-        <p className="text-xs text-muted-foreground">До {new Date(homework.dueOn).toLocaleDateString('ru-RU')}</p>
+        <p className="text-xs text-muted-foreground">До {calendarDay(homework.dueOn)}</p>
       ) : null}
       {homework.parentNote ? <p className="text-sm">Родитель: {homework.parentNote}</p> : null}
       {homework.teacherFeedback ? <p className="text-sm">Фидбек: {homework.teacherFeedback}</p> : null}

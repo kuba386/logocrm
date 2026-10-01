@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS, type GoalTrend } from '@/lib/goal-trend'
 import { cn } from '@/lib/utils'
+import { attendanceStatusClasses } from '@/lib/attendance'
 import { completeLesson, requestVoiceNote, type CompleteLessonState } from './actions'
 
 export type StudentEntry = {
@@ -82,7 +83,7 @@ export function CompleteLessonForm({
 }: {
   lessonId: string
   students: StudentEntry[]
-  attendanceStatuses: { code: string; name: string }[]
+  attendanceStatuses: { code: string; name: string; color: string }[]
   exercises: ExerciseOption[]
   /** Без имени бота deep-link не собрать — кнопка просто не рисуется. */
   botName: string | null
@@ -264,19 +265,32 @@ export function CompleteLessonForm({
             </CardHeader>
             <CardContent className="space-y-5">
               {/* 1. Посещение --------------------------------------------------- */}
-              <div className="space-y-1">
-                <Label htmlFor={`attendance-${student.id}`}>Посещение</Label>
-                <Select
-                  id={`attendance-${student.id}`}
-                  value={d.attendanceStatusCode}
-                  onChange={(e) => update(student.id, { attendanceStatusCode: e.target.value })}
-                >
-                  {attendanceStatuses.map((s) => (
-                    <option key={s.code} value={s.code}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
+              <div className="space-y-1.5">
+                <p id={`attendance-${student.id}`} className="text-sm font-medium">
+                  Посещение
+                </p>
+                {/* Те же цветные кнопки, что в панели отметки расписания. */}
+                <div role="radiogroup" aria-labelledby={`attendance-${student.id}`} className="flex flex-wrap gap-1.5">
+                  {attendanceStatuses.map((s) => {
+                    const checked = d.attendanceStatusCode === s.code
+                    const classes = attendanceStatusClasses(s.color)
+                    return (
+                      <button
+                        key={s.code}
+                        type="button"
+                        role="radio"
+                        aria-checked={checked}
+                        onClick={() => update(student.id, { attendanceStatusCode: s.code })}
+                        className={cn(
+                          'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          checked ? classes.active : classes.inactive,
+                        )}
+                      >
+                        {s.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* 2. Цели --------------------------------------------------------- */}

@@ -109,7 +109,7 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
               {rows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t('mySalary', 'detailsEmpty')}</p>
               ) : (
-                <Table>
+                <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden">
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('salary', 'colDate')}</TableHead>

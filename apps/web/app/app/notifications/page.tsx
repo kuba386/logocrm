@@ -59,7 +59,7 @@ export default async function NotificationLogPage() {
           {log.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('notifications', 'logEmpty')}</p>
           ) : (
-            <Table>
+            <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(6)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('notifications', 'colWhen')}</TableHead>
