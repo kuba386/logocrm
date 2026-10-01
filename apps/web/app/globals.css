@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    --font-text: 'Golos Text Variable';
+    --font-display: 'Unbounded Variable';
+
     /* Палитра «тетради» — та же, что на лендинге (components/landing): прохладная бумага,
        чернила вместо чёрного, бирюза действия из Material 3 (DESIGN.md) сохранена. */
     --background: 210 38% 97%;
