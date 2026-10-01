@@ -10,6 +10,7 @@ import {
 } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
+import { debtProblems } from '@/lib/debts'
 import { centerTimeZone, dayInZone } from '@/lib/timezone'
 import { isFinance } from '@/lib/roles'
 import { Card, CardContent } from '@/components/ui/card'
@@ -43,22 +44,6 @@ type Row = {
   zeroLeft: boolean
   lastLessonAt: string | null
   nextLessonAt: string | null
-}
-
-// Три разных долга не складываются в один (docs/Database.md, «Два слова,
-// два определения»): за занятия без абонемента, перерасход по абонементу и
-// просрочка оплаты САМОГО абонемента (0070) — разные деньги, разные причины
-// написать родителю. «Остаток исчерпан» — не долг, а сигнал «пора продлить»,
-// показывается только когда денежных проблем нет вовсе.
-function problems(row: Row): Array<{ label: string; amount: number | null; tone: 'danger' | 'warning' }> {
-  const list: Array<{ label: string; amount: number | null; tone: 'danger' | 'warning' }> = []
-  if (row.debtTiyin > 0) list.push({ label: 'Долг за занятия', amount: row.debtTiyin, tone: 'danger' })
-  if (row.overdrawnTiyin > 0) list.push({ label: 'Перерасход', amount: row.overdrawnTiyin, tone: 'danger' })
-  if (row.subscriptionOverdueTiyin > 0) {
-    list.push({ label: 'Просрочен платёж за абонемент', amount: row.subscriptionOverdueTiyin, tone: 'danger' })
-  }
-  if (list.length === 0) list.push({ label: 'Остаток исчерпан', amount: null, tone: 'warning' })
-  return list
 }
 
 export default async function DebtsPage({
@@ -214,7 +199,7 @@ export default async function DebtsPage({
       ) : (
         <div className="space-y-3">
           {rows.map((row) => {
-            const rowProblems = problems(row)
+            const rowProblems = debtProblems(row)
             const waNumber = whatsappNumber(row.payerPhone)
             // null — сказать текущему плательщику нечего (только чужая просрочка): кнопки нет.
             const waText = debtWhatsappMessage(row)
