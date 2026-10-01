@@ -1,11 +1,14 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { formatKgPhone, whatsappNumber } from '@logocrm/core'
+import { formatKgPhone, formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { statusLabel, studentAge } from '@/lib/students'
 import { isFrontDesk } from '@/lib/roles'
+import { debtProblems } from '@/lib/debts'
+import { label } from '@/lib/messages'
+import { centerTimeZone, dayInZone } from '@/lib/timezone'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
@@ -54,6 +57,40 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
     // Бейдж и действия стойки — только стойке; родитель видит свою карточку
     // без кнопок (RLS пустила бы его к строке, а RPC отказал бы).
     frontDesk ? supabase.rpc('payer_telegram_linked', { p_payer_id: id }) : Promise.resolve({ data: null }),
+  ])
+
+  // Долги — тем же единым источником, что /app/debts и дашборд (0076): права
+  // по роли внутри функции, здесь только отбор строк этого плательщика.
+  // overdue_payer_id — плательщик просроченного АБОНЕМЕНТА, он может не
+  // совпадать с текущим payer_id ребёнка (0060, 0070).
+  const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? ''
+  const [{ data: debtRows }, { data: payments }, { data: center }] = await Promise.all([
+    supabase.rpc('student_debt_problems'),
+    supabase
+      .from('payments')
+      .select('id, amount_tiyin, paid_at, kind, student_id, comment')
+      .eq('payer_id', id)
+      .order('paid_at', { ascending: false })
+      .limit(10),
+    supabase.from('centers').select('settings').eq('id', centerId).maybeSingle(),
+  ])
+  const timeZone = centerTimeZone(center?.settings)
+  const myDebtRows = (debtRows ?? []).filter((r) => r.payer_id === id || r.overdue_payer_id === id)
+  const debtByStudent = new Map(
+    myDebtRows.map((r) => [
+      r.student_id,
+      debtProblems({
+        debtTiyin: r.payer_id === id ? r.debt_tiyin : 0,
+        overdrawnTiyin: r.payer_id === id ? r.overdrawn_tiyin : 0,
+        subscriptionOverdueTiyin: r.overdue_payer_id === id ? r.overdue_tiyin : 0,
+      }),
+    ]),
+  )
+  const childIds = new Set((children ?? []).map((c) => c.id))
+  const otherDebtRows = myDebtRows.filter((r) => !childIds.has(r.student_id) && r.overdue_payer_id === id && r.overdue_tiyin > 0)
+  const studentNames = new Map<string, string>([
+    ...(children ?? []).map((c) => [c.id, c.full_name] as [string, string]),
+    ...myDebtRows.map((r) => [r.student_id, r.full_name] as [string, string]),
   ])
 
   const wa = whatsappNumber(payer.phone)
@@ -118,7 +155,10 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           {children && children.length > 0 ? (
             <ul className="space-y-2">
               {children.map((child) => (
-                <li key={child.id} className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+                <li
+                  key={child.id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-border p-3"
+                >
                   <div>
                     <Link href={`/app/students/${child.id}`} className="font-medium hover:underline">
                       {child.full_name}
@@ -127,11 +167,67 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                       {studentAge(child.birth_date)}, {statusLabel(child.status).toLowerCase()}
                     </p>
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(debtByStudent.get(child.id) ?? []).map((problem) => (
+                      <StatusBadge key={problem.label} tone={problem.tone}>
+                        {problem.label}
+                        {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
+                      </StatusBadge>
+                    ))}
+                  </div>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm text-muted-foreground">Детей пока нет.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {otherDebtRows.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Просроченные абонементы других детей</CardTitle>
+            <CardDescription>Абонемент покупал этот плательщик, а ребёнок сейчас записан на другого.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              {otherDebtRows.map((r) => (
+                <li key={r.student_id} className="flex flex-wrap items-center justify-between gap-2">
+                  <Link href={`/app/students/${r.student_id}#subscriptions`} className="font-medium hover:underline">
+                    {r.full_name}
+                  </Link>
+                  <StatusBadge tone="danger">Просрочен платёж за абонемент {formatSom(r.overdue_tiyin)}</StatusBadge>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Платежи</CardTitle>
+          <CardDescription>{frontDesk ? 'Последние десять. Все платежи — в разделе «Финансы».' : 'Последние десять.'}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {payments && payments.length > 0 ? (
+            <ul className="divide-y divide-border text-sm">
+              {payments.map((p) => (
+                <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2">
+                  <span>
+                    <span className="tabular-nums text-muted-foreground">{dayInZone(p.paid_at, timeZone)}</span>
+                    {' — '}
+                    {label('paymentKind', p.kind)}
+                    {p.student_id && studentNames.get(p.student_id) ? `, ${studentNames.get(p.student_id)}` : ''}
+                    {p.comment ? <span className="block text-xs text-muted-foreground">{p.comment}</span> : null}
+                  </span>
+                  <span className="font-medium tabular-nums">{formatSom(p.amount_tiyin)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">Платежей пока нет.</p>
           )}
         </CardContent>
       </Card>

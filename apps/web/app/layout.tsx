@@ -1,5 +1,8 @@
 import type { Metadata } from 'next'
-import { display, text } from './fonts'
+// Шрифты из npm, а не next/font/google: тот скачивает их с Google Fonts во
+// время сборки и на Vercel время от времени падал на пустом ответе.
+import '@fontsource-variable/golos-text'
+import '@fontsource-variable/unbounded'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -9,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={`${display.variable} ${text.variable}`}>
+    <html lang="ru">
       <body>{children}</body>
     </html>
   )

@@ -1,5 +1,7 @@
 'use client'
 
+import '@fontsource-variable/golos-text'
+import '@fontsource-variable/unbounded'
 import './globals.css'
 import { ErrorScreen } from '@/components/error-screen'
 
