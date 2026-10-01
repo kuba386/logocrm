@@ -44,12 +44,6 @@ const FORBIDDEN = '42501'
 // а оплатить.
 const PAYMENT_REQUIRED = 'PT402'
 const CHECK_VIOLATION = '23514'
-// Текст отказа второго пробного центра (0052) зашит в функцию с почтой,
-// которую владелец платформы заменил на телефон; до переиздания функции
-// миграцией подменяем его здесь — это и есть единое место текстов ошибок.
-const SECOND_TRIAL_PREFIX = 'У вас уже есть центр на пробном периоде'
-const SECOND_TRIAL_MESSAGE =
-  'У вас уже есть центр на пробном периоде. Второй центр открывает администратор платформы — позвоните или напишите: 0707 001 107.'
 // Сериализация и deadlock: данные изменились под рукой, повтор обычно проходит.
 const SERIALIZATION_FAILURE = '40001'
 const DEADLOCK_DETECTED = '40P01'
@@ -298,7 +292,6 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   }
 
   if (code === CHECK_VIOLATION) {
-    if (message.startsWith(SECOND_TRIAL_PREFIX)) return { message: SECOND_TRIAL_MESSAGE }
     const name = checkConstraintName(message)
     if (name && CHECK_MESSAGES[name]) return { message: CHECK_MESSAGES[name] }
     // Исключения из plpgsql с этим кодом уже по-русски; нативный констрейнт —
