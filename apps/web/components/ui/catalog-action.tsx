@@ -12,7 +12,7 @@ function ToggleButton({ label }: { label: string }) {
   const { pending } = useFormStatus()
   return (
     <Button type="submit" size="sm" variant="outline" disabled={pending}>
-      {pending ? '…' : label}
+      {pending ? 'Секунду…' : label}
     </Button>
   )
 }

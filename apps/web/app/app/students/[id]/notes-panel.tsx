@@ -150,7 +150,7 @@ function NoteCard({
               title={summaryMissing ? 'Сначала заполните резюме для родителя' : undefined}
               onClick={approve}
             >
-              {pending ? 'Утверждаю…' : 'Утвердить'}
+              {pending ? 'Утверждаем…' : 'Утвердить'}
             </Button>
           ) : null}
           <Link

@@ -6,6 +6,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { FormError } from '@/components/ui/alert'
 import { roleLabel } from '@/lib/roles'
+import { dayInZone } from '@/lib/timezone'
 
 const initialState: StaffState = {}
 
@@ -61,7 +62,7 @@ function whatsappHref(invitation: PendingInvitation): string {
     : `https://wa.me/?text=${encodeURIComponent(text)}`
 }
 
-export function PendingInvitations({ invitations }: { invitations: PendingInvitation[] }) {
+export function PendingInvitations({ invitations, timeZone }: { invitations: PendingInvitation[]; timeZone: string }) {
   if (invitations.length === 0) {
     return <p className="text-sm text-muted-foreground">Нет активных приглашений.</p>
   }
@@ -86,7 +87,7 @@ export function PendingInvitations({ invitations }: { invitations: PendingInvita
               {invitation.phone ?? invitation.email ?? '—'}
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {new Date(invitation.expiresAt).toLocaleDateString('ru-RU')}
+              {dayInZone(invitation.expiresAt, timeZone)}
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap items-center justify-end gap-2">

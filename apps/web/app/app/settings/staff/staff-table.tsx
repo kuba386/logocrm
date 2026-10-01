@@ -179,7 +179,7 @@ export function StaffTable({
   }
 
   return (
-    <Table>
+    <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden">
       <TableHeader>
         <TableRow>
           <TableHead>ФИО</TableHead>

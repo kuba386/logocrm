@@ -97,7 +97,7 @@ export default async function SalaryPage({
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('salary', 'empty')}</p>
           ) : (
-            <Table>
+            <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(3)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('salary', 'colTeacher')}</TableHead>
@@ -191,7 +191,7 @@ function DetailsTable({
     return <p className="text-sm text-muted-foreground">{t('salary', 'detailsEmpty')}</p>
   }
   return (
-    <Table>
+    <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden">
       <TableHeader>
         <TableRow>
           <TableHead>{t('salary', 'colDate')}</TableHead>

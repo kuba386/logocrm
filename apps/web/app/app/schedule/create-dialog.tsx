@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select'
 import { FormNotice } from '@/components/ui/alert'
 import { ConflictList } from './conflict-list'
 import { conflictLabel } from '@/lib/errors'
+import { calendarDay } from '@/lib/timezone'
 import { WEEKDAY_LABELS } from '@/lib/schedule'
 
 const initial: ScheduleState = { message: '' }
@@ -304,7 +305,7 @@ export function CreateLessonDialog({
                   <ul className="mt-2 space-y-1 text-xs text-destructive">
                     {busyDays.map((row) => (
                       <li key={row.day}>
-                        {new Date(row.startsAt).toLocaleDateString('ru-RU')}:{' '}
+                        {calendarDay(row.day)}:{' '}
                         {row.conflicts.map((conflict) => conflictLabel(conflict)).join('; ')}
                       </li>
                     ))}

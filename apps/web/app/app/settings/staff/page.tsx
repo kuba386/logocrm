@@ -127,7 +127,7 @@ export default async function StaffPage() {
           <CardDescription>Ссылки, которыми ещё не воспользовались.</CardDescription>
         </CardHeader>
         <CardContent>
-          <PendingInvitations invitations={invitations} />
+          <PendingInvitations invitations={invitations} timeZone={timeZone} />
         </CardContent>
       </Card>
     </div>

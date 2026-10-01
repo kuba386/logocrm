@@ -246,7 +246,7 @@ async function PaymentsTab({
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('finance', 'paymentsEmpty')}</p>
           ) : (
-            <Table>
+            <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(7)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('finance', 'colDate')}</TableHead>
@@ -344,7 +344,7 @@ async function ExpensesTab({
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('finance', 'expensesEmpty')}</p>
           ) : (
-            <Table>
+            <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(6)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('finance', 'colDate')}</TableHead>
@@ -418,7 +418,7 @@ async function InstallmentsTab({
         {live.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('finance', 'installmentsEmpty')}</p>
         ) : (
-          <Table>
+          <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('finance', 'colDue')}</TableHead>
