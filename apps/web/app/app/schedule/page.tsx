@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { buttonVariants } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
+import { PeriodNav } from '@/components/ui/period-nav'
 import { centerTimeZone, addDays, isoDayInZone, startOfWeek, formatInTimeZone } from '@/lib/timezone'
 import { WEEKDAY_LABELS } from '@/lib/schedule'
 import { CreateLessonDialog } from './create-dialog'
@@ -139,55 +139,52 @@ export default async function SchedulePage({
 
   const teacherOptions = (teachers ?? []).map((t) => ({ id: t.id, fullName: t.full_name }))
 
+  const todayIso = isoDayInZone(new Date(), timeZone)
+  const weekLabel =
+    formatInTimeZone(`${weekStart}T12:00:00Z`, timeZone, { day: 'numeric', month: 'short' }) +
+    ' – ' +
+    formatInTimeZone(`${addDays(weekStart, 6)}T12:00:00Z`, timeZone, { day: 'numeric', month: 'short' })
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="page-title">Расписание</h1>
-          <p className="text-sm text-muted-foreground">
-            {canManage
-              ? 'Накладки не дадут сохранить — проверяет база.'
-              : 'Вам видны только ваши занятия.'}
-          </p>
-        </div>
-
-        {canManage ? (
-          <CreateLessonDialog
-            teachers={teacherOptions}
-            rooms={(rooms ?? []).map((r) => ({ id: r.id, name: r.name }))}
-            services={(services ?? []).map((s) => ({
-              id: s.id,
-              name: s.name,
-              durationMin: s.duration_min,
-              kind: s.kind,
-            }))}
-            students={(students ?? []).map((s) => ({ id: s.id, fullName: s.full_name }))}
-            groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
-          />
-        ) : null}
-      </div>
+      <PageHeader
+        title="Расписание"
+        description={
+          canManage
+            ? 'Накладки по специалисту и кабинету база не даст сохранить.'
+            : 'Здесь только ваши занятия.'
+        }
+        actions={
+          canManage ? (
+            <CreateLessonDialog
+              teachers={teacherOptions}
+              rooms={(rooms ?? []).map((r) => ({ id: r.id, name: r.name }))}
+              services={(services ?? []).map((s) => ({
+                id: s.id,
+                name: s.name,
+                durationMin: s.duration_min,
+                kind: s.kind,
+              }))}
+              students={(students ?? []).map((s) => ({ id: s.id, fullName: s.full_name }))}
+              groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
+            />
+          ) : null
+        }
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/app/schedule?week=${addDays(weekStart, -7)}`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            ← Неделя назад
-          </Link>
-          <Link
-            href={`/app/schedule?week=${isoDayInZone(new Date(), timeZone)}`}
-            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-          >
-            Сегодня
-          </Link>
-          <Link
-            href={`/app/schedule?week=${addDays(weekStart, 7)}`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            Неделя вперёд →
-          </Link>
-        </div>
+        <PeriodNav
+          label={weekLabel}
+          prev={`/app/schedule?week=${addDays(weekStart, -7)}`}
+          next={`/app/schedule?week=${addDays(weekStart, 7)}`}
+          prevLabel="Предыдущая неделя"
+          nextLabel="Следующая неделя"
+          today={{
+            href: `/app/schedule?week=${todayIso}`,
+            label: 'Сегодня',
+            current: todayIso >= weekStart && todayIso <= addDays(weekStart, 6),
+          }}
+        />
 
         <ScheduleFilters
           week={weekStart}
@@ -200,20 +197,12 @@ export default async function SchedulePage({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>
-            {formatInTimeZone(`${weekStart}T12:00:00Z`, timeZone, { day: 'numeric', month: 'long' })}
-            {' — '}
-            {formatInTimeZone(`${addDays(weekStart, 6)}T12:00:00Z`, timeZone, {
-              day: 'numeric',
-              month: 'long',
-            })}
-          </CardTitle>
+        <CardHeader className="pb-3">
           <CardDescription>
-            Занятий на неделе: {lessons.length}. Время показано в часовом поясе центра ({timeZone}).
+            Занятий на неделе: {lessons.length}. Время — по часовому поясу центра.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <WeekGrid
             days={days}
             lessons={lessons}

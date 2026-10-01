@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -43,9 +44,19 @@ export function Dialog({
       )}
     >
       <div className="space-y-4 p-6">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="font-display text-lg font-medium tracking-tight">{title}</h2>
+            {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+          </div>
+          <button
+            type="button"
+            aria-label="Закрыть окно"
+            onClick={onClose}
+            className="-mr-2 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="size-4" />
+          </button>
         </div>
         {children}
       </div>

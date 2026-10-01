@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/ui/page-header'
+import { toAppError } from '@/lib/errors'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/lib/messages'
 import { isFrontDesk } from '@/lib/roles'
@@ -58,18 +61,15 @@ export default async function BookingsPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t('bookingQueue', 'title')} description={t('bookingQueue', 'description')} />
       <Card>
-        <CardHeader>
-          <CardTitle>{t('bookingQueue', 'title')}</CardTitle>
-          <CardDescription>{t('bookingQueue', 'description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {error ? (
             <p role="alert" className="text-sm text-destructive">
-              {error.message}
+              {toAppError(error, 'Не удалось загрузить заявки').message}
             </p>
           ) : !rows || rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('bookingQueue', 'empty')}</p>
+            <EmptyState title={t('bookingQueue', 'empty')} />
           ) : (
             <Table>
               <TableHeader>

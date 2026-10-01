@@ -274,7 +274,7 @@ export default async function DebtsPage({
                         WhatsApp
                       </a>
                     ) : null}
-                    <Link href={`/app/students/${row.studentId}`} className={buttonVariants({ size: 'sm' })}>
+                    <Link href={`/app/students/${row.studentId}#subscriptions`} className={buttonVariants({ size: 'sm' })}>
                       Продать абонемент
                     </Link>
                   </div>
