@@ -47,13 +47,21 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     ...parsed.data,
     options: { emailRedirectTo: `${siteUrl()}/auth/callback`, ...captchaOptions(formData) },
   })
 
   if (error) {
     return { error: authErrorMessage(error, 'Не удалось зарегистрироваться. Возможно, такой email уже занят.') }
+  }
+
+  // На prod почта подтверждается (ADR-004): сессии ещё нет, и редирект в
+  // /onboarding молча возвращал человека на вход без слова о письме.
+  if (!data.session) {
+    return {
+      notice: `Мы отправили письмо на ${parsed.data.email}. Откройте его и нажмите ссылку — после этого центр можно будет создать. Письма нет 5 минут — проверьте «Спам». Если запросите письмо ещё раз, открывайте только последнее.`,
+    }
   }
 
   revalidatePath('/', 'layout')

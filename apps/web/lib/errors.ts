@@ -251,6 +251,8 @@ export function authErrorMessage(error: { code?: string | null } | null | undefi
   switch (error?.code) {
     case 'captcha_failed':
       return 'Не удалось проверить, что вы не робот. Дождитесь, пока пройдёт проверка над кнопкой, и повторите.'
+    case 'email_not_confirmed':
+      return 'Почта ещё не подтверждена. Откройте последнее письмо от LogoCRM и нажмите ссылку в нём. Письма нет — нажмите «Войти по ссылке из письма», придёт новое.'
     case 'over_email_send_rate_limit':
     case 'over_request_rate_limit':
     case 'over_sms_send_rate_limit':

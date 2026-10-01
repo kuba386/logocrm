@@ -65,6 +65,7 @@ export function LoginForm({ next }: { next: string }) {
       <TurnstileField />
 
       <FormError message={passwordState.error ?? signUpState.error} />
+      <FormNotice message={signUpState.notice} />
 
       <div className="space-y-2">
         <SubmitButton>Войти</SubmitButton>
