@@ -383,6 +383,7 @@
     "planField": "Тариф",
     "monthsField": "Месяцев",
     "amountField": "Сумма, сом",
+    "priceHint": "По прайсу со скидкой за предоплату: {amount}",
     "receiptReceived": "Чек получен",
     "confirm": "Подтвердить и продлить",
     "confirmed": "Подтверждено — подписка до {until}",
