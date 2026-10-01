@@ -1,0 +1,15 @@
+{
+  "name": "LogoCRM — проверка базы",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [54321, 54322],
+  "customizations": {
+    "codespaces": {
+      "openFiles": [".devcontainer/README.md"]
+    }
+  }
+}
