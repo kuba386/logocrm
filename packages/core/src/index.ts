@@ -67,3 +67,4 @@ export {
   type SpeechAreaKey,
   type SpeechConclusionSuggestion,
 } from './nosology'
+export { prepayDiscountPercent, platformPaymentAmountTiyin } from './platform-payment'

@@ -172,6 +172,7 @@ export function Landing() {
           </h2>
           <p className={s.sectionLead}>
             Цена в месяц за весь центр, без доплаты за каждого сотрудника. Первые 14 дней — бесплатно.
+            При оплате сразу за 6 месяцев — скидка 10%, за 12 месяцев — 20%.
           </p>
           <div className={s.plans}>
             {PLANS.map((plan) => (
