@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createCenterSchema } from '@logocrm/contracts'
+import { toAppError } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/server'
 
 export type OnboardingState = { error?: string }
@@ -34,7 +35,7 @@ export async function createCenter(
   })
 
   if (error) {
-    return { error: 'Не удалось создать центр. Попробуйте ещё раз.' }
+    return { error: toAppError(error, 'Не удалось создать центр. Попробуйте ещё раз.').message }
   }
 
   const { error: refreshError } = await supabase.auth.refreshSession()
