@@ -1,9 +1,10 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { formatSom, platformPaymentAmountTiyin, prepayDiscountPercent } from '@logocrm/core'
 import { label, t } from '@/lib/messages'
 import { submitPayment, withdrawPayment, type PlanState } from './actions'
 
@@ -21,9 +22,9 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Форма заявки: тариф, месяцы, способ. Сумму не считает и не показывает —
- * её считает submit_platform_payment из прайса (0051 Р11); центр видит
- * итог в карточке открытой заявки, которую вернул сервер.
+ * Форма заявки: тариф, месяцы, способ. Сумма в заявке — из
+ * submit_platform_payment (0051 Р11, скидка 0084); здесь только подсказка
+ * зеркалом из packages/core, чтобы центр видел скидку до отправки.
  */
 export function PaymentForm({
   plans,
@@ -34,6 +35,13 @@ export function PaymentForm({
 }) {
   const [state, action] = useActionState(submitPayment, initial)
   const defaultPlan = plans.some((p) => p.code === currentPlan) ? currentPlan : (plans[0]?.code ?? '')
+  const [planCode, setPlanCode] = useState(defaultPlan)
+  const [months, setMonths] = useState(1)
+  const price = plans.find((p) => p.code === planCode)?.priceTiyin ?? 0
+  const validMonths = Number.isInteger(months) && months >= 1 && months <= 24
+  const discount = validMonths ? prepayDiscountPercent(months) : 0
+  const amount = validMonths ? platformPaymentAmountTiyin(price, months) : 0
+  const saving = validMonths ? price * months - amount : 0
 
   return (
     <form action={action} className="space-y-3">
@@ -42,7 +50,8 @@ export function PaymentForm({
           <span className="font-medium">{t('plan', 'planField')}</span>
           <select
             name="plan"
-            defaultValue={defaultPlan}
+            value={planCode}
+            onChange={(event) => setPlanCode(event.target.value)}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             {plans.map((p) => (
@@ -60,7 +69,8 @@ export function PaymentForm({
             name="months"
             min={1}
             max={24}
-            defaultValue={1}
+            value={Number.isNaN(months) ? '' : months}
+            onChange={(event) => setMonths(event.target.valueAsNumber)}
             required
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
@@ -93,6 +103,17 @@ export function PaymentForm({
         />
       </label>
 
+      {validMonths && price > 0 ? (
+        <p className="text-sm">
+          {t('plan', 'amountToPay')} <span className="font-semibold tabular-nums">{formatSom(amount)}</span>
+          {discount > 0 ? (
+            <span className="text-muted-foreground">
+              {' '}
+              {t('plan', 'discountNote', { percent: discount, saving: formatSom(saving) })}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">{t('plan', 'amountHint')}</p>
 
       <SubmitButton>{t('plan', 'submit')}</SubmitButton>

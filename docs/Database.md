@@ -1391,7 +1391,10 @@ call public.apply_readonly_guard('tbl');
 
 `platform_payments` — заявка центра и решение платформы в одной строке,
 но разными колонками: центр пишет `claimed_plan`, `claimed_months`,
-`claimed_amount_tiyin` (= `plans.price_tiyin × months`, посчитано в SQL),
+`claimed_amount_tiyin` (= `plans.price_tiyin × months` со скидкой за
+предоплату — от 6 месяцев 10 %, от 12 — 20 %, `platform_payment_amount`,
+0084; посчитано в SQL, TS-зеркало `platformPaymentAmountTiyin` только для
+подсказки),
 `source`, `note` через `submit_platform_payment(plan, months, source,
 note)` (owner/admin, работает и в read-only — таблица в списке
 исключений guard); платформа — `confirmed_*`/`plan`/`months`/`amount_tiyin`

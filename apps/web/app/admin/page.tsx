@@ -78,7 +78,7 @@ export default async function AdminPage() {
     supabase.rpc('platform_summary'),
     supabase.rpc('platform_centers'),
     supabase.rpc('platform_open_payments'),
-    supabase.from('plans').select('code, name').eq('is_public', true).order('sort'),
+    supabase.from('plans').select('code, name, price_tiyin').eq('is_public', true).order('sort'),
     supabase
       .from('platform_payments')
       .select('id, center_id, plan, months, amount_tiyin, confirmed_at, receipt_received')
@@ -88,7 +88,9 @@ export default async function AdminPage() {
   ])
 
   const summary = parseSummary(summaryJson)
-  const planOptions = (plans ?? []).filter((p) => p.code !== 'trial')
+  const planOptions = (plans ?? [])
+    .filter((p) => p.code !== 'trial')
+    .map((p) => ({ code: p.code, name: p.name, priceTiyin: p.price_tiyin }))
 
   return (
     <div className="space-y-6">

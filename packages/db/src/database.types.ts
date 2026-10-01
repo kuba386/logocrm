@@ -5486,6 +5486,14 @@ export type Database = {
           submitted_by_email: string
         }[]
       }
+      platform_payment_amount: {
+        Args: { p_months: number; p_price_tiyin: number }
+        Returns: number
+      }
+      platform_prepay_discount_pct: {
+        Args: { p_months: number }
+        Returns: number
+      }
       platform_summary: { Args: never; Returns: Json }
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
