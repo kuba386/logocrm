@@ -10,6 +10,9 @@ import { authErrorMessage } from '@/lib/errors'
 
 export type AuthState = { error?: string; notice?: string }
 
+const ALREADY_REGISTERED =
+  'Этот email уже зарегистрирован. Войдите с паролем или по ссылке из письма, а если не помните пароль — нажмите «Забыли пароль?».'
+
 /** Вход по email и паролю. */
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = signInSchema.safeParse({
@@ -56,6 +59,14 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     return { error: authErrorMessage(error, 'Не удалось зарегистрироваться. Возможно, такой email уже занят.') }
   }
 
+  // Почта уже зарегистрирована: Supabase не сообщает об этом ошибкой (иначе
+  // по форме можно перебирать адреса), а возвращает пользователя без
+  // identities и письма не шлёт. Без этой проверки форма обещала письмо,
+  // которое не придёт.
+  if (data.user && data.user.identities?.length === 0) {
+    return { error: ALREADY_REGISTERED }
+  }
+
   // На prod почта подтверждается (ADR-004): сессии ещё нет, и редирект в
   // /onboarding молча возвращал человека на вход без слова о письме.
   if (!data.session) {
@@ -87,6 +98,54 @@ export async function sendMagicLink(_prev: AuthState, formData: FormData): Promi
   }
 
   return { notice: `Ссылка для входа отправлена на ${parsed.data.email}. Проверьте почту.` }
+}
+
+/** Письмо со ссылкой на смену пароля. Ссылка ведёт через /auth/callback на /reset-password. */
+export async function sendPasswordReset(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = magicLinkSchema.safeParse({ email: String(formData.get('email') ?? '') })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Проверьте email' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${siteUrl()}/auth/callback?next=/reset-password`,
+    ...captchaOptions(formData),
+  })
+
+  if (error) {
+    return { error: authErrorMessage(error, 'Не удалось отправить письмо. Попробуйте позже.') }
+  }
+
+  // Одинаковый ответ для любого адреса — форма не подсказывает, кто зарегистрирован.
+  return {
+    notice: `Если ${parsed.data.email} зарегистрирован, мы отправили письмо со ссылкой для смены пароля. Откройте его в этом же браузере.`,
+  }
+}
+
+/** Новый пароль после перехода по ссылке из письма (сессия уже есть). */
+export async function updatePassword(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const password = String(formData.get('password') ?? '')
+  const confirm = String(formData.get('confirm') ?? '')
+  const parsed = signInSchema.shape.password.safeParse(password)
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Проверьте пароль' }
+  }
+  if (password !== confirm) {
+    return { error: 'Пароли не совпадают' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.updateUser({ password })
+
+  if (error) {
+    return { error: authErrorMessage(error, 'Не удалось сменить пароль. Запросите новую ссылку.') }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/app')
 }
 
 /** Выход из аккаунта. */
