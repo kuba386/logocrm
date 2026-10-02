@@ -1,13 +1,14 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { sendMagicLink, sendPasswordReset, signIn, signUp, type AuthState } from './actions'
+import { resendCode, sendMagicLink, sendPasswordReset, signIn, signUp, verifyCode, type AuthState } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
+import { EmailCodeStep } from '@/components/email-code-step'
 
 const initialState: AuthState = {}
 
@@ -26,6 +27,29 @@ export function LoginForm({ next }: { next: string }) {
   const [signUpState, signUpAction] = useActionState(signUp, initialState)
   const [magicState, magicAction] = useActionState(sendMagicLink, initialState)
   const [resetState, resetAction] = useActionState(sendPasswordReset, initialState)
+  const [codeStep, setCodeStep] = useState<{ email: string; purpose: 'signup' | 'magic' } | null>(null)
+
+  // Письмо ушло (регистрация без сессии или вход по почте) — переходим на ввод кода.
+  // Каждый ответ действия — новый объект, поэтому повторная отправка тоже срабатывает.
+  useEffect(() => {
+    if (signUpState.codeSentTo) setCodeStep({ email: signUpState.codeSentTo, purpose: 'signup' })
+  }, [signUpState])
+  useEffect(() => {
+    if (magicState.codeSentTo) setCodeStep({ email: magicState.codeSentTo, purpose: 'magic' })
+  }, [magicState])
+
+  if (codeStep) {
+    return (
+      <EmailCodeStep
+        email={codeStep.email}
+        purpose={codeStep.purpose}
+        hidden={{ next }}
+        verifyAction={verifyCode}
+        resendAction={resendCode}
+        onBack={() => setCodeStep(null)}
+      />
+    )
+  }
 
   if (mode === 'reset') {
     return (
@@ -62,10 +86,11 @@ export function LoginForm({ next }: { next: string }) {
 
         <TurnstileField />
 
-        <FormError message={magicState.error} />
-        <FormNotice message={magicState.notice} />
+        <p className="text-sm text-muted-foreground">Пришлём код на почту — введёте его здесь, пароль не нужен.</p>
 
-        <SubmitButton>Отправить ссылку для входа</SubmitButton>
+        <FormError message={magicState.error} />
+
+        <SubmitButton>Получить код для входа</SubmitButton>
 
         <Button type="button" variant="link" className="w-full" onClick={() => setMode('password')}>
           Войти по паролю
@@ -110,7 +135,7 @@ export function LoginForm({ next }: { next: string }) {
       </div>
 
       <Button type="button" variant="link" className="w-full" onClick={() => setMode('magic')}>
-        Войти по ссылке из письма
+        Войти по коду из письма
       </Button>
     </form>
   )

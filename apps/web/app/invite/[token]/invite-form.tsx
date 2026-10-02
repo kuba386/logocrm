@@ -1,12 +1,14 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import {
   acceptSignedIn,
   magicLinkAndAccept,
+  resendInviteCode,
   signInAndAccept,
   signUpAndAccept,
+  verifyCodeAndAccept,
   type InviteState,
 } from './actions'
 import { Button } from '@/components/ui/button'
@@ -14,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
+import { EmailCodeStep } from '@/components/email-code-step'
 import { signOut } from '@/app/login/actions'
 
 const initialState: InviteState = {}
@@ -51,6 +54,27 @@ export function InviteForm({ token }: { token: string }) {
   const [signUpState, signUpAction] = useActionState(signUpAndAccept, initialState)
   const [signInState, signInAction] = useActionState(signInAndAccept, initialState)
   const [magicState, magicAction] = useActionState(magicLinkAndAccept, initialState)
+  const [codeStep, setCodeStep] = useState<{ email: string; purpose: 'signup' | 'magic' } | null>(null)
+
+  useEffect(() => {
+    if (signUpState.codeSentTo) setCodeStep({ email: signUpState.codeSentTo, purpose: 'signup' })
+  }, [signUpState])
+  useEffect(() => {
+    if (magicState.codeSentTo) setCodeStep({ email: magicState.codeSentTo, purpose: 'magic' })
+  }, [magicState])
+
+  if (codeStep) {
+    return (
+      <EmailCodeStep
+        email={codeStep.email}
+        purpose={codeStep.purpose}
+        hidden={{ token }}
+        verifyAction={verifyCodeAndAccept}
+        resendAction={resendInviteCode}
+        onBack={() => setCodeStep(null)}
+      />
+    )
+  }
 
   if (mode === 'magic') {
     return (
@@ -64,10 +88,11 @@ export function InviteForm({ token }: { token: string }) {
 
         <TurnstileField />
 
-        <FormError message={magicState.error} />
-        <FormNotice message={magicState.notice} />
+        <p className="text-sm text-muted-foreground">Пришлём код на почту — введёте его здесь, пароль не нужен.</p>
 
-        <SubmitButton>Получить ссылку для входа</SubmitButton>
+        <FormError message={magicState.error} />
+
+        <SubmitButton>Получить код для входа</SubmitButton>
 
         <Button type="button" variant="link" className="w-full" onClick={() => setMode('signup')}>
           Назад
@@ -117,7 +142,7 @@ export function InviteForm({ token }: { token: string }) {
           {isSignUp ? 'У меня уже есть аккаунт' : 'Я здесь впервые'}
         </Button>
         <Button type="button" variant="link" className="w-full" onClick={() => setMode('magic')}>
-          Войти по ссылке из письма
+          Войти по коду из письма
         </Button>
       </div>
     </form>

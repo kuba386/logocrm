@@ -21,6 +21,20 @@ export const magicLinkSchema = z.object({
 })
 export type MagicLinkInput = z.infer<typeof magicLinkSchema>
 
+/**
+ * Код из письма (Supabase Auth, шаблоны с {{ .Token }}). Длина кода — настройка
+ * проекта (по умолчанию 6, бывает до 10), поэтому 6–10 цифр. Пробелы и дефисы
+ * убираем: код копируют из письма как «123 456».
+ */
+export const emailCodeSchema = z.object({
+  email: z.string().min(1, 'Укажите email').email('Некорректный email'),
+  code: z
+    .string()
+    .transform((v) => v.replace(/[\s-]/g, ''))
+    .pipe(z.string().regex(/^\d{6,10}$/, 'Введите код из письма — только цифры')),
+})
+export type EmailCodeInput = z.infer<typeof emailCodeSchema>
+
 export const createCenterSchema = z.object({
   name: z.string().trim().min(2, 'Название не короче 2 символов').max(120, 'Слишком длинное название'),
   city: z.string().trim().min(2, 'Укажите город').max(80, 'Слишком длинное название города'),

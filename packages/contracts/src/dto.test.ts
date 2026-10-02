@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInvitationSchema, sellSubscriptionPaidSchema } from './dto'
+import { createInvitationSchema, emailCodeSchema, sellSubscriptionPaidSchema } from './dto'
 
 const sale = {
   studentId: '00000000-0000-0000-0000-0000000000e1',
@@ -71,5 +71,23 @@ describe('createInvitationSchema', () => {
   it('отвергает кривой телефон', () => {
     const result = createInvitationSchema.safeParse({ role: 'parent', phone: 'абв' })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('emailCodeSchema', () => {
+  const email = 'teacher@example.kg'
+
+  it('принимает код, скопированный с пробелом или дефисом', () => {
+    for (const code of ['123456', '123 456', '123-456', ' 12345678 ']) {
+      const result = emailCodeSchema.safeParse({ email, code })
+      expect(result.success).toBe(true)
+      if (result.success) expect(result.data.code).toMatch(/^\d+$/)
+    }
+  })
+
+  it('отвергает буквы и слишком короткий код', () => {
+    for (const code of ['12345', 'abc123', '']) {
+      expect(emailCodeSchema.safeParse({ email, code }).success).toBe(false)
+    }
   })
 })
