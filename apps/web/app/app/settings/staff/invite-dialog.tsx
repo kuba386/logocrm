@@ -112,7 +112,12 @@ export function InviteDialog({
       >
         {state.inviteUrl ? (
           <div className="space-y-4">
-            <FormNotice message={state.notice ?? 'Ссылка готова. Отправьте её человеку.'} />
+            <FormNotice
+              message={
+                state.notice ??
+                'Ссылка готова. Отправьте её человеку — открыть и принять её должен он сам. Если откроете ссылку у себя, где вы уже вошли, она не сработает: проверять — только в режиме инкогнито.'
+              }
+            />
 
             <div className="rounded-md border border-border bg-muted p-3 text-xs break-all">
               {state.inviteUrl}

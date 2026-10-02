@@ -51,7 +51,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           </CardTitle>
           <CardDescription>
             {user
-              ? `Вы вошли как ${user.email}. Примите приглашение — доступ откроется сразу.`
+              ? `Вы вошли как ${user.email}. Примите приглашение — доступ откроется сразу. Если вы руководитель и открыли ссылку проверить её — не принимайте, а перешлите сотруднику.`
               : 'Создайте аккаунт или войдите — доступ откроется сразу после этого.'}
           </CardDescription>
         </CardHeader>

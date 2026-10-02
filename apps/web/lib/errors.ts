@@ -1,3 +1,5 @@
+import { roleLabel } from '@/lib/roles'
+
 /**
  * Единственное место, где разбираются ошибки Postgres.
  *
@@ -260,6 +262,20 @@ export function authErrorMessage(error: { code?: string | null } | null | undefi
     default:
       return fallback
   }
+}
+
+/**
+ * Отказ accept_invitation (0060). «Уже участник с другой ролью» приходит с
+ * кодом роли («owner») и чаще всего значит, что владелец открыл ссылку для
+ * сотрудника у себя, где он уже вошёл — объясняем это, а не код роли.
+ */
+export function invitationErrorMessage(error: { code?: string | null; message?: string | null }): string {
+  const message = error.message ?? ''
+  if (error.code === '23505' && message.startsWith('Вы уже участник этого центра')) {
+    const role = message.match(/«([a-z_]+)»/)?.[1]
+    return `Вы уже в этом центре как ${roleLabel(role).toLowerCase()}. Эта ссылка — для нового сотрудника: перешлите её ему, принять её должен он сам. Проверить ссылку самому можно только в режиме инкогнито.`
+  }
+  return message || 'Не удалось принять приглашение'
 }
 
 export function toAppError(error: PostgrestLike | null | undefined, fallback: string): AppError {
