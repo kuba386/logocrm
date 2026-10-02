@@ -678,6 +678,7 @@ export function SubscriptionsPanel({
   attendanceHistory,
   timeZone,
   canManage,
+  hideBalance = false,
 }: {
   studentId: string
   balance: BalanceView
@@ -697,12 +698,14 @@ export function SubscriptionsPanel({
    * (Backlog.md, 23.09.2026).
    */
   canManage: boolean
+  /** Остаток и долг уже показаны в шапке карточки (StudentSummary) — второй раз не рисуем. */
+  hideBalance?: boolean
 }) {
   const [tab, setTab] = useState<'subscriptions' | 'attendance'>('subscriptions')
 
   const subscriptionsList = (
     <div className="space-y-4">
-      <BalanceStrip balance={balance} timeZone={timeZone} />
+      {hideBalance ? null : <BalanceStrip balance={balance} timeZone={timeZone} />}
       {subscriptions.length === 0 ? (
         <p className="text-sm text-muted-foreground">Абонементов пока нет.</p>
       ) : (
