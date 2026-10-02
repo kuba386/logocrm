@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { centerTimeZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
+import { calendarDay, centerTimeZone, dayInZone, formatInTimeZone, isoDayInZone } from '@/lib/timezone'
 import { STUDENT_STATUS_TONES, statusLabel, studentAge, type FunnelStage } from '@/lib/students'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -22,6 +22,8 @@ import {
   type SubscriptionView,
 } from './subscriptions-panel'
 import { DiagnosticsPanel, type DiagnosticEntry } from './diagnostics-panel'
+import { GoalSuggestions, type GoalSuggestion } from './goal-suggestions'
+import { PrintToolbar } from './print-toolbar'
 import { AnamnesisPanel, type AnamnesisEntry } from './anamnesis-panel'
 import { ArticulationPanel, type ArticulationEntry } from './articulation-panel'
 import { SyllableAssessmentPanel, type SyllableAssessmentEntry } from './syllable-assessment-panel'
@@ -35,8 +37,15 @@ import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
-export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StudentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ print?: string }>
+}) {
   const { id } = await params
+  const { print } = await searchParams
   const supabase = await createClient()
 
   const {
@@ -55,6 +64,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   // Клиника положена тем же ролям, что в 0036 (registrar/finance — ни строки).
   const clinicalAllowed = isAdmin || isTeacher || isParent
   const canWriteClinical = isAdmin || isTeacher
+  // Печатный вид речевой карты (этап 9) — только тем, кто ведёт клинику;
+  // без форм: панели в режиме чтения.
+  let printMode = print === '1' && canWriteClinical
 
   // Специалисту и родителю карточку отдаёт витрина — телефона в ней нет;
   // бухгалтеру — students_brief: ни телефона, ни заметок (0031). Стойка
@@ -456,7 +468,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   // родителю в Telegram (0047); пояс браузера здесь не годится.
   const clinicalCenterId = (user.app_metadata as { center_id?: string })?.center_id ?? null
   const { data: clinicalCenter } = clinicalAllowed
-    ? await supabase.from('centers').select('settings').eq('id', clinicalCenterId ?? '').maybeSingle()
+    ? await supabase.from('centers').select('name, settings').eq('id', clinicalCenterId ?? '').maybeSingle()
     : { data: null }
   const clinicalTimeZone = centerTimeZone(clinicalCenter?.settings)
 
@@ -911,6 +923,32 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   // Порядок разделов — по тому, зачем роль открывает карточку: специалист —
   // вести занятия, стойка — абонементы и контакты, родитель — прогресс.
+  // След печати — на сервере при открытии печатного вида (0085 Р5): печать
+  // через меню браузера иначе прошла бы мимо журнала. Не записался —
+  // печатного вида нет.
+  if (printMode) {
+    const { error: logError } = await supabase.rpc('log_speech_card_opened', { p_student_id: id })
+    if (logError) printMode = false
+  }
+  const canEditClinical = canWriteClinical && !printMode
+
+  // Цели из последней диагностики (этап 9) — только тем, кто ведёт клинику;
+  // состав и этап считает goal_suggestions, отказ по роли — тоже там.
+  const latestDiagnostic = clinicalSection?.diagnostics[0] ?? null
+  const { data: suggestionRows } =
+    canEditClinical && latestDiagnostic
+      ? await supabase.rpc('goal_suggestions', { p_diagnostic_id: latestDiagnostic.id })
+      : { data: null }
+  const goalSuggestions: GoalSuggestion[] = (suggestionRows ?? []).map((r) => ({
+    sound: r.sound,
+    soundStatus: r.sound_status,
+    stageTitle: r.stage_title,
+    title: r.title,
+    alreadyActive: r.already_active,
+    existingStageTitle: r.existing_stage_title,
+    existingStatus: r.existing_status,
+  }))
+
   const sectionBlocks: Record<string, { label: string; show: boolean; node: React.ReactNode }> = {
     subscriptions: {
       label: 'Абонементы',
@@ -1016,7 +1054,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <CardDescription>История до первого приёма. Родителю не показывается.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AnamnesisPanel studentId={id} entry={anamnesis} canWrite={canWriteClinical} />
+            <AnamnesisPanel studentId={id} entry={anamnesis} canWrite={canEditClinical} />
           </CardContent>
         </Card>
       
@@ -1032,7 +1070,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <CardDescription>Строение и подвижность. Родителю не показывается.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ArticulationPanel studentId={id} entry={articulation} canWrite={canWriteClinical} />
+            <ArticulationPanel studentId={id} entry={articulation} canWrite={canEditClinical} />
           </CardContent>
         </Card>
       
@@ -1048,7 +1086,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <CardDescription>История обследований. Родителю не показывается.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SyllableAssessmentPanel studentId={id} entries={syllableAssessments} canWrite={canWriteClinical} />
+            <SyllableAssessmentPanel studentId={id} entries={syllableAssessments} canWrite={canEditClinical} />
           </CardContent>
         </Card>
       
@@ -1064,7 +1102,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <CardDescription>История обследований. Родителю не показывается.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ProsodyAssessmentPanel studentId={id} entries={prosodyAssessments} canWrite={canWriteClinical} />
+            <ProsodyAssessmentPanel studentId={id} entries={prosodyAssessments} canWrite={canEditClinical} />
           </CardContent>
         </Card>
       
@@ -1083,7 +1121,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <ReadingWritingAssessmentPanel
               studentId={id}
               entries={readingWritingAssessments}
-              canWrite={canWriteClinical}
+              canWrite={canEditClinical}
             />
           </CardContent>
         </Card>
@@ -1103,11 +1141,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <DiagnosticsPanel
               studentId={id}
               entries={clinicalSection!.diagnostics}
-              canWrite={canWriteClinical}
+              canWrite={canEditClinical}
               conclusions={conclusionLookup}
               forms={formLookup}
               referralTargets={referralLookup}
             />
+            {latestDiagnostic && goalSuggestions.length > 0 ? (
+              <div className="mt-4">
+                <GoalSuggestions studentId={id} diagnosticId={latestDiagnostic.id} suggestions={goalSuggestions} />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ),
@@ -1126,7 +1169,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               studentId={id}
               goals={clinicalSection!.goals}
               stages={clinicalSection!.stages}
-              canWrite={canWriteClinical}
+              canWrite={canEditClinical}
             />
           </CardContent>
         </Card>
@@ -1146,7 +1189,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               studentId={id}
               homework={clinicalSection!.homework}
               exercises={clinicalSection!.exercises}
-              canWrite={canWriteClinical}
+              canWrite={canEditClinical}
             />
           </CardContent>
         </Card>
@@ -1169,7 +1212,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             <NotesPanel
               studentId={id}
               notes={clinicalSection!.notes}
-              canWrite={canWriteClinical}
+              canWrite={canEditClinical}
               timeZone={clinicalTimeZone}
             />
           </CardContent>
@@ -1195,7 +1238,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               months={reportMonths}
               initialMonth={initialReportMonth!}
               initialReport={(initialReport as unknown as MonthlyReport | null) ?? null}
-              canSend={canWriteClinical}
+              canSend={canEditClinical}
               canResend={isAdmin}
               timeZone={clinicalTimeZone}
             />
@@ -1242,15 +1285,40 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     : isParent
       ? ['report', 'goals', 'homework', 'notes', 'subscriptions', 'data', 'payer']
       : ['subscriptions', 'payer', 'data', 'goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'history']
-  const sections = sectionOrder
+  const printOrder = ['diagnostics', 'goals', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting']
+  const sections = (printMode ? printOrder : sectionOrder)
     .map((key) => ({ id: key, ...sectionBlocks[key]! }))
     .filter((section) => section.show)
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
+      {printMode ? (
+        <PrintToolbar backHref={`/app/students/${id}`} />
+      ) : null}
+      {printMode ? (
+        <div className="space-y-1 border-b border-border pb-4">
+          <p className="text-sm text-muted-foreground">
+            {clinicalCenter?.name ?? 'LogoCRM'}, речевая карта на {dayInZone(new Date(), clinicalTimeZone)}{' '}
+            {new Date().getFullYear()} г.
+          </p>
+          <h1 className="page-title">{student.fullName}</h1>
+          <p className="text-sm">
+            {student.birthDate ? `Дата рождения: ${calendarDay(student.birthDate, { day: 'numeric', month: 'long', year: 'numeric' })}, ` : ''}
+            {studentAge(student.birthDate)}
+            {teacherName ? `. Специалист: ${teacherName}` : ''}
+          </p>
+        </div>
+      ) : null}
+      <div className={printMode ? 'hidden' : 'space-y-3'}>
         <PageHeader
           back={{ href: '/app/students', label: 'Все ученики' }}
+          actions={
+            canWriteClinical ? (
+              <Link href={`/app/students/${id}?print=1`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Речевая карта: печать / PDF
+              </Link>
+            ) : null
+          }
           title={student.fullName}
           aside={
             <StatusBadge tone={STUDENT_STATUS_TONES[student.status] ?? 'neutral'}>{statusLabel(student.status)}</StatusBadge>
@@ -1262,7 +1330,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         ) : null}
       </div>
 
-      {sections.length > 3 ? (
+      {sections.length > 3 && !printMode ? (
         <nav
           aria-label="Разделы карточки"
           className="-mx-6 flex gap-1 overflow-x-auto border-y border-border bg-background/95 px-6 py-2 backdrop-blur sm:sticky sm:top-0 sm:z-10 sm:mx-0 sm:rounded-lg sm:border sm:px-2"
