@@ -421,6 +421,25 @@ export async function createGoal(_prev: ClinicalState, formData: FormData): Prom
   return { message: '', notice: 'Цель заведена' }
 }
 
+/** Цели из последней диагностики (этап 9): выбор — звуки, состав и этап считает SQL. */
+export async function createGoalsFromDiagnostic(_prev: ClinicalState, formData: FormData): Promise<ClinicalState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const diagnosticId = String(formData.get('diagnosticId') ?? '')
+  const sounds = formData.getAll('sounds').map((value) => String(value)).filter(Boolean)
+  if (sounds.length === 0) return { message: 'Отметьте хотя бы одну цель' }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('create_goals_from_diagnostic', {
+    p_diagnostic_id: diagnosticId,
+    p_sounds: sounds,
+  })
+
+  if (error) return toAppError(error, 'Не удалось завести цели')
+
+  revalidatePath(`/app/students/${studentId}`)
+  return { message: '', notice: data ? `Заведено целей: ${data}` : 'Новых целей нет — все уже заведены' }
+}
+
 export async function setGoalStatus(studentId: string, goalId: string, status: string): Promise<ClinicalState> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('set_goal_status', { p_id: goalId, p_status: status })

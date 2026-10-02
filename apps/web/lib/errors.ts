@@ -123,6 +123,7 @@ const CHECK_MESSAGES: Record<string, string> = {
  * экране появлялся как есть.
  */
 const UNIQUE_MESSAGES: Record<string, string> = {
+  goals_one_active_per_sound_stage: 'Активная цель по этому звуку и этапу уже есть — поставьте её на паузу или завершите',
   payers_center_phone_uniq: 'Плательщик с таким телефоном уже есть',
   installment_plans_one_live_key: 'По абонементу уже есть рассрочка — сначала отмените её',
   subscriptions_sale_key_key: 'Эта продажа уже проведена — обновите страницу',

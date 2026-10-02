@@ -172,7 +172,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-card sm:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-card sm:flex print:hidden">
         <div className="border-b border-border p-4">{centerHeader}</div>
 
         {canSearch ? <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} /> : null}
@@ -183,7 +183,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-border bg-card sm:hidden">
+        <header className="sticky top-0 z-30 border-b border-border bg-card sm:hidden print:hidden">
           <div className="container flex h-14 items-center gap-2">
             <MobileNav groups={groups} header={centerHeader} footer={accountActions} />
             {centerHeader}
@@ -192,13 +192,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {canSearch ? <GlobalSearch canSeeContacts={canSeeContacts} timeZone={timeZone} compact /> : null}
         </header>
 
-        <PlanBanner limits={limits} />
+        <div className="print:hidden">
+          <PlanBanner limits={limits} />
+        </div>
 
-        <main className={cn('container flex-1 py-6 sm:py-8', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
+        <main className={cn('container flex-1 py-6 sm:py-8 print:max-w-none print:p-0', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
           {children}
         </main>
 
-        {bottomTabs ? <BottomTabs links={bottomTabs} /> : null}
+        {bottomTabs ? (
+          <div className="print:hidden">
+            <BottomTabs links={bottomTabs} />
+          </div>
+        ) : null}
       </div>
     </div>
   )

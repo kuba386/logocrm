@@ -4961,6 +4961,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_goals_from_diagnostic: {
+        Args: { p_diagnostic_id: string; p_sounds: string[] }
+        Returns: number
+      }
       create_installment_plan: {
         Args: {
           p_expected_remaining_tiyin?: number
@@ -5244,6 +5248,19 @@ export type Database = {
           week_start: string
         }[]
       }
+      goal_suggestions: {
+        Args: { p_diagnostic_id: string }
+        Returns: {
+          already_active: boolean
+          existing_stage_title: string
+          existing_status: string
+          sound: string
+          sound_status: string
+          stage_id: string
+          stage_title: string
+          title: string
+        }[]
+      }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
       installment_plans_cancel_live: {
         Args: { p_subscription_id: string }
@@ -5292,6 +5309,10 @@ export type Database = {
       link_telegram: {
         Args: { p_chat_id: number; p_code: string }
         Returns: string
+      }
+      log_speech_card_opened: {
+        Args: { p_student_id: string }
+        Returns: undefined
       }
       mark_attendance: {
         Args: {

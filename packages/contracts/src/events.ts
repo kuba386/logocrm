@@ -945,6 +945,20 @@ export const reportExportedSchema = z.object({
   }),
 })
 
+/**
+ * Открыт печатный вид речевой карты (0085, этап 9) — след «данные ребёнка
+ * уходят из системы» (школа, ПМПК). Пишет сервер при рендере, не кнопка.
+ * Адресата нет, как у report.exported.
+ */
+export const studentSpeechCardOpenedSchema = z.object({
+  type: z.literal('student.speech_card_opened'),
+  payload: z.object({
+    student_id: z.string().uuid(),
+    by: z.string().uuid(),
+    role: z.string().nullable(),
+  }),
+})
+
 /** Заявка на удаление центра (0056 Р8) — owner, mandatory (не выключить). */
 export const centerDeletionRequestedSchema = z.object({
   type: z.literal('center.deletion_requested'),
@@ -1060,6 +1074,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   aiQuotaExceededSchema,
   centerExportedSchema,
   reportExportedSchema,
+  studentSpeechCardOpenedSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,
