@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
-import { sendMagicLink, signIn, signUp, type AuthState } from './actions'
+import { sendMagicLink, sendPasswordReset, signIn, signUp, type AuthState } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,10 +21,36 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
 }
 
 export function LoginForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<'password' | 'magic'>('password')
+  const [mode, setMode] = useState<'password' | 'magic' | 'reset'>('password')
   const [passwordState, passwordAction] = useActionState(signIn, initialState)
   const [signUpState, signUpAction] = useActionState(signUp, initialState)
   const [magicState, magicAction] = useActionState(sendMagicLink, initialState)
+  const [resetState, resetAction] = useActionState(sendPasswordReset, initialState)
+
+  if (mode === 'reset') {
+    return (
+      <form action={resetAction} className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Пришлём письмо со ссылкой — по ней вы зададите новый пароль.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="reset-email">Email</Label>
+          <Input id="reset-email" name="email" type="email" autoComplete="email" required />
+        </div>
+
+        <TurnstileField />
+
+        <FormError message={resetState.error} />
+        <FormNotice message={resetState.notice} />
+
+        <SubmitButton>Отправить ссылку для смены пароля</SubmitButton>
+
+        <Button type="button" variant="link" className="w-full" onClick={() => setMode('password')}>
+          Вспомнил пароль — войти
+        </Button>
+      </form>
+    )
+  }
 
   if (mode === 'magic') {
     return (
@@ -58,7 +84,16 @@ export function LoginForm({ next }: { next: string }) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Пароль</Label>
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor="password">Пароль</Label>
+          <button
+            type="button"
+            className="text-xs text-primary hover:underline"
+            onClick={() => setMode('reset')}
+          >
+            Забыли пароль?
+          </button>
+        </div>
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
       </div>
 
