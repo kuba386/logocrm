@@ -7,6 +7,7 @@ import { acceptInvitationSchema, magicLinkSchema, signInSchema } from '@logocrm/
 import { createClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { INVITE_COOKIE } from '@/lib/invite'
+import { invitationErrorMessage } from '@/lib/errors'
 import { captchaOptions } from '@/lib/captcha'
 import { authErrorMessage } from '@/lib/errors'
 
@@ -38,7 +39,7 @@ export async function acceptInvitation(token: string): Promise<{ error?: string 
   const { error } = await supabase.rpc('accept_invitation', { p_token: parsed.data.token })
 
   if (error) {
-    return { error: error.message || 'Не удалось принять приглашение' }
+    return { error: invitationErrorMessage(error) }
   }
 
   // accept_invitation вызвал switch_center — в текущем JWT центра ещё нет.
