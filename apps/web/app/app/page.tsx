@@ -32,6 +32,7 @@ export default async function DashboardPage() {
         finance={role !== 'registrar'}
         showLessons={role !== 'finance'}
         canOpenDebts={role === 'owner' || role === 'admin'}
+        setupCenterId={(role === 'owner' || role === 'admin') && centerId ? centerId : null}
       />
     )
   }

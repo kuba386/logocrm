@@ -299,7 +299,7 @@ export default async function PlanPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="booking" className="scroll-mt-20">
             <CardHeader>
               <CardTitle>{t('bookingQueue', 'publishTitle')}</CardTitle>
               <CardDescription>
