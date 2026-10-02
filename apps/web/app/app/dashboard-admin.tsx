@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { t } from '@/lib/messages'
 import { toAppError } from '@/lib/errors'
 import { PageHeader } from '@/components/ui/page-header'
+import { SetupChecklist } from './setup-checklist'
 
 /**
  * Дашборд администратора: сколько занятий сегодня, у кого заканчивается
@@ -22,12 +23,15 @@ export async function AdminDashboard({
   finance = true,
   showLessons = true,
   canOpenDebts = false,
+  setupCenterId = null,
 }: {
   timeZone: string
   finance?: boolean
   showLessons?: boolean
   /** Ссылка «Все долги →»: тем же условием, что редирект /app/debts (owner/admin). */
   canOpenDebts?: boolean
+  /** Плашка «Настройка центра» — только owner/admin: шаги ведут в их настройки. */
+  setupCenterId?: string | null
 }) {
   const supabase = await createClient()
 
@@ -107,6 +111,8 @@ export async function AdminDashboard({
   return (
     <div className="space-y-6">
       <PageHeader title="Дашборд" description={`${dayInZone(new Date(), timeZone)}, сегодня`} />
+
+      {setupCenterId ? <SetupChecklist centerId={setupCenterId} /> : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
         {showLessons ? (
