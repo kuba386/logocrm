@@ -34,6 +34,8 @@ import { HomeworkPanel, type ExerciseOption, type HomeworkEntry } from './homewo
 import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
 import type { MonthlyReport } from './clinical-actions'
 import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
+import { StudentSummary } from './student-summary'
+import { CardTabs, type CardTab } from './card-tabs'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
@@ -166,6 +168,14 @@ export default async function StudentPage({
     timeZone: string
     /** owner/admin — продажа/заморозка/возврат/перенос; родитель — только чтение. */
     canManage: boolean
+  } | null = null
+
+  // Шапка со сводкой — только owner/admin: у них есть и баланс, и посещения,
+  // и все занятия ученика. Родителю attendance закрыта (0044), специалисту
+  // деньги не показываются (ADR-005).
+  let summary: {
+    lastMark: { startsAt: string; statusName: string } | null
+    nextLessonAt: string | null
   } | null = null
 
   if (isAdmin) {
@@ -333,6 +343,29 @@ export default async function StudentPage({
         }
       }),
       canManage: true,
+    }
+
+    // Следующее — из lesson_participants: там и разовые, и групповые занятия
+    // ученика с уже посчитанным временем (строки кладут триггеры 0006).
+    const { data: nextRow } = await supabase
+      .from('lesson_participants')
+      .select('starts_at')
+      .eq('student_id', id)
+      .eq('status', 'planned')
+      .is('deleted_at', null)
+      .gte('starts_at', new Date().toISOString())
+      .order('starts_at')
+      .limit(1)
+      .maybeSingle()
+
+    const nowIso = new Date().toISOString()
+    const lastMark = subscriptionsSection.attendanceHistory
+      .filter((row) => row.startsAt && row.startsAt <= nowIso)
+      .reduce<AttendanceHistoryRow | null>((latest, row) => (!latest || row.startsAt > latest.startsAt ? row : latest), null)
+
+    summary = {
+      lastMark: lastMark ? { startsAt: lastMark.startsAt, statusName: lastMark.statusName } : null,
+      nextLessonAt: nextRow?.starts_at ?? null,
     }
   } else if (isParent) {
     // Родителю — то же самое «Оплачено X из Y», статус и график рассрочки,
@@ -964,7 +997,7 @@ export default async function StudentPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SubscriptionsPanel studentId={id} {...subscriptionsSection} />
+              <SubscriptionsPanel studentId={id} {...subscriptionsSection} hideBalance={Boolean(summary)} />
             </CardContent>
           </Card>
         ) : subscriptionBadge ? (
@@ -1290,6 +1323,39 @@ export default async function StudentPage({
     .map((key) => ({ id: key, ...sectionBlocks[key]! }))
     .filter((section) => section.show)
 
+  // Вкладки вместо ленты: разделы те же и в том же порядке по роли, просто
+  // разложены по смыслу. Первая вкладка — та, ради которой роль открывает
+  // карточку: администратору деньги, специалисту и родителю занятия.
+  const tabGroups: { key: string; label: string; ids: string[] }[] = [
+    { key: 'money', label: 'Абонементы', ids: ['subscriptions'] },
+    { key: 'work', label: 'Занятия', ids: ['goals', 'homework', 'notes', 'report'] },
+    { key: 'exam', label: 'Обследование', ids: ['diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting'] },
+    { key: 'profile', label: 'Данные', ids: ['data', 'payer'] },
+    { key: 'history', label: 'История', ids: ['history'] },
+  ]
+  // Специалисту бейдж абонемента — к данным ученика, отдельная вкладка ради одного слова не нужна.
+  if (isTeacher) {
+    tabGroups[0]!.ids = []
+    tabGroups[3]!.ids = ['subscriptions', 'payer', 'data']
+  }
+  const firstTab = isAdmin || isRegistrar ? 'money' : 'work'
+  const orderedGroups = [...tabGroups.filter((g) => g.key === firstTab), ...tabGroups.filter((g) => g.key !== firstTab)]
+  const tabs: CardTab[] = orderedGroups
+    .map((group) => {
+      const inTab = sections.filter((section) => group.ids.includes(section.id))
+      return {
+        key: group.key,
+        label: group.label,
+        sectionIds: inTab.map((section) => section.id),
+        content: inTab.map((section) => (
+          <section key={section.id} id={section.id} className="scroll-mt-20">
+            {section.node}
+          </section>
+        )),
+      }
+    })
+    .filter((tab) => tab.sectionIds.length > 0)
+
   return (
     <div className="space-y-6">
       {printMode ? (
@@ -1328,30 +1394,25 @@ export default async function StudentPage({
         {(isAdmin || isRegistrar) && 'funnel_stage' in base && base.funnel_stage ? (
           <FunnelStageWidget studentId={student.id} stage={base.funnel_stage as FunnelStage} />
         ) : null}
+        {summary && subscriptionsSection ? (
+          <StudentSummary
+            balance={subscriptionsSection.balance}
+            lastMark={summary.lastMark}
+            nextLessonAt={summary.nextLessonAt}
+            timeZone={subscriptionsSection.timeZone}
+          />
+        ) : null}
       </div>
 
-      {sections.length > 3 && !printMode ? (
-        <nav
-          aria-label="Разделы карточки"
-          className="-mx-6 flex gap-1 overflow-x-auto border-y border-border bg-background/95 px-6 py-2 backdrop-blur sm:sticky sm:top-0 sm:z-10 sm:mx-0 sm:rounded-lg sm:border sm:px-2"
-        >
-          {sections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {section.label}
-            </a>
-          ))}
-        </nav>
-      ) : null}
-
-      {sections.map((section) => (
-        <section key={section.id} id={section.id} className="scroll-mt-20">
-          {section.node}
-        </section>
-      ))}
+      {printMode || tabs.length < 2 ? (
+        sections.map((section) => (
+          <section key={section.id} id={section.id} className="scroll-mt-20">
+            {section.node}
+          </section>
+        ))
+      ) : (
+        <CardTabs tabs={tabs} initial={tabs[0]!.key} />
+      )}
     </div>
   )
 }

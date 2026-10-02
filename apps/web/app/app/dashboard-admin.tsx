@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { addDays, dayInZone, isoDayInZone, startOfDayInZone, timeInZone } from '@/lib/timezone'
 import { debtSummaryLine, debtTopAmountLine, formatSom, parseDebtSummary } from '@logocrm/core'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlarmClock, Banknote, CalendarDays, Hourglass, TrendingUp, Wallet } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { StatTile } from '@/components/ui/stat-tile'
 import { t } from '@/lib/messages'
 import { toAppError } from '@/lib/errors'
 import { PageHeader } from '@/components/ui/page-header'
@@ -108,149 +110,151 @@ export async function AdminDashboard({
   const upcoming = upcomingAll.slice(0, 6)
 
 
+  const debtorsLabel = debtError
+    ? toAppError(debtError, 'Не удалось загрузить долги').message
+    : debt.debtorsN > 0
+      ? debtSummaryLine(debt)
+      : t('dashboard', 'debtorsNone')
+
   return (
     <div className="space-y-6">
       <PageHeader title="Дашборд" description={`${dayInZone(new Date(), timeZone)}, сегодня`} />
 
       {setupCenterId ? <SetupChecklist centerId={setupCenterId} /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3">
+        {showLessons ? (
+          <StatTile
+            icon={CalendarDays}
+            tone="info"
+            value={lessons.length}
+            label={t('dashboard', 'lessonsToday')}
+            hint={lessons.length > 0 ? t('dashboard', 'lessonsTodayHint', { done, cancelled }) : t('dashboard', 'lessonsNone')}
+            href="/app/schedule"
+          />
+        ) : null}
+        <StatTile
+          icon={Hourglass}
+          tone={lowBalance.length > 0 ? 'warning' : 'neutral'}
+          value={lowBalance.length}
+          label={t('dashboard', 'lowBalance')}
+          hint={t('dashboard', 'lowBalanceHint')}
+        />
+        {/* /app/debts открыт owner/admin (страница редиректит остальных). */}
+        <StatTile
+          icon={Wallet}
+          tone={debt.debtorsN > 0 ? 'danger' : 'neutral'}
+          value={debtError ? '—' : debt.debtorsN}
+          label={t('dashboard', 'debtors')}
+          hint={debtorsLabel}
+          href={canOpenDebts ? '/app/debts' : undefined}
+        />
+        {finance ? (
+          <>
+            <StatTile
+              icon={TrendingUp}
+              tone="success"
+              value={formatSom(revenue)}
+              label={t('dashboard', 'revenueMonth')}
+              hint={visits > 0 ? t('dashboard', 'revenueVisits', { visits }) : t('dashboard', 'revenueHint')}
+              href="/app/finance"
+            />
+            <StatTile
+              icon={Banknote}
+              tone="primary"
+              value={formatSom(cashTotal)}
+              label={t('dashboard', 'cashMonth')}
+              hint={t('dashboard', 'cashHint')}
+              href="/app/finance"
+            />
+          </>
+        ) : null}
+        <StatTile
+          icon={AlarmClock}
+          tone={(overdueCount ?? 0) > 0 ? 'danger' : 'neutral'}
+          value={overdueCount ?? 0}
+          label={t('dashboard', 'overdueInstallments')}
+          href="/app/finance?tab=installments"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
         {showLessons ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-3xl">{lessons.length}</CardTitle>
-              <CardDescription>
-                {lessons.length === 0
-                  ? 'Сегодня занятий нет'
-                  : `Занятий сегодня: проведено ${done}, отменено ${cancelled}`}
-              </CardDescription>
+              <CardTitle className="text-base">{t('dashboard', 'upcomingTitle')}</CardTitle>
             </CardHeader>
-            {upcoming.length > 0 ? (
-              <CardContent className="space-y-1 text-sm">
-                <p className="pb-1 text-xs text-muted-foreground">Дальше сегодня</p>
-                {upcoming.map((lesson) => {
-                  const effectiveTeacher = lesson.substitute_teacher_id ?? lesson.teacher_id
-                  const title = lesson.group_id
-                    ? (groupName.get(lesson.group_id) ?? 'Группа')
-                    : (studentName.get(lesson.student_id ?? '') ?? 'Занятие')
-                  return (
-                    <p key={lesson.id} className="flex justify-between gap-2">
-                      <span className="truncate">
-                        {timeInZone(lesson.starts_at, timeZone)} {title}
-                      </span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {effectiveTeacher ? (teacherName.get(effectiveTeacher) ?? '—') : '—'}
-                      </span>
-                    </p>
-                  )
-                })}
-                <Link href="/app/schedule" className="block pt-1 font-medium text-primary hover:underline">
-                  {upcomingAll.length > upcoming.length ? `Ещё ${upcomingAll.length - upcoming.length} в расписании` : 'Расписание'}
-                </Link>
-              </CardContent>
-            ) : null}
+            <CardContent className="space-y-1 text-sm">
+              {upcoming.length === 0 ? <p className="text-muted-foreground">{t('dashboard', 'upcomingNone')}</p> : null}
+              {upcoming.map((lesson) => {
+                const effectiveTeacher = lesson.substitute_teacher_id ?? lesson.teacher_id
+                const title = lesson.group_id
+                  ? (groupName.get(lesson.group_id) ?? 'Группа')
+                  : (studentName.get(lesson.student_id ?? '') ?? 'Занятие')
+                return (
+                  <p key={lesson.id} className="flex justify-between gap-2">
+                    <span className="truncate">
+                      {timeInZone(lesson.starts_at, timeZone)} {title}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {effectiveTeacher ? (teacherName.get(effectiveTeacher) ?? '—') : '—'}
+                    </span>
+                  </p>
+                )
+              })}
+              <Link href="/app/schedule" className="block pt-1 font-medium text-primary hover:underline">
+                {upcomingAll.length > upcoming.length
+                  ? t('dashboard', 'moreInSchedule', { count: upcomingAll.length - upcoming.length })
+                  : t('dashboard', 'toSchedule')}
+              </Link>
+            </CardContent>
           </Card>
         ) : null}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl">{lowBalance.length}</CardTitle>
-            <CardDescription>Заканчивается абонемент</CardDescription>
+            <CardTitle className="text-base">{t('dashboard', 'lowBalance')}</CardTitle>
           </CardHeader>
-          {lowBalance.length > 0 ? (
-            <CardContent className="space-y-1 text-sm">
-              {lowBalance.slice(0, 5).map((row) => (
-                <Link
-                  key={row.student_id}
-                  href={`/app/students/${row.student_id}`}
-                  className="flex justify-between gap-2 hover:underline"
-                >
-                  <span className="truncate">{studentName.get(row.student_id ?? '') ?? '—'}</span>
-                  <span className="shrink-0 text-muted-foreground">{row.lessons_left} зан.</span>
-                </Link>
-              ))}
-            </CardContent>
-          ) : null}
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className={debt.debtorsN > 0 ? 'text-3xl text-destructive' : 'text-3xl'}>{debt.debtorsN}</CardTitle>
-            {/* Отказ RPC (миграция не применена, сбой) — не «Долгов нет». */}
-            <CardDescription>
-              {debtError
-                ? toAppError(debtError, 'Не удалось загрузить долги').message
-                : debt.debtorsN > 0
-                  ? `Долги — ${debtSummaryLine(debt)}`
-                  : 'Долгов нет'}
-            </CardDescription>
-          </CardHeader>
-          {debt.debtorsN > 0 ? (
-            <CardContent className="space-y-1 text-sm">
-              {debtTop.map((row) => (
-                <Link
-                  key={row.studentId}
-                  href={`/app/students/${row.studentId}`}
-                  className="flex justify-between gap-2 hover:underline"
-                >
-                  <span className="truncate">{row.name}</span>
-                  <span className="shrink-0 text-destructive">{debtTopAmountLine(row)}</span>
-                </Link>
-              ))}
-              {/* /app/debts открыт owner/admin (страница редиректит остальных). */}
-              {canOpenDebts ? (
-                <Link href="/app/debts" className="block pt-1 font-medium text-primary hover:underline">
-                  Все долги →
-                </Link>
-              ) : null}
-            </CardContent>
-          ) : null}
-        </Card>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {finance ? (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl">{formatSom(revenue)}</CardTitle>
-                <CardDescription>
-                  {t('dashboard', 'revenueMonth')}
-                  {visits > 0 ? `, посещений ${visits}` : ''}
-                  <span className="block text-xs">{t('dashboard', 'revenueHint')}</span>
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl">{formatSom(cashTotal)}</CardTitle>
-                <CardDescription>
-                  {t('dashboard', 'cashMonth')}
-                  <span className="block text-xs">{t('dashboard', 'cashHint')}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm">
-                <Link href="/app/finance" className="font-medium text-primary hover:underline">
-                  {t('dashboard', 'toFinance')}
-                </Link>
-              </CardContent>
-            </Card>
-          </>
-        ) : null}
-        <Card>
-          <CardHeader>
-            <CardTitle className={(overdueCount ?? 0) > 0 ? 'text-3xl text-destructive' : 'text-3xl'}>{overdueCount ?? 0}</CardTitle>
-            <CardDescription>
-              {(overdueCount ?? 0) > 0 ? t('dashboard', 'overdueInstallments') : t('dashboard', 'overdueNone')}
-            </CardDescription>
-          </CardHeader>
-          {(overdueCount ?? 0) > 0 ? (
-            <CardContent className="text-sm">
-              <Link href="/app/finance?tab=installments" className="font-medium text-primary hover:underline">
-                {t('dashboard', 'toInstallments')}
+          <CardContent className="space-y-1 text-sm">
+            {lowBalance.length === 0 ? <p className="text-muted-foreground">{t('dashboard', 'lowBalanceNone')}</p> : null}
+            {lowBalance.slice(0, 5).map((row) => (
+              <Link
+                key={row.student_id}
+                href={`/app/students/${row.student_id}`}
+                className="flex justify-between gap-2 hover:underline"
+              >
+                <span className="truncate">{studentName.get(row.student_id ?? '') ?? '—'}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {t('dashboard', 'lessonsLeft', { count: row.lessons_left ?? 0 })}
+                </span>
               </Link>
-            </CardContent>
-          ) : null}
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('dashboard', 'debtsTitle')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            {/* Отказ RPC (миграция не применена, сбой) — не «Долгов нет». */}
+            {debtError || debt.debtorsN === 0 ? <p className="text-muted-foreground">{debtorsLabel}</p> : null}
+            {debtTop.map((row) => (
+              <Link
+                key={row.studentId}
+                href={`/app/students/${row.studentId}`}
+                className="flex justify-between gap-2 hover:underline"
+              >
+                <span className="truncate">{row.name}</span>
+                <span className="shrink-0 text-destructive">{debtTopAmountLine(row)}</span>
+              </Link>
+            ))}
+            {canOpenDebts && debt.debtorsN > 0 ? (
+              <Link href="/app/debts" className="block pt-1 font-medium text-primary hover:underline">
+                {t('dashboard', 'allDebts')}
+              </Link>
+            ) : null}
+          </CardContent>
         </Card>
       </div>
     </div>
