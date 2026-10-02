@@ -53,6 +53,22 @@ export async function acceptInvitation(token: string): Promise<{ error?: string 
   return {}
 }
 
+/**
+ * Уже вошедший пользователь принимает приглашение одной кнопкой. Нужен,
+ * когда подтверждение почты открылось в другом браузере (кука с токеном и
+ * ключ PKCE остались в первом): человек входит паролем и возвращается по
+ * ссылке приглашения — без этого страница снова просила зарегистрироваться.
+ */
+export async function acceptSignedIn(_prev: InviteState, formData: FormData): Promise<InviteState> {
+  const token = String(formData.get('token') ?? '')
+  const accepted = await acceptInvitation(token)
+  if (accepted.error) {
+    return { error: accepted.error }
+  }
+  revalidatePath('/', 'layout')
+  redirect('/app')
+}
+
 export async function signInAndAccept(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const token = String(formData.get('token') ?? '')
   const parsed = signInSchema.safeParse({
@@ -117,7 +133,10 @@ export async function signUpAndAccept(_prev: InviteState, formData: FormData): P
     redirect('/app')
   }
 
-  return { notice: 'Мы отправили письмо для подтверждения. Перейдите по ссылке из него.' }
+  return {
+    notice:
+      'Мы отправили письмо для подтверждения. Откройте его на этом же устройстве и в этом же браузере. Если ссылка открылась в другом — войдите с паролем и снова откройте ссылку приглашения: там будет кнопка «Принять».',
+  }
 }
 
 export async function magicLinkAndAccept(_prev: InviteState, formData: FormData): Promise<InviteState> {

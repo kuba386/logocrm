@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { roleLabel } from '@/lib/roles'
-import { InviteForm } from './invite-form'
+import { AcceptSignedInForm, InviteForm } from './invite-form'
 
 export const metadata = { title: 'Приглашение — LogoCRM' }
 
@@ -38,6 +38,10 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     )
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-md">
@@ -46,11 +50,13 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             «{preview.center_name}» приглашает вас как {roleLabel(preview.role).toLowerCase()}
           </CardTitle>
           <CardDescription>
-            Создайте аккаунт или войдите — доступ откроется сразу после этого.
+            {user
+              ? `Вы вошли как ${user.email}. Примите приглашение — доступ откроется сразу.`
+              : 'Создайте аккаунт или войдите — доступ откроется сразу после этого.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <InviteForm token={token} />
+          {user ? <AcceptSignedInForm token={token} /> : <InviteForm token={token} />}
         </CardContent>
       </Card>
     </main>

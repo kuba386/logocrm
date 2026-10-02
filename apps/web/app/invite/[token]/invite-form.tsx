@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import {
+  acceptSignedIn,
   magicLinkAndAccept,
   signInAndAccept,
   signUpAndAccept,
@@ -13,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
+import { signOut } from '@/app/login/actions'
 
 const initialState: InviteState = {}
 
@@ -22,6 +24,25 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
     <Button type="submit" className="w-full" disabled={pending}>
       {pending ? 'Подождите…' : children}
     </Button>
+  )
+}
+
+/** Вошедший пользователь: одна кнопка «Принять», без повторного пароля. */
+export function AcceptSignedInForm({ token }: { token: string }) {
+  const [state, action] = useActionState(acceptSignedIn, initialState)
+  return (
+    <div className="space-y-3">
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="token" value={token} />
+        <SubmitButton>Принять приглашение</SubmitButton>
+        <FormError message={state.error} />
+      </form>
+      <form action={signOut}>
+        <Button type="submit" variant="link" className="w-full">
+          Это не мой аккаунт — выйти
+        </Button>
+      </form>
+    </div>
   )
 }
 
