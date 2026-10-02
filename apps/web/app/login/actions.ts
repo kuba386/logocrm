@@ -7,11 +7,12 @@ import { createClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { captchaOptions } from '@/lib/captcha'
 import { authErrorMessage } from '@/lib/errors'
+import { codePurpose, resendEmailCode, verifyEmailCode, type CodeStep } from '@/lib/email-code'
 
-export type AuthState = { error?: string; notice?: string }
+export type AuthState = { error?: string; notice?: string } & CodeStep
 
 const ALREADY_REGISTERED =
-  'Этот email уже зарегистрирован. Войдите с паролем или по ссылке из письма, а если не помните пароль — нажмите «Забыли пароль?».'
+  'Этот email уже зарегистрирован. Войдите с паролем или по коду из письма, а если не помните пароль — нажмите «Забыли пароль?».'
 
 /** Вход по email и паролю. */
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -67,19 +68,17 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     return { error: ALREADY_REGISTERED }
   }
 
-  // На prod почта подтверждается (ADR-004): сессии ещё нет, и редирект в
-  // /onboarding молча возвращал человека на вход без слова о письме.
+  // На prod почта подтверждается (ADR-004): сессии ещё нет — форма
+  // переключается на ввод кода из письма (verifyCode ниже).
   if (!data.session) {
-    return {
-      notice: `Мы отправили письмо на ${parsed.data.email}. Откройте его и нажмите ссылку — после этого центр можно будет создать. Письма нет 5 минут — проверьте «Спам». Если запросите письмо ещё раз, открывайте только последнее.`,
-    }
+    return { codeSentTo: parsed.data.email, codePurpose: 'signup' }
   }
 
   revalidatePath('/', 'layout')
   redirect('/onboarding')
 }
 
-/** Вход по одноразовой ссылке (magic link). */
+/** Вход по коду из письма (то же письмо содержит и запасную ссылку). */
 export async function sendMagicLink(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = magicLinkSchema.safeParse({ email: String(formData.get('email') ?? '') })
 
@@ -94,10 +93,37 @@ export async function sendMagicLink(_prev: AuthState, formData: FormData): Promi
   })
 
   if (error) {
-    return { error: authErrorMessage(error, 'Не удалось отправить ссылку. Попробуйте позже.') }
+    return { error: authErrorMessage(error, 'Не удалось отправить код. Попробуйте позже.') }
   }
 
-  return { notice: `Ссылка для входа отправлена на ${parsed.data.email}. Проверьте почту.` }
+  return { codeSentTo: parsed.data.email, codePurpose: 'magic' }
+}
+
+/**
+ * Код из письма: регистрация ведёт в /onboarding (центра ещё нет), вход — в
+ * next. Отказ возвращает тот же шаг, чтобы форма осталась на вводе кода.
+ */
+export async function verifyCode(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const purpose = codePurpose(formData.get('purpose'))
+  const email = String(formData.get('email') ?? '')
+  const { error } = await verifyEmailCode(formData)
+  if (error) {
+    return { error, codeSentTo: email, codePurpose: purpose }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect(purpose === 'signup' ? '/onboarding' : String(formData.get('next') || '/app'))
+}
+
+/** Повторное письмо с кодом. */
+export async function resendCode(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const purpose = codePurpose(formData.get('purpose'))
+  const email = String(formData.get('email') ?? '')
+  const result = await resendEmailCode(formData)
+  if (result.error) {
+    return { error: result.error, codeSentTo: email, codePurpose: purpose }
+  }
+  return { notice: `Отправили новый код на ${email}. Вводите код из последнего письма.`, codeSentTo: email, codePurpose: purpose }
 }
 
 /** Письмо со ссылкой на смену пароля. Ссылка ведёт через /auth/callback на /reset-password. */

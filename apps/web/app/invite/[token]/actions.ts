@@ -10,8 +10,9 @@ import { INVITE_COOKIE } from '@/lib/invite'
 import { invitationErrorMessage } from '@/lib/errors'
 import { captchaOptions } from '@/lib/captcha'
 import { authErrorMessage } from '@/lib/errors'
+import { codePurpose, resendEmailCode, verifyEmailCode, type CodeStep } from '@/lib/email-code'
 
-export type InviteState = { error?: string; notice?: string }
+export type InviteState = { error?: string; notice?: string } & CodeStep
 
 /**
  * Токен кладём в httpOnly-куку: после magic link пользователь возвращается на
@@ -128,7 +129,7 @@ export async function signUpAndAccept(_prev: InviteState, formData: FormData): P
   if (data.user && data.user.identities?.length === 0) {
     return {
       error:
-        'Этот email уже зарегистрирован. Выберите «Войти» ниже — после входа приглашение примется сразу. Не помните пароль — «Войти по ссылке из письма».',
+        'Этот email уже зарегистрирован. Выберите «Войти» ниже — после входа приглашение примется сразу. Не помните пароль — «Войти по коду из письма».',
     }
   }
 
@@ -143,10 +144,9 @@ export async function signUpAndAccept(_prev: InviteState, formData: FormData): P
     redirect('/app')
   }
 
-  return {
-    notice:
-      'Мы отправили письмо для подтверждения. Откройте его на этом же устройстве и в этом же браузере. Если ссылка открылась в другом — войдите с паролем и снова откройте ссылку приглашения: там будет кнопка «Принять».',
-  }
+  // Подтверждение почты включено (prod): форма переходит на ввод кода из
+  // письма — он работает, где бы письмо ни открыли.
+  return { codeSentTo: parsed.data.email, codePurpose: 'signup' }
 }
 
 export async function magicLinkAndAccept(_prev: InviteState, formData: FormData): Promise<InviteState> {
@@ -166,8 +166,39 @@ export async function magicLinkAndAccept(_prev: InviteState, formData: FormData)
   })
 
   if (error) {
-    return { error: authErrorMessage(error, 'Не удалось отправить ссылку. Попробуйте позже.') }
+    return { error: authErrorMessage(error, 'Не удалось отправить код. Попробуйте позже.') }
   }
 
-  return { notice: `Ссылка для входа отправлена на ${parsed.data.email}. Проверьте почту.` }
+  return { codeSentTo: parsed.data.email, codePurpose: 'magic' }
+}
+
+/** Код из письма → сессия → приглашение принято → в центр. */
+export async function verifyCodeAndAccept(_prev: InviteState, formData: FormData): Promise<InviteState> {
+  const token = String(formData.get('token') ?? '')
+  const purpose = codePurpose(formData.get('purpose'))
+  const email = String(formData.get('email') ?? '')
+
+  const verified = await verifyEmailCode(formData)
+  if (verified.error) {
+    return { error: verified.error, codeSentTo: email, codePurpose: purpose }
+  }
+
+  const accepted = await acceptInvitation(token)
+  if (accepted.error) {
+    return { error: accepted.error }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/app')
+}
+
+/** Повторное письмо с кодом. */
+export async function resendInviteCode(_prev: InviteState, formData: FormData): Promise<InviteState> {
+  const purpose = codePurpose(formData.get('purpose'))
+  const email = String(formData.get('email') ?? '')
+  const result = await resendEmailCode(formData)
+  if (result.error) {
+    return { error: result.error, codeSentTo: email, codePurpose: purpose }
+  }
+  return { notice: `Отправили новый код на ${email}. Вводите код из последнего письма.`, codeSentTo: email, codePurpose: purpose }
 }
