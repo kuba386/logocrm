@@ -225,12 +225,14 @@ update public.centers set subscription_until = null where id = 'a0520000-0000-00
 select public.tests_claims(null, null);
 select is((select center_count from public.subscription_reminders()), 0, 'Центр без даты: напоминаний нет');
 
--- Мусор в поясе одного центра: фолбэк на Asia/Bishkek у корня (Р7), прогон без пропусков.
-update public.centers set settings = '{"timezone":"Mars/Olympus"}'::jsonb where id = 'a0520000-0000-0000-0000-0000000000c2';
-select is(public.center_timezone('a0520000-0000-0000-0000-0000000000c2'), 'Asia/Bishkek',
-  'center_timezone: имя вне pg_timezone_names → Asia/Bishkek');
+-- Мусор в поясе (Р7). До 0086 — фолбэк на Asia/Bishkek при чтении; с 0086
+-- мусор не записать вовсе: триггер centers_validate_timezone (0086 Р1), а
+-- center_timezone проверку при чтении сняла (скан tzdata ~50 мс на вызов).
+select throws_ok(
+  $q$ update public.centers set settings = '{"timezone":"Mars/Olympus"}'::jsonb where id = 'a0520000-0000-0000-0000-0000000000c2' $q$,
+  '22023', null, 'имя вне pg_timezone_names не записывается (0086)');
 select is((select center_count + skipped_count from public.subscription_reminders()), 0,
-  'Мусорный пояс у Б — прогон живёт, пропусков нет, живой trial события не даёт');
+  'Б с прежним поясом — прогон живёт, пропусков нет, живой trial события не даёт');
 update public.centers set settings = jsonb_build_object('timezone', (select tz_night from t_tz)) where id = 'a0520000-0000-0000-0000-0000000000c2';
 
 
@@ -297,11 +299,12 @@ select throws_ok($q$ select * from public.platform_centers() $q$, '42501', null,
 select throws_ok($q$ select public.platform_summary() $q$, '42501', null, 'platform_summary от центра — отказ');
 reset role;
 
--- Мусорный пояс у В не роняет пульт (Р7): фолбэк в center_timezone.
-update public.centers set settings = '{"timezone":"Mars/Olympus"}'::jsonb where id = 'a0520000-0000-0000-0000-0000000000c3';
+-- Мусорный пояс у В (Р7): с 0086 его не записать (триггер), поэтому пульт
+-- проверяется на обычных поясах. Дрейф tzdata без записи — остаточный риск
+-- 0086, проверочный запрос в docs/Database.md.
 select public.tests_claims('a0520000-0000-0000-0000-000000000004', null);
 set local role authenticated;
-select lives_ok($q$ select * from public.platform_centers() $q$, 'platform_centers живёт при мусорном поясе одного центра');
+select lives_ok($q$ select * from public.platform_centers() $q$, 'platform_centers живёт');
 select is(
   (select pc.no_date from public.platform_centers() pc limit 1),
   true, 'Центр без даты — первым в списке (Р5)');
