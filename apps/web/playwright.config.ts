@@ -73,6 +73,24 @@ export default defineConfig({
       dependencies: ['setup', 'admin', 'teacher'],
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/parent.json' },
     },
+    {
+      // Деньги и дашборд владельца. До 3.10.2026 эти файлы не совпадали ни с
+      // одним testMatch и не запускались ни разу с этапа 5. Последними: они
+      // пишут расходы, платежи, корректировки и ставки, а teacher/parent
+      // читают ту же неделю фикстуры.
+      name: 'owner-money',
+      testMatch: /(dashboard|finance|salary|teacher-rates)\.spec\.ts/,
+      dependencies: ['setup', 'admin', 'teacher', 'parent'],
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
+    },
+    {
+      // Обход всех страниц под каждой ролью (pages.spec.ts). Только чтение —
+      // порядок относительно остальных проектов не важен; роль задаёт сам файл.
+      name: 'pages',
+      testMatch: /pages\.spec\.ts/,
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   webServer: {
