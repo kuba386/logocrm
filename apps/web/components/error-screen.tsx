@@ -1,17 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { Button } from '@/components/ui/button'
 
-// Технические детали видны пользователю: Sentry в приложении нет, и
-// скриншот этого экрана — единственный способ узнать причину сбоя на
-// чужом устройстве (встроенный браузер Telegram, старый iOS).
+// Ошибка уходит в Sentry (на prod, lib/sentry.ts). Технические детали всё
+// равно видны пользователю: снимок экрана с digest помогает найти событие
+// в Sentry, а на staging Sentry нет вовсе.
 export function ErrorScreen({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [userAgent, setUserAgent] = useState('')
 
   useEffect(() => {
     setUserAgent(navigator.userAgent)
     console.error(error)
+    Sentry.captureException(error)
   }, [error])
 
   return (
