@@ -84,9 +84,11 @@ select ok(
        and (t.tgtype & 2) = 2      -- BEFORE
        and (t.tgtype & 4) = 4      -- INSERT
        and (t.tgtype & 16) = 16    -- UPDATE
-       and t.tgattr::int2[] = array[(
-         select a.attnum from pg_attribute a
-          where a.attrelid = 'public.centers'::regclass and a.attname = 'settings')]),
+       -- int2vector индексируется с 0: сравнение с array[...] (с 1) всегда
+       -- false, поэтому через текст — «5», один столбец settings.
+       and t.tgattr::text = (
+         select a.attnum::text from pg_attribute a
+          where a.attrelid = 'public.centers'::regclass and a.attname = 'settings')),
   'триггер centers_validate_timezone: before insert or update of settings, for each row');
 
 
