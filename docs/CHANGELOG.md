@@ -606,6 +606,16 @@
 
 ### Исправлено
 
+- **Пояс центра без скана tzdata** — `0086_center_timezone_fast.sql`.
+  `center_timezone()` с 0052 на каждый вызов читала `pg_timezone_names`
+  (~53 мс), а `calc_salary` зовёт её построчно — `/app/salary` падала в
+  `statement timeout` уже на паре десятков посещений (поймал e2e, PR #200).
+  Валидность пояса теперь держит триггер на запись
+  `centers_validate_timezone` (только точное имя, проверка при смене пояса),
+  чтение — один поиск по ключу. Остаточный риск дрейфа tzdata и проверочный
+  запрос — `docs/Database.md`, «Часовой пояс». Известный остаток: предикаты
+  по дате в `calc_salary`/`close_month` построчные — отдельной миграцией.
+
 - **`message_templates` нельзя было сохранить** (`0037_message_templates_writable.sql`) —
   найдено на живой приёмке этапа 6. Первое сохранение шаблона на
   `/app/settings/notifications` падало RLS: `saveTemplate` не передавал

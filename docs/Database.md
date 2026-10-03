@@ -375,6 +375,29 @@ create unique index payers_center_phone_uniq
 по умолчанию `Asia/Bishkek`), а не в `TimeZone` сервера. Та же логика
 продублирована в `@logocrm/core/schedule` — правила синхронизации в ADR-006.
 
+**Валидность пояса держит триггер на запись** `centers_validate_timezone`
+(0086): только точное имя из `pg_timezone_names`, проверка на INSERT и на
+UPDATE, меняющем пояс. `center_timezone()` при чтении имя не проверяет — это
+один поиск по ключу. До 0086 проверка при чтении сканировала tzdata (~50 мс на
+вызов) и роняла `/app/salary` в `statement timeout`.
+
+Остаточный риск: имя может исчезнуть из tzdata при обновлении Postgres без
+всякой записи — тогда `at time zone` падает у центра, а дайджест — у всех.
+**После каждого обновления Postgres в проекте** (staging и prod) выполнить:
+
+```sql
+select id, name, settings->'timezone' as tz
+  from public.centers
+ where jsonb_typeof(settings) = 'object'
+   and settings ? 'timezone'
+   and (jsonb_typeof(settings->'timezone') <> 'string'
+        or not exists (select 1 from pg_catalog.pg_timezone_names z
+                        where z.name = settings->>'timezone'));
+```
+
+Пусто — всё в порядке. Строки — поправить пояс этим центрам (триггер пустит
+валидное имя).
+
 ## Права на функции — отдельная от RLS история
 
 RLS не распространяется на функции. Любая функция в схеме `public`
