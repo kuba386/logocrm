@@ -352,7 +352,7 @@ test('Этап 5, п.1: продажа с оплатой 2 000 и рассроч
   // (installments_view), не предпросмотр формы.
   await expect(page.getByText(`Оплачено ${formatSom(200_000)} из ${formatSom(400_000)}`)).toBeVisible()
   await expect(page.getByText('оплачен частично')).toBeVisible()
-  // После продажи форма сбрасывается на цену типа, предпросмотра нет —
+  // После продажи форма очищается (тип, цена, рассрочка), предпросмотра нет —
   // две строки по 1 000 остаются только в графике карточки.
   await expect(page.getByText('· ожидается', { exact: false }).or(page.getByText('· к оплате', { exact: false }))).toHaveCount(2)
 })

@@ -1,7 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
-import { useFormStatus } from 'react-dom'
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from 'react'
 import { formatSom, installmentDueDates, refundPayout, splitInstallments } from '@logocrm/core'
 import {
   freezeSubscription,
@@ -100,8 +99,41 @@ export type AttendanceHistoryRow = {
   comment: string | null
 }
 
-function SubmitButton({ children, variant }: { children: React.ReactNode; variant?: 'outline' | 'destructive' }) {
-  const { pending } = useFormStatus()
+/**
+ * Формы панели отправляются через onSubmit, а не <form action>. React 19
+ * после action-формы сбрасывает её, и при отказе сервера (оплата больше цены,
+ * кривая дата) поля молча возвращались к значениям по умолчанию: источник
+ * оплаты — на первый в списке, дата начала и «по» заморозки — на пустые,
+ * select типа — на «Выберите тип» при цене от прежнего типа. Повторная
+ * отправка провела бы деньги не через ту кассу и не с той даты. Теперь при
+ * отказе введённое остаётся как есть, а очищается форма только после
+ * успеха — чтобы второй клик не провёл ту же операцию ещё раз.
+ */
+function useSubmit(state: SubscriptionState, formAction: (payload: FormData) => void) {
+  const formRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    if (state.notice) formRef.current?.reset()
+  }, [state])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => formAction(formData))
+  }
+
+  return { formRef, submit }
+}
+
+/** pending — из useActionState: useFormStatus без <form action> всегда false. */
+function SubmitButton({
+  children,
+  pending,
+  variant,
+}: {
+  children: React.ReactNode
+  pending: boolean
+  variant?: 'outline' | 'destructive'
+}) {
   return (
     <Button type="submit" size="sm" variant={variant} disabled={pending}>
       {pending ? 'Секунду…' : children}
@@ -169,7 +201,8 @@ function SellForm({
   today: string
   timeZone: string
 }) {
-  const [state, formAction] = useActionState(sellSubscriptionPaid, initial)
+  const [state, formAction, pending] = useActionState(sellSubscriptionPaid, initial)
+  const { formRef, submit } = useSubmit(state, formAction)
   const [typeId, setTypeId] = useState('')
   const [priceSom, setPriceSom] = useState('')
   const [paidSom, setPaidSom] = useState('')
@@ -178,11 +211,22 @@ function SellForm({
   const [firstDue, setFirstDue] = useState(today)
   const [stepMonths, setStepMonths] = useState(1)
   // Не при инициализации: случайный uuid на сервере и клиенте разошёлся бы
-  // в гидратации. После успешной продажи — новый ключ для следующей.
+  // в гидратации. Новый ключ — на каждый ответ сервера, а не на смену текста
+  // notice: две продажи подряд дают одинаковый notice, и третья ушла бы со
+  // старым ключом. После отказа продажа откатилась, новый ключ ничего не
+  // ломает. После успеха поля очищаются вслед за сбросом формы в useSubmit.
   const [saleKey, setSaleKey] = useState('')
   useEffect(() => {
     setSaleKey(crypto.randomUUID())
-  }, [state.notice])
+    if (!state.notice) return
+    setTypeId('')
+    setPriceSom('')
+    setPaidSom('')
+    setWithInstallments(false)
+    setInstallments(2)
+    setFirstDue(today)
+    setStepMonths(1)
+  }, [state, today])
 
   const selected = types.find((t) => t.id === typeId)
   const priceTiyin = somToTiyin(priceSom)
@@ -203,7 +247,7 @@ function SellForm({
   }
 
   return (
-    <form action={formAction} className="space-y-3 rounded-md border border-border p-3">
+    <form ref={formRef} onSubmit={submit} className="space-y-3 rounded-md border border-border p-3">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="saleKey" value={saleKey} />
       <input type="hidden" name="expectedRemainingTiyin" value={remainingTiyin} />
@@ -356,15 +400,16 @@ function SellForm({
 
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
-      <SubmitButton>{t('sale', 'submit')}</SubmitButton>
+      <SubmitButton pending={pending}>{t('sale', 'submit')}</SubmitButton>
     </form>
   )
 }
 
 function FreezeForm({ studentId, subscriptionId }: { studentId: string; subscriptionId: string }) {
-  const [state, formAction] = useActionState(freezeSubscription, initial)
+  const [state, formAction, pending] = useActionState(freezeSubscription, initial)
+  const { formRef, submit } = useSubmit(state, formAction)
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2">
+    <form ref={formRef} onSubmit={submit} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <div className="space-y-1">
@@ -375,7 +420,9 @@ function FreezeForm({ studentId, subscriptionId }: { studentId: string; subscrip
         <Label htmlFor={`freeze-to-${subscriptionId}`}>По (пусто — пока не разморозят)</Label>
         <Input id={`freeze-to-${subscriptionId}`} name="to" type="date" />
       </div>
-      <SubmitButton variant="outline">Заморозить</SubmitButton>
+      <SubmitButton pending={pending} variant="outline">
+        Заморозить
+      </SubmitButton>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
@@ -383,12 +430,15 @@ function FreezeForm({ studentId, subscriptionId }: { studentId: string; subscrip
 }
 
 function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscriptionId: string }) {
-  const [state, formAction] = useActionState(unfreezeSubscription, initial)
+  const [state, formAction, pending] = useActionState(unfreezeSubscription, initial)
+  const { formRef, submit } = useSubmit(state, formAction)
   return (
-    <form action={formAction} className="flex items-center gap-2">
+    <form ref={formRef} onSubmit={submit} className="flex items-center gap-2">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
-      <SubmitButton variant="outline">Разморозить</SubmitButton>
+      <SubmitButton pending={pending} variant="outline">
+        Разморозить
+      </SubmitButton>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
@@ -424,7 +474,8 @@ function RefundForm({
   isPeriod: boolean
   sources: SourceOption[]
 }) {
-  const [state, formAction] = useActionState(refundSubscription, initial)
+  const [state, formAction, pending] = useActionState(refundSubscription, initial)
+  const { formRef, submit } = useSubmit(state, formAction)
   const [confirming, setConfirming] = useState(false)
   const moneyBack = refundPayout(refundTiyin, paidTiyin)
 
@@ -437,7 +488,7 @@ function RefundForm({
   }
 
   return (
-    <form action={formAction} className="space-y-2 rounded-md border border-border p-3">
+    <form ref={formRef} onSubmit={submit} className="space-y-2 rounded-md border border-border p-3">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedTiyin" value={refundTiyin} />
@@ -472,7 +523,9 @@ function RefundForm({
         </div>
       ) : null}
       <div className="flex gap-2">
-        <SubmitButton variant="destructive">{t('sale', moneyBack > 0 ? 'confirmRefund' : 'confirmCancel')}</SubmitButton>
+        <SubmitButton pending={pending} variant="destructive">
+          {t('sale', moneyBack > 0 ? 'confirmRefund' : 'confirmCancel')}
+        </SubmitButton>
         <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(false)}>
           {t('sale', 'cancel')}
         </Button>
@@ -492,11 +545,12 @@ function TransferForm({
   subscriptionId: string
   siblings: SiblingOption[]
 }) {
-  const [state, formAction] = useActionState(transferRemaining, initial)
+  const [state, formAction, pending] = useActionState(transferRemaining, initial)
+  const { formRef, submit } = useSubmit(state, formAction)
   if (siblings.length === 0) return null
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2">
+    <form ref={formRef} onSubmit={submit} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <div className="space-y-1">
@@ -510,7 +564,9 @@ function TransferForm({
           ))}
         </Select>
       </div>
-      <SubmitButton variant="outline">Перенести</SubmitButton>
+      <SubmitButton pending={pending} variant="outline">
+        Перенести
+      </SubmitButton>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
