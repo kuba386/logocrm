@@ -606,6 +606,15 @@
 
 ### Исправлено
 
+- **Зарплата и всё, что считает в поясе центра, тормозило** —
+  `0086_center_timezone_fast.sql`. С 0052 `center_timezone()` проверяла имя
+  через `pg_timezone_names` (чтение tzdata с диска, ~50 мс на вызов), а стоит
+  в 126 местах, в том числе по строке в `calc_salary`: `salary_summary` падал
+  по statement timeout уже на e2e-данных. Теперь шаблон IANA + `at time zone`
+  (микросекунды); аббревиатуры и смещения (`MSK`, `+6`) — фолбэк Asia/Bishkek,
+  как и мусор. То же правило — в TS (`packages/core/src/timezone.ts`):
+  `centerTimeZone()` раньше отдавал мусор в Intl и ронял `/app` центра.
+
 - **`message_templates` нельзя было сохранить** (`0037_message_templates_writable.sql`) —
   найдено на живой приёмке этапа 6. Первое сохранение шаблона на
   `/app/settings/notifications` падало RLS: `saveTemplate` не передавал

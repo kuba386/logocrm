@@ -4,14 +4,14 @@
  * Администратор из поездки должен видеть расписание своей студии: иначе он
  * позвонит родителю на два часа раньше или позже, чем нужно.
  */
-export const DEFAULT_TIME_ZONE = 'Asia/Bishkek'
+import { centerTimeZoneName, DEFAULT_CENTER_TIME_ZONE } from '@logocrm/core'
 
+export const DEFAULT_TIME_ZONE = DEFAULT_CENTER_TIME_ZONE
+
+/** Пояс центра по тому же правилу, что SQL center_timezone() (0086): мусор → Asia/Bishkek. */
 export function centerTimeZone(settings: unknown): string {
-  if (settings && typeof settings === 'object' && 'timezone' in settings) {
-    const value = (settings as { timezone?: unknown }).timezone
-    if (typeof value === 'string' && value.length > 0) return value
-  }
-  return DEFAULT_TIME_ZONE
+  const value = settings && typeof settings === 'object' && 'timezone' in settings ? (settings as { timezone?: unknown }).timezone : null
+  return centerTimeZoneName(value)
 }
 
 export function formatInTimeZone(
