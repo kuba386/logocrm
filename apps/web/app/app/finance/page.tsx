@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
+import { monthBounds, shiftMonth } from '@/lib/month'
 import { centerTimeZone, dayInZone, formatInTimeZone, isoDayInZone, startOfDayInZone } from '@/lib/timezone'
 import { canPayments, isFinance } from '@/lib/roles'
 import { label, t } from '@/lib/messages'
@@ -17,19 +18,7 @@ export const metadata = { title: 'Финансы — LogoCRM' }
 
 type Tab = 'payments' | 'expenses' | 'installments' | 'periods'
 
-/** «2026-09» → первое число и первое число следующего месяца. */
-function monthBounds(month: string): { first: string; next: string } {
-  const [y, m] = month.split('-').map(Number)
-  const nextY = m === 12 ? y! + 1 : y!
-  const nextM = m === 12 ? 1 : m! + 1
-  return { first: `${month}-01`, next: `${nextY}-${String(nextM).padStart(2, '0')}-01` }
-}
 
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number)
-  const total = y! * 12 + (m! - 1) + delta
-  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
-}
 
 /** «сентябрь 2026 г.» — полдень UTC, чтобы пояс не сдвинул месяц. */
 

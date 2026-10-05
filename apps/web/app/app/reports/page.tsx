@@ -4,16 +4,19 @@ import { isFinance } from '@/lib/roles'
 import { t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DebtsReportForm, PeriodReportForm, SalaryReportForm } from './report-forms'
+import { MonthSummary } from './month-summary'
+import { centerTimeZone } from '@/lib/timezone'
 
 export const metadata = { title: 'Отчёты — LogoCRM' }
 
 /**
- * Выгрузки в CSV (0058) — одна страница на все роли, ветвление внутри:
+ * Итоги месяца на экране и выгрузки в CSV (0058) — одна страница на все роли, ветвление внутри:
  * деньги (платежи, зарплата, долги) — owner/admin/finance, посещаемость —
  * только owner/admin. Карточки рисуются по тому же предикату, что гейт в
  * SQL (Р14), но отказ приходит из базы.
  */
-export default async function ReportsPage() {
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const params = await searchParams
   const supabase = await createClient()
   const { data: role } = await supabase.rpc('my_role')
   if (!role) redirect('/select-center')
@@ -27,6 +30,14 @@ export default async function ReportsPage() {
   const monthStart = `${todayIso.slice(0, 7)}-01`
   const [y, m] = todayIso.split('-').map(Number)
   const prevMonth = new Date(Date.UTC(y!, m! - 2, 1)).toISOString().slice(0, 7)
+  const summaryMonth = /^\d{4}-\d{2}$/.test(params.month ?? '') ? params.month! : todayIso.slice(0, 7)
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const centerId = (user?.app_metadata as { center_id?: string } | undefined)?.center_id ?? ''
+  const { data: center } = await supabase.from('centers').select('settings').eq('id', centerId).maybeSingle()
+  const timeZone = centerTimeZone(center?.settings)
 
   return (
     <div className="space-y-6">
@@ -34,6 +45,8 @@ export default async function ReportsPage() {
         <h1 className="page-title">{t('reports', 'title')}</h1>
         <p className="text-sm text-muted-foreground">{t('reports', 'subtitle')}</p>
       </div>
+
+      <MonthSummary supabase={supabase} month={summaryMonth} timeZone={timeZone} />
 
       <Card>
         <CardHeader>
