@@ -417,7 +417,11 @@ select set_eq(
     ('lesson_debt_account()'),
     ('accept_lesson_debt_payment(uuid,integer,uuid,date,integer,text)'),
     ('refund_lesson_debt_credit(uuid,integer,uuid,date,integer)'),
-    ('write_off_lesson_debt(uuid,integer,text,integer)')
+    ('write_off_lesson_debt(uuid,integer,text,integer)'),
+    -- 0088: покрытие долга абонементом
+    ('cover_lesson_debt_preview(uuid)'),
+    ('cover_lesson_debt(uuid,integer,integer)'),
+    ('uncover_lesson_debt(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
