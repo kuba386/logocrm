@@ -175,7 +175,10 @@ function SellForm({
   const [paidSom, setPaidSom] = useState('')
   const [withInstallments, setWithInstallments] = useState(false)
   const [installments, setInstallments] = useState(2)
-  const [firstDue, setFirstDue] = useState(today)
+  // Первый платёж рассрочки — через месяц от сегодня, а не сегодня: в день
+  // продажи семья уже внесла первую часть, и платёж «сегодня» назавтра
+  // становился просрочкой (аудит финансов 5.10.2026).
+  const [firstDue, setFirstDue] = useState(() => installmentDueDates(today, 2, 1)[1] ?? today)
   const [stepMonths, setStepMonths] = useState(1)
   // Не при инициализации: случайный uuid на сервере и клиенте разошёлся бы
   // в гидратации. После успешной продажи — новый ключ для следующей.
@@ -238,7 +241,7 @@ function SellForm({
       </div>
       <div className="space-y-1">
         <Label htmlFor="startsAt">Дата начала</Label>
-        <Input id="startsAt" name="startsAt" type="date" className="max-w-[200px]" />
+        <Input id="startsAt" name="startsAt" type="date" defaultValue={today} className="max-w-[200px]" />
       </div>
 
       <fieldset className="space-y-3 rounded-md border border-border p-3">
