@@ -1935,6 +1935,64 @@ export type Database = {
           },
         ]
       }
+      lesson_debt_writeoffs: {
+        Row: {
+          amount_tiyin: number
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          reason: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          reason: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          reason?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_debt_writeoffs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_debt_writeoffs_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_debt_writeoffs_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       lesson_note_goal_scores: {
         Row: {
           center_id: string
@@ -2781,6 +2839,7 @@ export type Database = {
           amount_tiyin: number
           center_id: string
           comment: string | null
+          covers_lesson_debt: boolean
           created_at: string
           created_by: string | null
           id: string
@@ -2796,6 +2855,7 @@ export type Database = {
           amount_tiyin: number
           center_id?: string
           comment?: string | null
+          covers_lesson_debt?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -2811,6 +2871,7 @@ export type Database = {
           amount_tiyin?: number
           center_id?: string
           comment?: string | null
+          covers_lesson_debt?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -4522,6 +4583,7 @@ export type Database = {
           center_id: string | null
           debt_tiyin: number | null
           ends_at: string | null
+          lesson_credit_tiyin: number | null
           lessons_left: number | null
           overdrawn_tiyin: number | null
           state: string | null
@@ -5294,6 +5356,35 @@ export type Database = {
       }
       is_member: { Args: { p_center_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      lesson_debt_account: {
+        Args: never
+        Returns: {
+          accrued_tiyin: number
+          credit_tiyin: number
+          debt_tiyin: number
+          overdrawn_gross_tiyin: number
+          overdrawn_tiyin: number
+          paid_tiyin: number
+          remaining_tiyin: number
+          student_id: string
+          written_off_tiyin: number
+        }[]
+      }
+      lesson_debt_accounts_unchecked: {
+        Args: { p_center_id: string; p_student_id?: string }
+        Returns: {
+          accrued_tiyin: number
+          credit_tiyin: number
+          debt_tiyin: number
+          overdrawn_gross_tiyin: number
+          overdrawn_tiyin: number
+          paid_tiyin: number
+          remaining_tiyin: number
+          student_id: string
+          written_off_tiyin: number
+        }[]
+      }
+      lesson_debt_lock: { Args: { p_student_id: string }; Returns: undefined }
       lesson_reminders: {
         Args: never
         Returns: {
@@ -5601,6 +5692,21 @@ export type Database = {
         }
         Returns: string
       }
+      record_payment_core: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment: string
+          p_covers_lesson_debt: boolean
+          p_kind: string
+          p_paid_at: string
+          p_paid_on: string
+          p_payer_id: string
+          p_source_id: string
+          p_student_id: string
+          p_subscription_id: string
+        }
+        Returns: string
+      }
       record_prosody_assessment: {
         Args: {
           p_breathing?: string
@@ -5653,6 +5759,16 @@ export type Database = {
       }
       refund_calc: { Args: { p_id: string }; Returns: number }
       refund_calc_unchecked: { Args: { p_id: string }; Returns: number }
+      refund_lesson_debt_credit: {
+        Args: {
+          p_amount_tiyin: number
+          p_expected_credit_tiyin: number
+          p_paid_on: string
+          p_source_id: string
+          p_student_id: string
+        }
+        Returns: string
+      }
       refund_subscription: {
         Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
         Returns: number
