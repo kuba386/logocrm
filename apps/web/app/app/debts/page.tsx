@@ -13,7 +13,8 @@ import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 import { debtProblems } from '@/lib/debts'
 import { centerTimeZone, dayInZone } from '@/lib/timezone'
-import { isFinance } from '@/lib/roles'
+import { canPayments, isFinance } from '@/lib/roles'
+import { DebtActions } from './debt-dialogs'
 import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -59,14 +60,22 @@ export default async function DebtsPage({
   const supabase = await createClient()
 
   const { data: role } = await supabase.rpc('my_role')
-  if (role !== 'owner' && role !== 'admin') redirect('/app')
+  // Принимать оплату долга могут все, кто принимает платежи (can_payments, 0087):
+  // регистратор на стойке — когда родитель пришёл. Списание — только owner (SQL).
+  if (!canPayments(role)) redirect('/app')
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
   const centerId = (user?.app_metadata as { center_id?: string } | undefined)?.center_id ?? null
-  const { data: center } = await supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle()
+  const [{ data: center }, { data: sourceRows }, { data: centerToday }] = await Promise.all([
+    supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
+    supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
+    supabase.rpc('center_today', {}),
+  ])
   const timeZone = centerTimeZone(center?.settings)
+  const sources = (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name }))
+  const today = centerToday ?? new Date().toISOString().slice(0, 10)
 
   // Одним запросом на всех (0078): строки student_debt_problems (0076 — тот же источник у
   // дашборда, ассистента и бота /debts), контакты плательщиков и последнее/ближайшее занятие
@@ -259,6 +268,18 @@ export default async function DebtsPage({
                       >
                         WhatsApp
                       </a>
+                    ) : null}
+                    {/* Долг за занятия и перерасход — гасятся оплатой и списанием (0087);
+                        просрочка по абонементу — оплатой абонемента на карточке. */}
+                    {row.debtTiyin + row.overdrawnTiyin > 0 ? (
+                      <DebtActions
+                        studentId={row.studentId}
+                        studentName={row.studentName}
+                        remainingTiyin={row.debtTiyin + row.overdrawnTiyin}
+                        sources={sources}
+                        today={today}
+                        canWriteOff={role === 'owner'}
+                      />
                     ) : null}
                     <Link href={`/app/students/${row.studentId}#subscriptions`} className={buttonVariants({ size: 'sm' })}>
                       Продать абонемент

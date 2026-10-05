@@ -4588,6 +4588,17 @@ export type Database = {
     }
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
+      accept_lesson_debt_payment: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment?: string
+          p_expected_remaining_tiyin: number
+          p_paid_on: string
+          p_source_id: string
+          p_student_id: string
+        }
+        Returns: string
+      }
       ack_events: { Args: { p_ids: number[] }; Returns: number }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       ai_job_begin: { Args: { p_event_id: number }; Returns: Json }
@@ -6209,6 +6220,15 @@ export type Database = {
           p_soap?: Json
           p_student_id: string
           p_teacher_id?: string
+        }
+        Returns: string
+      }
+      write_off_lesson_debt: {
+        Args: {
+          p_amount_tiyin: number
+          p_expected_remaining_tiyin: number
+          p_reason: string
+          p_student_id: string
         }
         Returns: string
       }
