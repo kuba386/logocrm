@@ -409,6 +409,25 @@ async function InstallmentsTab({
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
   const payerById = new Map((payers ?? []).map((p) => [p.id, p]))
 
+  // Источник по умолчанию — тот, которым по этому абонементу платили последним:
+  // семья обычно платит одним способом. Раньше всегда стояли «Наличные».
+  const subscriptionIds = [...new Set(live.map((r) => r.subscription_id).filter((v): v is string => Boolean(v)))]
+  const { data: lastPayments } = subscriptionIds.length
+    ? await supabase
+        .from('payments')
+        .select('subscription_id, source_id, paid_at')
+        .in('subscription_id', subscriptionIds)
+        .eq('kind', 'payment')
+        .not('source_id', 'is', null)
+        .order('paid_at', { ascending: false })
+    : { data: [] as { subscription_id: string | null; source_id: string | null; paid_at: string }[] }
+  const lastSourceBySubscription = new Map<string, string>()
+  for (const p of lastPayments ?? []) {
+    if (p.subscription_id && p.source_id && !lastSourceBySubscription.has(p.subscription_id)) {
+      lastSourceBySubscription.set(p.subscription_id, p.source_id)
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -474,7 +493,12 @@ async function InstallmentsTab({
                             {t('finance', 'whatsapp')}
                           </a>
                         ) : null}
-                        <PayInstallmentForm installmentId={r.id as string} amountTiyin={r.amount_tiyin as number} sources={sources} />
+                        <PayInstallmentForm
+                          installmentId={r.id as string}
+                          amountTiyin={r.amount_tiyin as number}
+                          sources={sources}
+                          defaultSourceId={r.subscription_id ? lastSourceBySubscription.get(r.subscription_id) : undefined}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
