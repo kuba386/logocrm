@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
 import { timeInZone } from '@/lib/timezone'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 import { getTeacherBusy, submitBooking, type BookingState } from './actions'
 
 type BookingService = { id: string; name: string; duration_min: number }
@@ -57,12 +58,15 @@ export function BookingForm({
     }
   }, [slug, teacherId, date])
 
+  // Отказ («время занято») не стирает имя, телефон и выбранную услугу.
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
+
   if (state.notice) {
     return <FormNotice message={state.notice} />
   }
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" {...keep}>
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="timezone" value={timezone} />
 

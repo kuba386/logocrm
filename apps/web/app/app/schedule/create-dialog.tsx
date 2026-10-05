@@ -13,6 +13,7 @@ import { ConflictList } from './conflict-list'
 import { conflictLabel } from '@/lib/errors'
 import { calendarDay } from '@/lib/timezone'
 import { WEEKDAY_LABELS } from '@/lib/schedule'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initial: ScheduleState = { message: '' }
 
@@ -46,6 +47,7 @@ export function CreateLessonDialog({
 }) {
   const [open, setOpen] = useState(false)
   const [state, formAction] = useActionState(createSeries, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message || state.conflicts?.length))
   const [target, setTarget] = useState<'student' | 'group'>('student')
   const [preview, setPreview] = useState<SeriesPreviewRow[] | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -116,7 +118,7 @@ export function CreateLessonDialog({
         title="Новое занятие"
         description="Одно занятие или серия по дням недели. Предпросмотр покажет, какие слоты заняты."
       >
-        <form action={formAction} className="space-y-4">
+        <form action={formAction} className="space-y-4" {...keep}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="serviceId">Услуга</Label>

@@ -112,3 +112,23 @@ test('Финансы: продажа с рассрочкой сходится н
   await page.getByRole('link', { name: STUDENTS.timur }).click()
   await expect(page.getByText(`Оплачено ${formatSom(250_000)} из ${formatSom(400_000)}`)).toBeVisible()
 })
+
+test('Финансы: отказ сервера не стирает введённое в форме платежа', async ({ page }) => {
+  // React 19 сбрасывает <form action> и при ошибке. Раньше после «Сумма не
+  // может быть нулём» плательщик, вид и комментарий пропадали
+  // (useKeepValuesOnError, UX-аудит 6.10.2026).
+  await page.goto('/app/finance?tab=payments')
+  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible()
+
+  await page.getByLabel('Плательщик').selectOption({ index: 1 })
+  const payer = await page.getByLabel('Плательщик').inputValue()
+  await page.getByLabel('Вид').selectOption({ label: 'Корректировка' })
+  await page.getByLabel('Сумма, сом').fill('0')
+  await page.getByLabel('Комментарий').fill('e2e: не должно пропасть')
+  await page.getByRole('button', { name: 'Записать платёж' }).click()
+
+  await expect(page.getByText('Сумма не может быть нулём')).toBeVisible()
+  await expect(page.getByLabel('Плательщик')).toHaveValue(payer)
+  await expect(page.getByLabel('Вид')).toHaveValue('correction')
+  await expect(page.getByLabel('Комментарий')).toHaveValue('e2e: не должно пропасть')
+})
