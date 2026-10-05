@@ -39,6 +39,11 @@ export function ageParts(birthDate: Date | string, today: Date | string = new Da
   return { years, months }
 }
 
+/** Русское склонение по числу: 1 ученик, 2 ученика, 5 учеников, 11 учеников. */
+export function pluralRu(value: number, one: string, few: string, many: string): string {
+  return plural(value, one, few, many)
+}
+
 function plural(value: number, one: string, few: string, many: string): string {
   const mod100 = value % 100
   if (mod100 >= 11 && mod100 <= 14) return many

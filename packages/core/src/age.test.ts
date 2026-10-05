@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageLabel, ageParts, ageYears } from './age'
+import { ageLabel, ageParts, ageYears, pluralRu } from './age'
 
 const today = '2026-09-07'
 
@@ -49,5 +49,15 @@ describe('ageLabel', () => {
   it('младше месяца и пустая дата', () => {
     expect(ageLabel('2026-09-01', today)).toBe('меньше месяца')
     expect(ageLabel(null, today)).toBe('—')
+  })
+})
+
+describe('pluralRu', () => {
+  const word = (n: number) => pluralRu(n, 'ученик', 'ученика', 'учеников')
+
+  it('1, 21, 101 — ученик; 2-4, 22 — ученика; 0, 5-20, 111-114 — учеников', () => {
+    expect([1, 21, 101].map(word)).toEqual(['ученик', 'ученик', 'ученик'])
+    expect([2, 3, 4, 22].map(word)).toEqual(['ученика', 'ученика', 'ученика', 'ученика'])
+    expect([0, 5, 11, 12, 14, 20, 111, 114].map(word)).toEqual(Array(8).fill('учеников'))
   })
 })

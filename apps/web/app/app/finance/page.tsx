@@ -145,6 +145,7 @@ export default async function FinancePage({
             received: sum((r) => r.received_tiyin),
             refunded: sum((r) => r.refunded_tiyin),
             corrections: sum((r) => r.corrections_tiyin),
+            spent: sum((r) => r.spent_tiyin),
             total: sum((r) => r.total_tiyin),
           }}
           bySource={cash.map((r) => ({
@@ -191,7 +192,7 @@ async function PaymentsTab({
   today: string
   sources: { id: string; name: string }[]
   sourceName: Map<string, string>
-  totals: { received: number; refunded: number; corrections: number; total: number }
+  totals: { received: number; refunded: number; corrections: number; spent: number; total: number }
   bySource: { name: string; total: number }[]
 }) {
   const [{ data: payments }, { data: payers }, { data: students }] = await Promise.all([
@@ -213,7 +214,14 @@ async function PaymentsTab({
 
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-4">
+      {/* «Итого в кассе» из cash_by_source — уже за вычетом расходов. Без
+          строки «Расходы» сумма над итогом не сходилась: получено 5 500,
+          итого 5 000, а куда делись 500 — не видно. Знаки как в базе:
+          возвраты и расходы отрицательные, строки складываются в итог. */}
+      <dl
+        data-testid="cash-totals"
+        className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-5"
+      >
         <div>
           <dt className="text-xs text-muted-foreground">{t('finance', 'received')}</dt>
           <dd className="font-medium">{formatSom(totals.received)}</dd>
@@ -225,6 +233,10 @@ async function PaymentsTab({
         <div>
           <dt className="text-xs text-muted-foreground">{t('finance', 'corrections')}</dt>
           <dd className="font-medium">{formatSom(totals.corrections)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">{t('finance', 'spent')}</dt>
+          <dd className="font-medium">{formatSom(totals.spent)}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">{t('finance', 'total')}</dt>

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { formatSom } from '@logocrm/core'
 
 import { actAndAwait } from './helpers'
+import { STUDENTS } from './fixtures'
 
 // /app/finance (этап 5, блок UI п.2). Независим от других spec-файлов:
 // расход и корректировка — свои строки текущего месяца по поясу центра,
@@ -41,4 +42,73 @@ test('Финансы: корректировка без абонемента п�
   await expect(row).toBeVisible()
   await expect(row).toContainText('Корректировка')
   await expect(row).toContainText(formatSom(5_000))
+})
+
+// Цепочка денег сквозь экраны: продажа с частичной оплатой и рассрочкой →
+// график в «Рассрочках» → приём первого платежа → итог в «Платежах» и на
+// карточке. Проверяет не суммы базы (их держит pgTAP 0013/0018/0021), а что
+// экраны показывают одно и то же и полоска сумм сходится в «Итого в кассе».
+// Тип абонемента «Восемь занятий · e2e» (4 000 сом) заводит
+// attendance-subscriptions.spec.ts — проект admin идёт раньше owner-money.
+
+function inDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** «5 500 сом», «−500 сом» → тыйыны. */
+function somText(text: string): number {
+  const digits = text.replace(/[−–]/g, '-').replace(/[^\d-]/g, '')
+  return Number(digits) * 100
+}
+
+test('Финансы: продажа с рассрочкой сходится на всех экранах, полоска сумм — в итог', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.timur }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
+
+  const typeSelect = page.locator('select#typeId')
+  const optionValue = await typeSelect.locator('option', { hasText: 'Восемь занятий · e2e' }).getAttribute('value')
+  if (!optionValue) throw new Error('Нет типа «Восемь занятий · e2e» — его создаёт attendance-subscriptions.spec.ts')
+  await typeSelect.selectOption(optionValue)
+  await expect(page.locator('#priceSom')).toHaveValue('4000')
+
+  await page.locator('#paidSom').fill('1000')
+  await expect(page.getByText(`Остаток к оплате: ${formatSom(300_000)}`)).toBeVisible()
+  await page.getByLabel('Рассрочка на остаток').check()
+  await page.locator('#installments').fill('2')
+  await page.locator('#firstDue').fill(inDays(30))
+  await page.getByRole('button', { name: 'Продать абонемент' }).click()
+
+  // Итог, а не уведомление формы: карточка абонемента с частичной оплатой.
+  await expect(page.getByText(`Оплачено ${formatSom(100_000)} из ${formatSom(400_000)}`)).toBeVisible({ timeout: 20_000 })
+
+  // «Рассрочки»: два платежа Тимура по 1 500.
+  await page.goto('/app/finance?tab=installments')
+  const timurRows = page.locator('tr', { hasText: STUDENTS.timur })
+  await expect(timurRows).toHaveCount(2)
+  await expect(timurRows.first()).toContainText(formatSom(150_000))
+
+  await timurRows.first().getByRole('button', { name: /^Принять/ }).click()
+  await expect(page.locator('tr', { hasText: STUDENTS.timur })).toHaveCount(1, { timeout: 20_000 })
+
+  // «Платежи»: обе оплаты Тимура есть, и строки полоски складываются в итог.
+  await page.goto('/app/finance?tab=payments')
+  const payments = page.locator('tr', { hasText: STUDENTS.timur })
+  await expect(payments.filter({ hasText: formatSom(100_000) })).not.toHaveCount(0)
+  await expect(payments.filter({ hasText: formatSom(150_000) })).not.toHaveCount(0)
+
+  const totals = page.getByTestId('cash-totals')
+  const value = async (label: string) =>
+    somText(await totals.locator('div', { has: page.locator('dt', { hasText: label }) }).locator('dd').innerText())
+  const received = await value('Получено')
+  const refunded = await value('Возвращено')
+  const corrections = await value('Корректировки')
+  const spent = await value('Расходы')
+  const total = await value('Итого в кассе')
+  expect(received + refunded + corrections + spent, 'строки полоски сходятся в «Итого в кассе»').toBe(total)
+
+  // Карточка: оплачено уже 2 500 из 4 000.
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.timur }).click()
+  await expect(page.getByText(`Оплачено ${formatSom(250_000)} из ${formatSom(400_000)}`)).toBeVisible()
 })
