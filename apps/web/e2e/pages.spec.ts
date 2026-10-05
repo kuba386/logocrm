@@ -47,13 +47,22 @@ const STATIC_ROUTES = [
 ]
 
 // Не обходятся здесь:
-//   /book/[slug] — без SUPABASE_BOOKING_JWT (в CI его нет) страница честно
-//     бросает ошибку конфигурации; запись проверяется на staging/prod;
 //   /app/schedule/lessons/[id]/complete — открывается из teacher.spec.ts
 //     со своими данными;
 //   /error — сама и есть экран «Что-то пошло не так» (ссылка из письма не
 //     сработала), проверка ошибки на ней падала бы всегда.
-const GUEST_ROUTES = ['/', '/login', '/reset-password', '/access-revoked', '/invite/nonexistent-token', '/app']
+// /book/centr-e2e — витрина e2e-центра: SUPABASE_BOOKING_JWT в CI выпускает
+// шаг «Переменные локального стека». Запись закрыта, пока owner-flows её не
+// откроет, — страница «запись недоступна» тоже должна открываться без ошибок.
+const GUEST_ROUTES = [
+  '/',
+  '/login',
+  '/reset-password',
+  '/access-revoked',
+  '/invite/nonexistent-token',
+  '/app',
+  ...(process.env.SUPABASE_BOOKING_JWT ? ['/book/centr-e2e'] : []),
+]
 
 const ROLES = [
   { name: 'владелец', state: 'e2e/.auth/owner.json' },

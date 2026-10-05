@@ -561,7 +561,9 @@
     "publishTitle": "Публичная запись",
     "publishDescription": "Когда включено, родители могут оставлять заявки на сайте по ссылке /book/{slug}.",
     "publishOn": "Запись открыта",
-    "publishOff": "Запись закрыта"
+    "publishOff": "Запись закрыта",
+    "openAction": "Открыть запись",
+    "closeAction": "Закрыть запись"
   },
   "reports": {
     "title": "Отчёты",

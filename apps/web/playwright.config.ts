@@ -84,6 +84,22 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
     },
     {
+      // Сквозные пути владельца со вторым человеком: приглашение специалиста,
+      // онлайн-запись, долг → абонемент. После teacher/parent: подтверждение
+      // заявки создаёт ученика и занятие, приглашение — карточку специалиста.
+      name: 'owner-flows',
+      testMatch: /owner-flows\.spec\.ts/,
+      dependencies: ['setup', 'admin', 'teacher', 'parent'],
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
+    },
+    {
+      // Регистрация нового центра с нуля — свой пользователь и свой центр,
+      // фикстуру не трогает.
+      name: 'signup',
+      testMatch: /signup\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       // Обход всех страниц под каждой ролью (pages.spec.ts). Только чтение —
       // порядок относительно остальных проектов не важен; роль задаёт сам файл.
       name: 'pages',
