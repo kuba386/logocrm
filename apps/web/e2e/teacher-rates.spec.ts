@@ -9,7 +9,7 @@ import { actAndAwait } from './helpers'
 
 test('Ставки: новая ставка за занятие появляется в списке', async ({ page }) => {
   await page.goto('/app/settings/teacher-rates')
-  await expect(page.getByRole('heading', { name: 'Ставки специалистов' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ставки специалистов' })).toBeVisible()
 
   await page.getByLabel('Специалист').selectOption({ index: 1 })
   await page.getByLabel('Модель').selectOption({ label: 'за занятие' })
