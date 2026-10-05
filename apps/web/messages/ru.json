@@ -112,7 +112,7 @@
     "colDue": "Срок",
     "colState": "Состояние",
     "colSeq": "№",
-    "markPaid": "Оплачен",
+    "markPaid": "Принять",
     "installmentPaid": "Платёж по рассрочке записан",
     "installmentFailed": "Не удалось записать платёж по рассрочке",
     "whatsapp": "WhatsApp",

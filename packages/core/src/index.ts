@@ -9,7 +9,7 @@ export {
 } from './debt-summary'
 export { debtWhatsappMessage, subscriptionOverdueAddressable, type DebtMessageRow } from './debt-message'
 export { isSpecialistOnly, SPECIALIST_ONLY_TAG } from './exercise-tags'
-export { ageYears, ageParts, ageLabel, type Age } from './age'
+export { ageYears, ageParts, ageLabel, pluralRu, type Age } from './age'
 export {
   generateSeriesDates,
   overlaps,

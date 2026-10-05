@@ -7,6 +7,7 @@ import {
   parseDebtSummary,
   subscriptionOverdueAddressable,
   whatsappNumber,
+  pluralRu,
 } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
@@ -152,7 +153,7 @@ export default async function DebtsPage({
       <div>
         <h1 className="page-title">Долги</h1>
         <p className="text-sm text-muted-foreground">
-          {headerCount} {headerCount === 1 ? 'ученик' : 'учеников'}
+          {headerCount} {pluralRu(headerCount, 'ученик', 'ученика', 'учеников')}
           {totalDebt > 0 ? ` · долг ${formatSom(totalDebt)}` : ''}
           {/* Отдельная сумма, не сложенная с долгом за занятия — разные деньги (docs/Database.md). */}
           {totalSubscriptionOverdue > 0 ? ` · просрочка по абонементам ${formatSom(totalSubscriptionOverdue)}` : ''}
