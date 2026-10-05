@@ -8,7 +8,7 @@ import { statusLabel, studentAge } from '@/lib/students'
 import { isFrontDesk } from '@/lib/roles'
 import { debtProblems } from '@/lib/debts'
 import { label } from '@/lib/messages'
-import { centerTimeZone, dayInZone } from '@/lib/timezone'
+import { calendarDay, centerTimeZone, dayInZone } from '@/lib/timezone'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
@@ -64,7 +64,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
   // overdue_payer_id — плательщик просроченного АБОНЕМЕНТА, он может не
   // совпадать с текущим payer_id ребёнка (0060, 0070).
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? ''
-  const [{ data: debtRows }, { data: payments }, { data: center }] = await Promise.all([
+  const [{ data: debtRows }, { data: payments }, { data: center }, { data: installmentRows }] = await Promise.all([
     supabase.rpc('student_debt_problems'),
     supabase
       .from('payments')
@@ -73,8 +73,19 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
       .order('paid_at', { ascending: false })
       .limit(10),
     supabase.from('centers').select('settings').eq('id', centerId).maybeSingle(),
+    // Неоплаченные платежи рассрочки, где плательщик — этот человек: он и
+    // будет платить, стойке это нужно видеть до звонка. Состояние считает
+    // installments_view (0020), не браузер.
+    supabase
+      .from('installments_view')
+      .select('id, student_id, due_date, amount_tiyin, state')
+      .eq('payer_id', id)
+      .is('cancelled_at', null)
+      .neq('state', 'paid')
+      .order('due_date'),
   ])
   const timeZone = centerTimeZone(center?.settings)
+  const installments = (installmentRows ?? []).filter((r) => r.due_date && r.amount_tiyin != null)
   const myDebtRows = (debtRows ?? []).filter((r) => r.payer_id === id || r.overdue_payer_id === id)
   const debtByStudent = new Map(
     myDebtRows.map((r) => [
@@ -198,6 +209,35 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                     {r.full_name}
                   </Link>
                   <StatusBadge tone="danger">Просрочен платёж за абонемент {formatSom(r.overdue_tiyin)}</StatusBadge>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {installments.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ближайшие платежи по рассрочке</CardTitle>
+            <CardDescription>Принять платёж — в «Финансы» → «Рассрочки».</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border text-sm">
+              {installments.map((row) => (
+                <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2">
+                  <span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {calendarDay(row.due_date as string, { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </span>
+                    {row.student_id && studentNames.get(row.student_id) ? ` — ${studentNames.get(row.student_id)}` : ''}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <StatusBadge tone={row.state === 'overdue' ? 'danger' : row.state === 'due' ? 'warning' : 'neutral'}>
+                      {label('installmentState', row.state ?? '')}
+                    </StatusBadge>
+                    <span className="font-medium tabular-nums">{formatSom(row.amount_tiyin as number)}</span>
+                  </span>
                 </li>
               ))}
             </ul>
