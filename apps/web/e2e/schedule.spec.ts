@@ -166,7 +166,7 @@ test('5. Перенос занятия — в поясе центра, а не U
     time: '15:00',
     weekdays: ['Чт'],
   })
-  await submitLessonDialog(page, 'Создано занятий: 1')
+  await submitLessonDialog(page, 'Занятие создано')
 
   await openWeek(page, THURSDAY)
   await lessonCard(page, '15:00', STUDENTS.ailin).click()
