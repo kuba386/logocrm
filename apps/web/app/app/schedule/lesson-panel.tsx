@@ -19,6 +19,8 @@ import { Select } from '@/components/ui/select'
 import { FormNotice } from '@/components/ui/alert'
 import { ConflictList } from './conflict-list'
 import { dayInZone, timeInZone } from '@/lib/timezone'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 import { lessonStatusLabel } from '@/lib/schedule'
 import type { TeacherOption } from './create-dialog'
 
@@ -127,9 +129,7 @@ export function LessonPanel({
             <form action={statusAction}>
               <input type="hidden" name="lessonId" value={lesson.id} />
               <input type="hidden" name="status" value="cancelled" />
-              <Button type="submit" size="sm" variant="outline">
-                Не состоялось
-              </Button>
+              <ConfirmSubmit label={t('lessonStatus', 'markCancelled')} question={t('lessonStatus', 'markCancelledConfirm')} />
             </form>
           </div>
         ) : null}
@@ -267,11 +267,12 @@ export function LessonPanel({
                       Занятие входит в серию. Можно отменить его и все следующие — прошедшие
                       останутся.
                     </p>
-                    <Input name="reason" placeholder="Причина отмены серии" />
+                    <Input name="reason" placeholder="Причина отмены серии" aria-label="Причина отмены серии" />
                     <Result state={seriesState} />
-                    <Button type="submit" size="sm" variant="outline">
-                      Отменить серию с этого дня
-                    </Button>
+                    <ConfirmSubmit
+                      label="Отменить серию с этого дня"
+                      question={t('lessonStatus', 'cancelSeriesConfirm', { day: dayInZone(lesson.startsAt, timeZone) })}
+                    />
                   </form>
                 ) : null}
               </div>

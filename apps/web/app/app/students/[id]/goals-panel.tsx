@@ -11,6 +11,8 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { GOAL_TREND_CLASSES, GOAL_TREND_LABELS, type GoalTrend } from '@/lib/goal-trend'
 import { cn } from '@/lib/utils'
 import { archiveGoal, createGoal, setGoalStatus, type ClinicalState } from './clinical-actions'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 export type GoalStageOption = { id: string; title: string }
 
@@ -124,15 +126,7 @@ function GoalCard({
               Пауза
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={pending}
-            onClick={() => run(() => archiveGoal(studentId, goal.id))}
-          >
-            Убрать
-          </Button>
+          <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeGoal')} onConfirm={() => run(() => archiveGoal(studentId, goal.id))} />
         </div>
       ) : null}
 
