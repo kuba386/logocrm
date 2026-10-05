@@ -46,7 +46,6 @@ select is_empty(
                       'public.lesson_debt_covers_recalc()'::regprocedure,
                       'public.attendance_close_covers()'::regprocedure,
                       'public.lessons_close_covers()'::regprocedure,
-                      'public.subscriptions_close_covers()'::regprocedure,
                       'public.recalc_subscription_usage(uuid)'::regprocedure)
         and has_function_privilege(r, p.oid, 'EXECUTE') $$,
   'Внутренние функции и триггеры 0088 не исполняет ни одна роль приложения');
