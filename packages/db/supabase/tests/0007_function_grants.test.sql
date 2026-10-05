@@ -412,7 +412,12 @@ select set_eq(
     ('set_booking_enabled(boolean)'),
     ('booking_request_payer_match(uuid)'),
     ('confirm_booking_request(uuid,uuid)'),
-    ('decline_booking_request(uuid,text)')
+    ('decline_booking_request(uuid,text)'),
+    -- 0087: счёт занятий и погашение долга
+    ('lesson_debt_account()'),
+    ('accept_lesson_debt_payment(uuid,integer,uuid,date,integer,text)'),
+    ('refund_lesson_debt_credit(uuid,integer,uuid,date,integer)'),
+    ('write_off_lesson_debt(uuid,integer,text,integer)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
