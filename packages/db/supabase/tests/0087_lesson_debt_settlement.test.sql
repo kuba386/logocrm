@@ -20,7 +20,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(45);
+select plan(48);
 
 
 -- 1. Каталог --------------------------------------------------------------------------------------
@@ -64,6 +64,17 @@ select is(
         'overdrawn_tiyin', 'state', 'subscription_overdue_tiyin', 'subscription_overdue_payer_id', 'lesson_credit_tiyin'],
   'student_balance: первые десять колонок как в 0070, аванс — одиннадцатой');
 
+select is_empty(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p
+      where p.oid in ('public.accept_lesson_debt_payment(uuid,integer,uuid,date,integer,text)'::regprocedure,
+                      'public.refund_lesson_debt_credit(uuid,integer,uuid,date,integer)'::regprocedure,
+                      'public.write_off_lesson_debt(uuid,integer,text,integer)'::regprocedure,
+                      'public.payments_lesson_debt_guard()'::regprocedure,
+                      'public.lesson_debt_writeoffs_guard()'::regprocedure)
+        and p.prosrc not like '%lesson_debt_lock%' $$,
+  'RPC оплаты, возврата, списания и оба триггера-границы берут блокировку по ребёнку');
+
 select ok(
   exists (select 1 from pg_trigger where tgrelid = 'public.lesson_debt_writeoffs'::regclass and tgname = 'a00_readonly_guard')
   and exists (select 1 from public.export_center_tables() x where x.table_name = 'lesson_debt_writeoffs'),
@@ -80,20 +91,26 @@ insert into auth.users (
 )
 select '00000000-0000-0000-0000-000000000000', ('87000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid,
        'authenticated', 'authenticated', 'u' || n || '-0087@test.kg', '', '', '', '', '', '', '', ''
-  from generate_series(1, 7) n;
+  from generate_series(1, 8) n;
 
 insert into public.centers (id, name, slug, settings) values
   ('87000000-0000-0000-0000-0000000000c1', 'Центр 0087',   'centr-0087',   '{"timezone":"Asia/Bishkek"}'::jsonb),
   ('87000000-0000-0000-0000-0000000000c2', 'Центр Б 0087', 'centr-0087-b', '{"timezone":"Asia/Bishkek"}'::jsonb);
+-- Центр В — просроченный solo, только чтение (0050): оплата и списание — PT402.
+insert into public.centers (id, name, slug, plan, subscription_until, settings) values
+  ('87000000-0000-0000-0000-0000000000c3', 'Центр В 0087', 'centr-0087-v', 'solo', now() - interval '2 days', '{"timezone":"Asia/Bishkek"}'::jsonb);
 
 insert into public.teachers (id, center_id, full_name) values
-  ('87000000-0000-0000-0000-00000000aa01', '87000000-0000-0000-0000-0000000000c1', 'Специалист 0087');
+  ('87000000-0000-0000-0000-00000000aa01', '87000000-0000-0000-0000-0000000000c1', 'Специалист 0087'),
+  ('87000000-0000-0000-0000-00000000aa03', '87000000-0000-0000-0000-0000000000c3', 'Специалист В 0087');
 
 insert into public.payers (id, center_id, full_name, phone) values
   ('87000000-0000-0000-0000-00000000dd01', '87000000-0000-0000-0000-0000000000c1', 'Плательщик 1 0087', '+996700008701'),
-  ('87000000-0000-0000-0000-00000000dd02', '87000000-0000-0000-0000-0000000000c1', 'Плательщик 2 0087', '+996700008702');
+  ('87000000-0000-0000-0000-00000000dd02', '87000000-0000-0000-0000-0000000000c1', 'Плательщик 2 0087', '+996700008702'),
+  ('87000000-0000-0000-0000-00000000dd03', '87000000-0000-0000-0000-0000000000c3', 'Плательщик В 0087', '+996700008703');
 
--- 1 owner · 2 admin · 3 registrar · 4 finance · 5 teacher · 6 parent (payer 1) · 7 owner центра Б.
+-- 1 owner · 2 admin · 3 registrar · 4 finance · 5 teacher · 6 parent (payer 1) · 7 owner центра Б ·
+-- 8 owner центра В (только чтение).
 insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) values
   ('87000000-0000-0000-0000-000000000001', '87000000-0000-0000-0000-0000000000c1', 'owner',     null, null),
   ('87000000-0000-0000-0000-000000000002', '87000000-0000-0000-0000-0000000000c1', 'admin',     null, null),
@@ -101,13 +118,16 @@ insert into public.memberships (user_id, center_id, role, teacher_id, payer_id) 
   ('87000000-0000-0000-0000-000000000004', '87000000-0000-0000-0000-0000000000c1', 'finance',   null, null),
   ('87000000-0000-0000-0000-000000000005', '87000000-0000-0000-0000-0000000000c1', 'teacher',   '87000000-0000-0000-0000-00000000aa01', null),
   ('87000000-0000-0000-0000-000000000006', '87000000-0000-0000-0000-0000000000c1', 'parent',    null, '87000000-0000-0000-0000-00000000dd01'),
-  ('87000000-0000-0000-0000-000000000007', '87000000-0000-0000-0000-0000000000c2', 'owner',     null, null);
+  ('87000000-0000-0000-0000-000000000007', '87000000-0000-0000-0000-0000000000c2', 'owner',     null, null),
+  ('87000000-0000-0000-0000-000000000008', '87000000-0000-0000-0000-0000000000c3', 'owner',     null, null);
 
 insert into public.payment_sources (id, center_id, code, name, sort) values
-  ('87000000-0000-0000-0000-0000000005f1', '87000000-0000-0000-0000-0000000000c1', 'test0087', 'Касса 0087', 999);
+  ('87000000-0000-0000-0000-0000000005f1', '87000000-0000-0000-0000-0000000000c1', 'test0087', 'Касса 0087', 999),
+  ('87000000-0000-0000-0000-0000000005f3', '87000000-0000-0000-0000-0000000000c3', 'test0087', 'Касса В 0087', 999);
 
 insert into public.services (id, center_id, name, default_price_tiyin) values
-  ('87000000-0000-0000-0000-00000000bb01', '87000000-0000-0000-0000-0000000000c1', 'Логопед 0087', 50000);
+  ('87000000-0000-0000-0000-00000000bb01', '87000000-0000-0000-0000-0000000000c1', 'Логопед 0087', 50000),
+  ('87000000-0000-0000-0000-00000000bb03', '87000000-0000-0000-0000-0000000000c3', 'Логопед В 0087', 50000);
 
 -- e1 долг · e2 перерасход на истёкшем пакете · e3 аванс до отметок · e4 списание ·
 -- e5 случай с prod (платёж без флага) · e6 — ребёнок другого плательщика.
@@ -117,7 +137,8 @@ insert into public.students (id, center_id, full_name, payer_id) values
   ('87000000-0000-0000-0000-00000000ee03', '87000000-0000-0000-0000-0000000000c1', 'Аванс 0087',      '87000000-0000-0000-0000-00000000dd01'),
   ('87000000-0000-0000-0000-00000000ee04', '87000000-0000-0000-0000-0000000000c1', 'Списание 0087',   '87000000-0000-0000-0000-00000000dd01'),
   ('87000000-0000-0000-0000-00000000ee05', '87000000-0000-0000-0000-0000000000c1', 'Prod 0087',       '87000000-0000-0000-0000-00000000dd01'),
-  ('87000000-0000-0000-0000-00000000ee06', '87000000-0000-0000-0000-0000000000c1', 'Чужая семья 0087','87000000-0000-0000-0000-00000000dd02');
+  ('87000000-0000-0000-0000-00000000ee06', '87000000-0000-0000-0000-0000000000c1', 'Чужая семья 0087','87000000-0000-0000-0000-00000000dd02'),
+  ('87000000-0000-0000-0000-00000000ee07', '87000000-0000-0000-0000-0000000000c3', 'Только чтение 0087','87000000-0000-0000-0000-00000000dd03');
 
 -- Истёкший пакет на 1 занятие, использовано 3 (allow_negative) — перерасход 2 × 400.
 insert into public.subscriptions (id, center_id, student_id, payer_id, lessons_total, lessons_used, price_tiyin,
@@ -134,6 +155,12 @@ select ('87000000-0000-0000-0000-0000000000' || x.code)::uuid, '87000000-0000-00
        date_trunc('hour', now()) - interval '3 days' - x.shift * interval '1 hour' + interval '45 minutes'
   from (values ('11', 'ee01', 1), ('12', 'ee01', 2), ('13', 'ee01', 3), ('14', 'ee01', 4),
                ('41', 'ee04', 5), ('42', 'ee04', 6), ('51', 'ee05', 7), ('61', 'ee06', 8)) as x(code, student, shift);
+
+-- Занятие центра В (только чтение) — его отметка попадёт в общий insert ниже по шаблону id.
+insert into public.lessons (id, center_id, teacher_id, service_id, student_id, status, starts_at, ends_at) values
+  ('87000000-0000-0000-0000-000000000071', '87000000-0000-0000-0000-0000000000c3', '87000000-0000-0000-0000-00000000aa03',
+   '87000000-0000-0000-0000-00000000bb03', '87000000-0000-0000-0000-00000000ee07', 'planned',
+   date_trunc('hour', now()) - interval '3 days', date_trunc('hour', now()) - interval '3 days' + interval '45 minutes');
 
 -- Отметки «пришёл» без абонемента — в долг по цене услуги (500). L14 отмечается позже.
 insert into public.attendance (center_id, lesson_id, student_id, status_id)
@@ -383,6 +410,17 @@ select throws_ok(
   $$ select public.accept_lesson_debt_payment('87000000-0000-0000-0000-00000000ee05', 1000,
        '87000000-0000-0000-0000-0000000005f1', null, 30000) $$,
   '42704', null, 'Чужой ребёнок — «не найден»');
+reset role;
+
+select public.tests_claims('87000000-0000-0000-0000-000000000008', '87000000-0000-0000-0000-0000000000c3');
+set local role authenticated;
+select throws_ok(
+  $$ select public.accept_lesson_debt_payment('87000000-0000-0000-0000-00000000ee07', 10000,
+       '87000000-0000-0000-0000-0000000005f3', null, 50000) $$,
+  'PT402', null, 'Центр только для чтения: оплату долга не принять');
+select throws_ok(
+  $$ select public.write_off_lesson_debt('87000000-0000-0000-0000-00000000ee07', 10000, 'тест', 50000) $$,
+  'PT402', null, 'Центр только для чтения: долг не списать');
 reset role;
 
 select * from finish();

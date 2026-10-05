@@ -638,8 +638,8 @@ select is(
     where table_schema = 'public' and table_name = 'student_balance'),
   array['student_id', 'center_id', 'active_subscription_id', 'lessons_left', 'ends_at',
         'debt_tiyin', 'overdrawn_tiyin', 'state', 'subscription_overdue_tiyin',
-        'subscription_overdue_payer_id'],
-  'student_balance: порядок колонок — восемь старых (0031), потом две новые в хвосте (0070); следующая миграция, дописывающая колонку не в конец, упадёт здесь, а не на 42P16 в проде'
+        'subscription_overdue_payer_id', 'lesson_credit_tiyin'],
+  'student_balance: порядок колонок — восемь старых (0031), две из 0070, аванс из 0087 в хвосте; следующая миграция, дописывающая колонку не в конец, упадёт здесь, а не на 42P16 в проде'
 );
 
 

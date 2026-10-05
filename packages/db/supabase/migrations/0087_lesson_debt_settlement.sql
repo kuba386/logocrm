@@ -39,7 +39,10 @@
 --   Р3. Границы — триггеры под advisory-блокировкой по ребёнку, не проверки в
 --       RPC (CLAUDE.md): возврат помеченных денег — не больше аванса (иначе
 --       возврат создавал бы долг из ничего); списание — не больше остатка.
---       Прямой insert из-под postgres упирается в те же границы.
+--       Прямой insert из-под postgres или service_role упирается в те же
+--       границы. Триггерные функции — definer (конвенция 0007 разд. 3): они
+--       зовут lesson_debt_lock/_unchecked без грантов, а у service_role
+--       insert на payments есть — invoker упал бы голым «permission denied».
 --   Р4. Две оплаты одного долга (две вкладки, два администратора): RPC берёт
 --       ту же блокировку, пересчитывает и сверяет p_expected_* — при
 --       расхождении 23514 со свежей суммой, без автоповтора (как
@@ -117,8 +120,10 @@ create table if not exists public.lesson_debt_writeoffs (
 comment on table public.lesson_debt_writeoffs is
   'Списание долга за занятия/перерасхода без денег (0087): только owner через write_off_lesson_debt, причина обязательна. Запись — только RPC: политик на запись нет, граница «не больше остатка» — триггер.';
 
+-- Не частичный: частичный индекс не засчитывается покрытием FK (unindexed_foreign_keys,
+-- урок 0069). Префикс (center_id, student_id) покрывает и FK на students, и на centers.
 create index if not exists lesson_debt_writeoffs_student_idx
-  on public.lesson_debt_writeoffs (center_id, student_id) where deleted_at is null;
+  on public.lesson_debt_writeoffs (center_id, student_id);
 
 drop trigger if exists lesson_debt_writeoffs_set_updated_at on public.lesson_debt_writeoffs;
 create trigger lesson_debt_writeoffs_set_updated_at
@@ -315,7 +320,7 @@ grant execute on function public.student_debts() to authenticated;
 create or replace function public.payments_lesson_debt_guard()
   returns trigger
   language plpgsql
-  security invoker
+  security definer
   set search_path = ''
 as $$
 declare
@@ -327,7 +332,7 @@ begin
     select coalesce(max(x.credit_tiyin), 0) into v_credit
       from public.lesson_debt_accounts_unchecked(new.center_id, new.student_id) x;
     if -new.amount_tiyin > v_credit then
-      raise exception 'Вернуть можно только аванс: сейчас % сом', trim_scale(round(v_credit / 100.0, 2))
+      raise exception 'Вернуть можно только аванс: сейчас %', public.format_som(v_credit)
         using errcode = '22023';
     end if;
   end if;
@@ -352,7 +357,7 @@ create trigger payments_lesson_debt_guard
 create or replace function public.lesson_debt_writeoffs_guard()
   returns trigger
   language plpgsql
-  security invoker
+  security definer
   set search_path = ''
 as $$
 declare
@@ -363,7 +368,7 @@ begin
   select coalesce(max(x.remaining_tiyin), 0) into v_remaining
     from public.lesson_debt_accounts_unchecked(new.center_id, new.student_id) x;
   if new.amount_tiyin > v_remaining then
-    raise exception 'Списать можно не больше долга: сейчас % сом', trim_scale(round(v_remaining / 100.0, 2))
+    raise exception 'Списать можно не больше долга: сейчас %', public.format_som(v_remaining)
       using errcode = '22023';
   end if;
   return new;
@@ -543,7 +548,7 @@ begin
     raise exception 'Долга нет — принимать нечего' using errcode = '22023';
   end if;
   if p_expected_remaining_tiyin is distinct from v_remaining then
-    raise exception 'Долг изменился, пока открывали форму: сейчас % сом. Проверьте сумму.', trim_scale(round(v_remaining / 100.0, 2))
+    raise exception 'Долг изменился, пока открывали форму: сейчас %. Проверьте сумму.', public.format_som(v_remaining)
       using errcode = '23514';
   end if;
 
@@ -606,7 +611,7 @@ begin
   select coalesce(max(x.credit_tiyin), 0) into v_credit
     from public.lesson_debt_accounts_unchecked(v_center, p_student_id) x;
   if p_expected_credit_tiyin is distinct from v_credit then
-    raise exception 'Аванс изменился, пока открывали форму: сейчас % сом. Проверьте сумму.', trim_scale(round(v_credit / 100.0, 2))
+    raise exception 'Аванс изменился, пока открывали форму: сейчас %. Проверьте сумму.', public.format_som(v_credit)
       using errcode = '23514';
   end if;
 
@@ -664,7 +669,7 @@ begin
   select coalesce(max(x.remaining_tiyin), 0) into v_remaining
     from public.lesson_debt_accounts_unchecked(v_center, p_student_id) x;
   if p_expected_remaining_tiyin is distinct from v_remaining then
-    raise exception 'Долг изменился, пока открывали форму: сейчас % сом. Проверьте сумму.', trim_scale(round(v_remaining / 100.0, 2))
+    raise exception 'Долг изменился, пока открывали форму: сейчас %. Проверьте сумму.', public.format_som(v_remaining)
       using errcode = '23514';
   end if;
 

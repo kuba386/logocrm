@@ -12,7 +12,7 @@ import {
 import { createClient } from '@/lib/supabase/server'
 import { toAppError } from '@/lib/errors'
 import { debtProblems } from '@/lib/debts'
-import { centerTimeZone, dayInZone } from '@/lib/timezone'
+import { centerTimeZone, dayInZone, isoDayInZone } from '@/lib/timezone'
 import { canPayments, isFinance } from '@/lib/roles'
 import { DebtActions } from './debt-dialogs'
 import { Card, CardContent } from '@/components/ui/card'
@@ -75,7 +75,7 @@ export default async function DebtsPage({
   ])
   const timeZone = centerTimeZone(center?.settings)
   const sources = (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name }))
-  const today = centerToday ?? new Date().toISOString().slice(0, 10)
+  const today = centerToday ?? isoDayInZone(new Date(), timeZone)
 
   // Одним запросом на всех (0078): строки student_debt_problems (0076 — тот же источник у
   // дашборда, ассистента и бота /debts), контакты плательщиков и последнее/ближайшее занятие

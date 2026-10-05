@@ -1,6 +1,7 @@
 'use client'
 
 import { startTransition, useActionState, useEffect, useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { formatSom } from '@logocrm/core'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -49,9 +50,17 @@ export function DebtActions({
   const onPay = useSubmit(payAction)
   const onWriteOff = useSubmit(writeOffAction)
 
+  const router = useRouter()
+
   useEffect(() => {
     if (payState.done) setPayOpen(false)
   }, [payState.done])
+  // Отказ (долг изменился — 23514, или другая причина): перечитать страницу,
+  // чтобы скрытое expectedTiyin и сумма в заголовке стали свежими. Иначе
+  // повторное нажатие отправило бы ту же устаревшую сумму и снова получило отказ.
+  useEffect(() => {
+    if (payState.message || writeOffState.message) router.refresh()
+  }, [payState, writeOffState, router])
   useEffect(() => {
     if (writeOffState.done) setWriteOffOpen(false)
   }, [writeOffState.done])
