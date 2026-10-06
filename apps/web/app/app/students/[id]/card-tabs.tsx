@@ -57,7 +57,7 @@ export function CardTabs({ tabs, initial }: { tabs: CardTab[]; initial: string }
               aria-controls={`panel-${tab.key}`}
               onClick={() => setActive(tab.key)}
               className={cn(
-                'shrink-0 whitespace-nowrap border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition-colors',
+                'min-h-11 shrink-0 whitespace-nowrap border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition-colors sm:min-h-0',
                 selected ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >

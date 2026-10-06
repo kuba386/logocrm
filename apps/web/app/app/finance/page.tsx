@@ -102,7 +102,7 @@ export default async function FinancePage({
               key={item.key}
               href={`/app/finance?tab=${item.key}&month=${month}`}
               className={cn(
-                'border-b-2 px-1 pb-2 text-sm font-medium',
+                'inline-flex min-h-11 items-end border-b-2 px-1 pb-2 text-sm font-medium sm:min-h-0',
                 tab === item.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground',
               )}
             >
@@ -270,8 +270,12 @@ async function PaymentsTab({
                           {studentName.get(p.student_id) ?? '—'}
                         </Link>
                       ) : (
-                        '—'
+                        <span className="sm:hidden">{payerName.get(p.payer_id) ?? '—'}</span>
                       )}
+                      {p.student_id ? null : <span className="hidden sm:inline">—</span>}
+                      {/* На телефоне колонки «Вид» и «Плательщик» скрыты — без этой строки
+                          корректировку не отличить от оплаты (UX-аудит, UX71). */}
+                      <span className="block text-xs text-muted-foreground sm:hidden">{label('paymentKind', p.kind)}</span>
                     </TableCell>
                     <TableCell>{label('paymentKind', p.kind)}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -280,7 +284,9 @@ async function PaymentsTab({
                     <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
                       {formatSom(p.amount_tiyin)}
                     </TableCell>
-                    <TableCell className="max-w-[16rem] truncate text-muted-foreground">{p.comment ?? ''}</TableCell>
+                    <TableCell className="max-w-[16rem] truncate text-muted-foreground" title={p.comment ?? undefined}>
+                      {p.comment ?? ''}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -121,7 +121,11 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
                   <TableBody>
                     {rows.map((r) => (
                       <TableRow key={r.attendance_id}>
-                        <TableCell className="whitespace-nowrap">{calendarDate(r.lesson_date, timeZone)}</TableCell>
+                        <TableCell>
+                          <span className="whitespace-nowrap">{calendarDate(r.lesson_date, timeZone)}</span>
+                          {/* Колонка «Примечание» на телефоне скрыта, а именно оно объясняет ноль. */}
+                          {r.note ? <span className="block text-xs text-muted-foreground sm:hidden">{r.note}</span> : null}
+                        </TableCell>
                         <TableCell>{r.model ? label('salary', `model_${r.model}`) : '—'}</TableCell>
                         <TableCell className="text-right font-medium">{formatSom(r.amount_tiyin)}</TableCell>
                         <TableCell className="text-muted-foreground">{r.note ?? ''}</TableCell>

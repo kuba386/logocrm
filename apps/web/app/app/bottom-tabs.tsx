@@ -17,7 +17,7 @@ export function BottomTabs({ links }: { links: { href: string; label: string }[]
   const pathname = usePathname()
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card sm:hidden">
+    <nav aria-label="Разделы" className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card sm:hidden">
       {links.map((link) => {
         const Icon = NAV_ICONS[link.href]
         const active = isActiveLink(pathname, link.href)
@@ -27,12 +27,15 @@ export function BottomTabs({ links }: { links: { href: string; label: string }[]
             href={link.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-xs',
+              'flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
               active ? 'font-medium text-primary' : 'text-muted-foreground',
             )}
           >
-            {Icon ? <Icon className="size-5" /> : null}
-            {link.label}
+            {/* Активная вкладка — пилюлей за иконкой, а не только оттенком (UX3/UX37). */}
+            <span className={cn('flex h-7 w-12 items-center justify-center rounded-full', active && 'bg-secondary')}>
+              {Icon ? <Icon className="size-5" aria-hidden="true" /> : null}
+            </span>
+            <span className="max-w-full truncate">{link.label}</span>
           </Link>
         )
       })}
