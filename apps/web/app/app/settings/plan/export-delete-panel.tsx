@@ -85,13 +85,13 @@ export function ExportAuditForm({ today, monthAgo }: { today: string; monthAgo: 
         <Label htmlFor="audit-from" className="text-xs">
           {t('plan', 'exportAuditFrom')}
         </Label>
-        <Input id="audit-from" name="from" type="date" defaultValue={monthAgo} className="h-9 w-40" />
+        <Input id="audit-from" name="from" type="date" defaultValue={monthAgo} className="sm:h-9 w-40" />
       </div>
       <div className="space-y-1">
         <Label htmlFor="audit-to" className="text-xs">
           {t('plan', 'exportAuditTo')}
         </Label>
-        <Input id="audit-to" name="to" type="date" defaultValue={today} className="h-9 w-40" />
+        <Input id="audit-to" name="to" type="date" defaultValue={today} className="sm:h-9 w-40" />
       </div>
       <SubmitButton>{t('plan', 'exportAuditButton')}</SubmitButton>
       {state.message ? <FormError message={state.message} /> : null}
@@ -109,7 +109,7 @@ export function DeleteCenterForm({ centerName }: { centerName: string }) {
         <Label htmlFor="confirm-name" className="text-xs">
           {t('plan', 'deleteConfirmLabel')} — «{centerName}»
         </Label>
-        <Input id="confirm-name" name="confirmName" placeholder={centerName} className="h-9 max-w-sm" />
+        <Input id="confirm-name" name="confirmName" placeholder={centerName} className="sm:h-9 max-w-sm" />
       </div>
       {state.message ? <FormError message={state.message} /> : null}
       {state.notice ? <FormNotice message={state.notice} /> : null}

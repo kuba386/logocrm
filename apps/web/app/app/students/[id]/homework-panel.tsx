@@ -186,7 +186,7 @@ export function HomeworkPanel({
             <Input placeholder="Поиск упражнения" value={query} onChange={(e) => setQuery(e.target.value)} />
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2">
               {filtered.map((exercise) => (
-                <label key={exercise.id} className="flex items-center gap-2 text-sm">
+                <label key={exercise.id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-0 sm:py-0.5">
                   <input type="checkbox" checked={selected.includes(exercise.id)} onChange={() => toggle(exercise.id)} />
                   <span>
                     {exercise.title}

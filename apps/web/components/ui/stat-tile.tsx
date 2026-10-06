@@ -38,12 +38,12 @@ export function StatTile({
       <span className={cn('flex h-9 w-9 items-center justify-center rounded-full', colors.icon)}>
         <Icon className="h-5 w-5" aria-hidden />
       </span>
-      <span className="mt-3 block font-display text-2xl font-medium leading-tight tracking-tight">{value}</span>
+      <span className="mt-3 block break-words font-display text-xl font-medium leading-tight tracking-tight sm:text-2xl">{value}</span>
       <span className="mt-1 block text-sm font-medium">{label}</span>
       {hint ? <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span> : null}
     </>
   )
-  const className = cn('block rounded-xl p-4 text-foreground', colors.tile)
+  const className = cn('block min-w-0 rounded-xl p-4 text-foreground', colors.tile)
 
   return href ? (
     <Link href={href} className={cn(className, 'transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring')}>
