@@ -6,7 +6,21 @@ import { supabaseEnv } from '@/lib/env'
 // /api/health — для внешнего монитора без сессии (docs/OBSERVABILITY_SETUP.md):
 // без этого он получал бы 307 на /login, и keyword-проверка «"ok":true»
 // никогда бы не проходила. /book — публичная витрина записи (0057).
-const PUBLIC_PATHS = ['/login', '/auth', '/error', '/invite', '/book', '/api/health', '/robots.txt', '/sitemap.xml']
+// Манифест, service worker и офлайн-страница — без входа: браузер берёт их сам,
+// в том числе на экране входа, и редирект на /login сломал бы установку (PWA).
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth',
+  '/error',
+  '/invite',
+  '/book',
+  '/api/health',
+  '/robots.txt',
+  '/sitemap.xml',
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline.html',
+]
 
 
 /**

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F7466">
+<title>Нет связи — LogoCRM</title>
+<style>
+  :root { --bg: #F4F7FA; --fg: #1C2650; --muted: #586379; --accent: #0F7466; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #11161F; --fg: #E7ECF4; --muted: #9BA6B9; --accent: #5DCDBB; color-scheme: dark; } }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+         background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
+  main { max-width: 360px; text-align: center; display: grid; gap: 14px; justify-items: center; }
+  img { width: 64px; height: 64px; border-radius: 14px; }
+  h1 { margin: 0; font-size: 1.35rem; }
+  p { margin: 0; color: var(--muted); }
+  button { font: inherit; font-weight: 600; color: #fff; background: var(--accent); border: 0; border-radius: 8px;
+           min-height: 44px; padding: 0 20px; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { button { color: #0B2622; } }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icons/icon-192.png" alt="">
+  <h1>Нет связи с интернетом</h1>
+  <p>LogoCRM работает только онлайн: данные учеников не хранятся на телефоне. Проверьте сеть и обновите страницу.</p>
+  <button type="button" onclick="location.reload()">Обновить</button>
+</main>
+</body>
+</html>

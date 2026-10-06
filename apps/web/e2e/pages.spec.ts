@@ -117,6 +117,22 @@ test.describe('гость', () => {
       await expectPageHealthy(page, path)
     })
   }
+
+  // Установка на телефон (PWA): браузер берёт эти файлы сам, в том числе на экране
+  // входа. Редирект на /login (middleware) молча ломал бы установку.
+  test('гость: файлы установки приложения отдаются без входа', async ({ request }) => {
+    const manifest = await request.get('/manifest.webmanifest', { maxRedirects: 0 })
+    expect(manifest.status()).toBe(200)
+    const body = await manifest.json()
+    expect(body.start_url).toBe('/app')
+    expect(body.display).toBe('standalone')
+    for (const icon of body.icons as { src: string }[]) {
+      expect((await request.get(icon.src, { maxRedirects: 0 })).status(), icon.src).toBe(200)
+    }
+    for (const path of ['/sw.js', '/offline.html', '/apple-icon.png']) {
+      expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(200)
+    }
+  })
 })
 
 for (const role of ROLES) {
