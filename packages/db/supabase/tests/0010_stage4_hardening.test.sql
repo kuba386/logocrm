@@ -8,7 +8,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(52);
+select plan(53);
 
 -- Фикстуры ---------------------------------------------------------------------
 
@@ -392,6 +392,17 @@ update public.attendance_statuses set deducts_lesson = true
 
 
 -- Перенос, возврат, архив ----------------------------------------------------------------
+
+-- 0091: перенос — только между детьми одного плательщика. A4 Айлин платит
+-- bbbb…02, Данияр — bbbb…01: отказ; затем делаем плательщика общим.
+select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
+set local role authenticated;
+select throws_ok(
+  $q$ select public.transfer_remaining('88888888-0000-0000-0000-000000000004','eeeeeeee-0000-0000-0000-000000000001') $q$,
+  '22023', 'Перенос остатка — только между детьми одного плательщика', 'Перенос ребёнку другого плательщика отклонён (0091)');
+reset role;
+update public.subscriptions set payer_id = 'bbbbbbbb-0000-0000-0000-000000000001'
+ where id = '88888888-0000-0000-0000-000000000004';
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
