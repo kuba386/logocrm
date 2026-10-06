@@ -1935,6 +1935,73 @@ export type Database = {
           },
         ]
       }
+      lesson_debt_covers: {
+        Row: {
+          attendance_id: string
+          center_id: string
+          closed_by: string | null
+          closed_reason: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          price_tiyin: number
+          student_id: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          attendance_id: string
+          center_id?: string
+          closed_by?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          price_tiyin: number
+          student_id: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          attendance_id?: string
+          center_id?: string
+          closed_by?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          price_tiyin?: number
+          student_id?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_debt_covers_attendance_fk"
+            columns: ["attendance_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+          {
+            foreignKeyName: "lesson_debt_covers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_debt_covers_subscription_fk"
+            columns: ["subscription_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+        ]
+      }
       lesson_debt_writeoffs: {
         Row: {
           amount_tiyin: number
@@ -5019,6 +5086,24 @@ export type Database = {
         Args: { p_chat_id: number; p_event_id: number; p_student_id: string }
         Returns: boolean
       }
+      cover_lesson_debt: {
+        Args: {
+          p_count: number
+          p_expected_remaining_tiyin: number
+          p_subscription_id: string
+        }
+        Returns: number
+      }
+      cover_lesson_debt_preview: {
+        Args: { p_subscription_id: string }
+        Returns: {
+          amount_tiyin: number
+          can_cover: number
+          credit_after_tiyin: number
+          debt_lessons_count: number
+          remaining_tiyin: number
+        }[]
+      }
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
@@ -5382,6 +5467,14 @@ export type Database = {
           remaining_tiyin: number
           student_id: string
           written_off_tiyin: number
+        }[]
+      }
+      lesson_debt_cover_plan: {
+        Args: { p_subscription_id: string }
+        Returns: {
+          attendance_id: string
+          lesson_id: string
+          price_tiyin: number
         }[]
       }
       lesson_debt_lock: { Args: { p_student_id: string }; Returns: undefined }
@@ -6231,6 +6324,7 @@ export type Database = {
         Args: { p_from: string; p_to_student: string }
         Returns: string
       }
+      uncover_lesson_debt: { Args: { p_cover_id: string }; Returns: undefined }
       unfreeze_subscription: {
         Args: { p_id: string; p_to?: string }
         Returns: undefined

@@ -451,6 +451,22 @@ export const lessonDebtWrittenOffSchema = z.object({
 })
 export type LessonDebtWrittenOff = z.infer<typeof lessonDebtWrittenOffSchema>
 
+/**
+ * Неоплаченные занятия покрыты абонементом (0088, cover_lesson_debt):
+ * занятия списаны с абонемента, долг снят, отметки не переписаны.
+ */
+export const lessonDebtCoveredSchema = z.object({
+  type: z.literal('lesson_debt.covered'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    lessons: z.number().int().positive(),
+    amount_tiyin: z.number().int().nonnegative(),
+  }),
+})
+export type LessonDebtCovered = z.infer<typeof lessonDebtCoveredSchema>
+
 /** Замок месяца (close_month / reopen_month, 0013-0014). month — первое число. */
 const periodPayload = z.object({
   center_id: z.string().uuid(),
@@ -1096,6 +1112,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   reportExportedSchema,
   studentSpeechCardOpenedSchema,
   lessonDebtWrittenOffSchema,
+  lessonDebtCoveredSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,
