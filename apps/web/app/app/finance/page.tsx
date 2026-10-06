@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { loadErrorMessage } from '@/lib/errors'
 import { FormError } from '@/components/ui/alert'
-import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm } from './finance-forms'
+import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm, VoidPaymentForm } from './finance-forms'
 
 /** Списки ниже обрезаны до LIST_LIMIT строк. «Всего» — настоящее число из базы
  *  (count: 'exact'), а если строк больше, чем показано, — так и пишем: иначе
@@ -138,6 +138,7 @@ export default async function FinancePage({
       {tab === 'payments' ? (
         <PaymentsTab
           supabase={supabase}
+          isOwner={isOwner}
           fromIso={fromIso}
           toIso={toIso}
           timeZone={timeZone}
@@ -181,6 +182,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 
 async function PaymentsTab({
   supabase,
+  isOwner,
   fromIso,
   toIso,
   timeZone,
@@ -192,6 +194,8 @@ async function PaymentsTab({
   bySource,
 }: {
   supabase: Supabase
+  /** Владелец — «Отменить» у ошибочного поступления (0093); право проверяет база. */
+  isOwner: boolean
   fromIso: string
   toIso: string
   timeZone: string
@@ -205,10 +209,13 @@ async function PaymentsTab({
   const [{ data: payments, error: paymentsError, count: paymentsCount }, { data: payers }, { data: students }] = await Promise.all([
     supabase
       .from('payments')
-      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment', { count: 'exact' })
+      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment, covers_lesson_debt, voids_payment_id', { count: 'exact' })
       .gte('paid_at', fromIso)
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
+      // У отмены та же дата, что у исходного (0093): вторичный порядок держит
+      // пару рядом и не режет её границей limit.
+      .order('created_at', { ascending: false })
       .limit(LIST_LIMIT),
     // Имена — из definer-источников без заметок (0031): таблицы students и
     // payers бухгалтеру закрыты, а экран один на все роли.
@@ -218,6 +225,8 @@ async function PaymentsTab({
   const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
   const rows = payments ?? []
+  // Отменённые (0093): у отмены та же дата, что у исходного, — пара всегда в одном периоде.
+  const voidedIds = new Set(rows.map((p) => p.voids_payment_id).filter((v): v is string => Boolean(v)))
 
   return (
     <div className="space-y-4">
@@ -303,8 +312,18 @@ async function PaymentsTab({
                     <TableCell className="text-muted-foreground">
                       {p.source_id ? (sourceName.get(p.source_id) ?? '—') : t('finance', 'noSource')}
                     </TableCell>
+                    {/* Метка «отменён» и кнопка — в колонке суммы: она видна и на
+                        телефоне, где комментарий скрыт (0093). */}
                     <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
                       {formatSom(p.amount_tiyin)}
+                      {voidedIds.has(p.id) ? <span className="block text-xs font-normal text-destructive">отменён</span> : null}
+                      {isOwner &&
+                      p.kind === 'payment' &&
+                      !p.subscription_id &&
+                      !p.covers_lesson_debt &&
+                      !voidedIds.has(p.id) ? (
+                        <VoidPaymentForm paymentId={p.id} amountTiyin={p.amount_tiyin} />
+                      ) : null}
                     </TableCell>
                     <TableCell className="max-w-[16rem] truncate text-muted-foreground" title={p.comment ?? undefined}>
                       {p.comment ?? ''}

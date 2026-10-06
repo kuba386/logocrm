@@ -207,8 +207,12 @@ async function paymentsSummary(supabase: Client, from: string, to: string, timeZ
     .gte('paid_at', startOfDayInZone(from, timeZone))
     .lt('paid_at', startOfDayInZone(addDays(to, 1), timeZone))
   const list = payments ?? []
-  const received = list.filter((p) => p.amount_tiyin > 0).reduce((s, p) => s + p.amount_tiyin, 0)
-  const refunded = list.filter((p) => p.amount_tiyin < 0).reduce((s, p) => s + p.amount_tiyin, 0)
+  // По виду операции, не по знаку: отмена ошибочного платежа (0093) —
+  // корректировка с минусом, а не возврат денег; так же делит cash_by_source.
+  const sumKind = (kind: string) => list.filter((p) => p.kind === kind).reduce((s, p) => s + p.amount_tiyin, 0)
+  const received = sumKind('payment')
+  const refunded = sumKind('refund')
+  const corrections = sumKind('correction')
 
   return {
     title: t('assistant', 'paymentsSummary', { from: calendarDate(from, timeZone), to: calendarDate(to, timeZone) }),
@@ -216,6 +220,7 @@ async function paymentsSummary(supabase: Client, from: string, to: string, timeZ
     rows: [
       [t('assistant', 'received'), formatSom(received)],
       [t('assistant', 'refunded'), formatSom(refunded)],
+      ...(corrections !== 0 ? [[t('assistant', 'corrections'), formatSom(corrections)]] : []),
       [t('assistant', 'paymentsCount'), String(list.length)],
     ],
     link: { href: `/app/finance?month=${from.slice(0, 7)}`, label: t('assistant', 'openScreen') },

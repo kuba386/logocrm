@@ -1,10 +1,10 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { formatSom } from '@logocrm/core'
-import { closeMonth, payInstallment, recordExpense, recordPayment, reopenMonth, type FinanceState } from './finance-actions'
+import { closeMonth, payInstallment, recordExpense, recordPayment, reopenMonth, voidPayment, type FinanceState } from './finance-actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -254,6 +254,42 @@ export function ReopenPeriodForm({ month }: { month: string }) {
     <form action={formAction} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="month" value={month} />
       <SubmitButton variant="outline">{t('finance', 'reopenMonth')}</SubmitButton>
+      <FormError message={state.message} />
+      <FormNotice message={state.notice} />
+    </form>
+  )
+}
+
+/**
+ * «Отменить» у ошибочного поступления (0093) — только владелец. Причина
+ * обязательна; подтверждение называет сумму. Отмена — корректировка с
+ * минусом той же датой, исходная строка не стирается.
+ */
+export function VoidPaymentForm({ paymentId, amountTiyin }: { paymentId: string; amountTiyin: number }) {
+  const [state, formAction] = useActionState(voidPayment, initial)
+  const [open, setOpen] = useState(false)
+
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Отменить
+      </Button>
+    )
+  }
+
+  return (
+    <form action={formAction} className="space-y-2">
+      <input type="hidden" name="paymentId" value={paymentId} />
+      <Input name="reason" required maxLength={500} placeholder="Причина, например «дубль перевода»" aria-label="Причина отмены" />
+      <div className="flex gap-2">
+        <ConfirmSubmit
+          label="Отменить платёж"
+          question={`Отменить платёж ${formatSom(amountTiyin)}? Рядом появится отмена на ту же сумму, в кассе станет на ${formatSom(amountTiyin)} меньше.`}
+        />
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Не отменять
+        </Button>
+      </div>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

@@ -2901,6 +2901,61 @@ export type Database = {
           },
         ]
       }
+      payment_voids: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          payment_id: string
+          reason: string
+          updated_at: string
+          voided_payment_id: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          payment_id: string
+          reason: string
+          updated_at?: string
+          voided_payment_id: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          payment_id?: string
+          reason?: string
+          updated_at?: string
+          voided_payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_voids_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_voids_payment_fk"
+            columns: ["payment_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "payment_voids_voided_fk"
+            columns: ["voided_payment_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_tiyin: number
@@ -2917,6 +2972,7 @@ export type Database = {
           student_id: string | null
           subscription_id: string | null
           updated_at: string
+          voids_payment_id: string | null
         }
         Insert: {
           amount_tiyin: number
@@ -2933,6 +2989,7 @@ export type Database = {
           student_id?: string | null
           subscription_id?: string | null
           updated_at?: string
+          voids_payment_id?: string | null
         }
         Update: {
           amount_tiyin?: number
@@ -2949,6 +3006,7 @@ export type Database = {
           student_id?: string | null
           subscription_id?: string | null
           updated_at?: string
+          voids_payment_id?: string | null
         }
         Relationships: [
           {
@@ -2992,6 +3050,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "subscriptions"
             referencedColumns: ["id", "student_id", "center_id"]
+          },
+          {
+            foreignKeyName: "payments_void_fk"
+            columns: ["voids_payment_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id", "center_id"]
           },
         ]
       }
@@ -6498,6 +6563,10 @@ export type Database = {
         Returns: string
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
+      void_payment: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: string
+      }
       was_access_revoked: { Args: never; Returns: boolean }
       withdraw_platform_payment: {
         Args: { p_payment_id: string }

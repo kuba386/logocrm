@@ -424,7 +424,9 @@ select set_eq(
     ('uncover_lesson_debt(uuid)'),
     -- 0090: оплата по абонементу с карточки, списание недоплаты владельцем.
     ('accept_subscription_payment(uuid,integer,uuid,date,integer)'),
-    ('write_off_subscription(uuid,integer,text)')
+    ('write_off_subscription(uuid,integer,text)'),
+    -- 0093: отмена ошибочного платежа владельцем.
+    ('void_payment(uuid,text)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

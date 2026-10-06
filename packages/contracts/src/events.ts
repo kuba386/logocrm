@@ -439,6 +439,22 @@ export const paymentRefundedSchema = z.object({
 export type PaymentRefunded = z.infer<typeof paymentRefundedSchema>
 
 /**
+ * Владелец отменил ошибочное поступление (void_payment, 0093): payment_id —
+ * строка отмены (корректировка с минусом), voided_payment_id — исходная.
+ * amount_tiyin — сумма исходного платежа. Причины в payload нет.
+ */
+export const paymentVoidedSchema = z.object({
+  type: z.literal('payment.voided'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    payment_id: z.string().uuid(),
+    voided_payment_id: z.string().uuid(),
+    amount_tiyin: z.number().int().positive(),
+  }),
+})
+export type PaymentVoided = z.infer<typeof paymentVoidedSchema>
+
+/**
  * Долг за занятия/перерасход списан владельцем без денег (0087,
  * write_off_lesson_debt). Причины в payload нет намеренно: outbox уходит
  * наружу, причина живёт в lesson_debt_writeoffs под RLS.
@@ -1132,6 +1148,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   studentSpeechCardOpenedSchema,
   lessonDebtWrittenOffSchema,
   lessonDebtCoveredSchema,
+  paymentVoidedSchema,
   subscriptionShortfallWrittenOffSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,

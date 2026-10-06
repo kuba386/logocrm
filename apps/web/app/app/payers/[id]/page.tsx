@@ -68,9 +68,10 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
     supabase.rpc('student_debt_problems'),
     supabase
       .from('payments')
-      .select('id, amount_tiyin, paid_at, kind, student_id, comment')
+      .select('id, amount_tiyin, paid_at, kind, student_id, comment, voids_payment_id')
       .eq('payer_id', id)
       .order('paid_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(10),
     supabase.from('centers').select('settings').eq('id', centerId).maybeSingle(),
     // Неоплаченные платежи рассрочки, где плательщик — этот человек: он и
@@ -260,6 +261,9 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                     {' — '}
                     {label('paymentKind', p.kind)}
                     {p.student_id && studentNames.get(p.student_id) ? `, ${studentNames.get(p.student_id)}` : ''}
+                    {(payments ?? []).some((v) => v.voids_payment_id === p.id) ? (
+                      <span className="block text-xs text-destructive">отменён</span>
+                    ) : null}
                     {p.comment ? <span className="block text-xs text-muted-foreground">{p.comment}</span> : null}
                   </span>
                   <span className="font-medium tabular-nums">{formatSom(p.amount_tiyin)}</span>
