@@ -43,15 +43,21 @@ export function BookingForm({
   const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? '')
   const [date, setDate] = useState('')
   const [busy, setBusy] = useState<{ starts_at: string; ends_at: string }[]>([])
+  // null — ещё не проверяли; 'loading' — идёт запрос; 'failed' — проверить не удалось.
+  const [busyState, setBusyState] = useState<null | 'loading' | 'ok' | 'failed'>(null)
 
   useEffect(() => {
     if (!teacherId || !date) {
       setBusy([])
+      setBusyState(null)
       return
     }
     let cancelled = false
-    void getTeacherBusy(slug, teacherId, date).then((rows) => {
-      if (!cancelled) setBusy(rows)
+    setBusyState('loading')
+    void getTeacherBusy(slug, teacherId, date).then((result) => {
+      if (cancelled) return
+      setBusy(result.busy)
+      setBusyState(result.failed ? 'failed' : 'ok')
     })
     return () => {
       cancelled = true
@@ -117,7 +123,13 @@ export function BookingForm({
         </div>
       </div>
 
-      {busy.length > 0 ? (
+      {busyState === 'loading' ? (
+        <p className="text-xs text-muted-foreground" role="status">{t('booking', 'busyLoading')}</p>
+      ) : null}
+      {busyState === 'failed' ? (
+        <p className="text-xs text-warning" role="status">{t('booking', 'busyFailed')}</p>
+      ) : null}
+      {busyState === 'ok' && busy.length > 0 ? (
         <p className="text-xs text-muted-foreground">
           {t('booking', 'busyNote')}{' '}
           {busy.map((b) => `${timeInZone(b.starts_at, timezone)}–${timeInZone(b.ends_at, timezone)}`).join(', ')}

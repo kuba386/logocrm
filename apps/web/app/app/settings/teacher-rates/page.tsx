@@ -11,6 +11,8 @@ import { Select } from '@/components/ui/select'
 import { CatalogForm } from '@/components/ui/catalog-form'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { addTeacherRate } from './actions'
+import { loadErrorMessage } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 
 export const metadata = { title: 'Ставки специалистов — LogoCRM' }
 
@@ -37,7 +39,7 @@ export default async function TeacherRatesPage() {
   if (!isFinance(role)) redirect('/app')
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? ''
-  const [{ data: center }, { data: rates }, { data: teachers }, { data: services }] = await Promise.all([
+  const [{ data: center }, { data: rates, error: loadError }, { data: teachers }, { data: services }] = await Promise.all([
     supabase.from('centers').select('settings').eq('id', centerId).maybeSingle(),
     supabase
       .from('teacher_rates')
@@ -119,10 +121,12 @@ export default async function TeacherRatesPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t('teacherRates', 'title')}</CardTitle>
-          <CardDescription>Всего: {rows.length}</CardDescription>
+          {loadError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {loadError ? (
+            <FormError message={loadErrorMessage(loadError, 'Не удалось загрузить ставки. Обновите страницу.')} />
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('teacherRates', 'empty')}</p>
           ) : (
             <Table>

@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { CatalogAction } from '@/components/ui/catalog-action'
 import { saveSubscriptionType, archiveSubscriptionType, restoreSubscriptionType } from './actions'
+import { loadErrorMessage } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 
 export const metadata = { title: 'Типы абонементов — LogoCRM' }
 
@@ -123,7 +125,7 @@ export default async function SubscriptionTypesPage() {
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
 
-  const [{ data: types }, { data: services }] = await Promise.all([
+  const [{ data: types, error: loadError }, { data: services }] = await Promise.all([
     supabase
       .from('subscription_types')
       .select('id, name, service_id, kind, lessons_count, period_days, price_tiyin, is_active, deleted_at')
@@ -188,7 +190,11 @@ export default async function SubscriptionTypesPage() {
               </CatalogRow>
             ))}
           </ul>
-          {rows.length === 0 ? <EmptyState title="Типов пока нет" description="Добавьте первый — форма выше." /> : null}
+          {loadError ? (
+            <FormError message={loadErrorMessage(loadError, 'Не удалось загрузить типы абонементов. Обновите страницу.')} />
+          ) : rows.length === 0 ? (
+            <EmptyState title="Типов пока нет" description="Добавьте первый — форма выше." />
+          ) : null}
         </CardContent>
       </Card>
 
