@@ -913,14 +913,11 @@ function SubscriptionCard({
           <FreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>
       ) : null}
-      {/* Разморозить можно открытую (без даты конца) заморозку и любую ещё
-          не начавшуюся (freezeFrom в будущем, state ещё не 'frozen') — обе
-          unfreeze_subscription закрывает или отменяет целиком. Закрытую
-          датированную, уже идущую (freezeTo есть И state === 'frozen'),
-          снять раньше срока нельзя — RPC откажет «У абонемента нет
-          открытой заморозки», и кнопка обещала бы несбыточное
-          (продуктовое решение 2, см. заголовок миграции 0015). */}
-      {canManage && subscription.freezeFrom && !(subscription.freezeTo && subscription.state === 'frozen') ? (
+      {/* Разморозить можно любую текущую или будущую заморозку: бессрочную
+          и датированную, уже идущую, unfreeze_subscription заканчивает
+          сегодня (0092 — решение 2 из 0015 отменено владельцем 6.10.2026),
+          ещё не начавшуюся отменяет целиком. */}
+      {canManage && subscription.freezeFrom ? (
         <div className="border-t border-border pt-3">
           <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} />
         </div>
