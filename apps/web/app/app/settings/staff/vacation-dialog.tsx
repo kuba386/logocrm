@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useActionState, useId, useState, useTransition } from 'react'
 import { teacherVacation, vacationPreview, type ScheduleState } from '@/app/app/schedule/actions'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -28,6 +28,8 @@ export function VacationDialog({
   timeZone: string
 }) {
   const [open, setOpen] = useState(false)
+  // Диалог есть в каждой строке таблицы сотрудников — id полей должны быть уникальны.
+  const fieldId = useId()
   const [state, formAction] = useActionState(teacherVacation, initial)
   const [range, setRange] = useState({ from: '', to: '' })
   const [preview, setPreview] = useState<PreviewLesson[] | null>(null)
@@ -64,9 +66,9 @@ export function VacationDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="from">С</Label>
+              <Label htmlFor={`${fieldId}-from`}>С</Label>
               <Input
-                id="from"
+                id={`${fieldId}-from`}
                 name="from"
                 type="date"
                 value={range.from}
@@ -78,9 +80,9 @@ export function VacationDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="to">По</Label>
+              <Label htmlFor={`${fieldId}-to`}>По</Label>
               <Input
-                id="to"
+                id={`${fieldId}-to`}
                 name="to"
                 type="date"
                 value={range.to}

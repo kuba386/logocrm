@@ -3,7 +3,9 @@ import { cn } from '@/lib/utils'
 
 const Table = React.forwardRef<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div className="w-full overflow-x-auto">
+    // tabIndex: широкую таблицу на телефоне прокручивают и с клавиатуры —
+    // стрелками после Tab (axe: scrollable-region-focusable, UX71).
+    <div tabIndex={0} className="w-full overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   ),

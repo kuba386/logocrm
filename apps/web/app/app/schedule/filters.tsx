@@ -33,6 +33,7 @@ export function ScheduleFilters({
     <div className="flex flex-wrap gap-2">
       {showTeacherFilter ? (
         <Select
+          aria-label="Фильтр: специалист"
           value={selectedTeacher}
           onChange={(event) => go({ teacher: event.target.value })}
           className="sm:h-9 max-w-[220px]"
@@ -47,6 +48,7 @@ export function ScheduleFilters({
       ) : null}
 
       <Select
+        aria-label="Фильтр: кабинет"
         value={selectedRoom}
         onChange={(event) => go({ room: event.target.value })}
         className="sm:h-9 max-w-[200px]"

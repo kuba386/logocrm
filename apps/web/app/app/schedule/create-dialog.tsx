@@ -183,6 +183,7 @@ export function CreateLessonDialog({
 
             {target === 'student' ? (
               <Select
+                aria-label="Ученик"
                 name="studentId"
                 value={form.studentId}
                 onChange={(e) => set('studentId', e.target.value)}
@@ -197,6 +198,7 @@ export function CreateLessonDialog({
               </Select>
             ) : (
               <Select
+                aria-label="Группа"
                 name="groupId"
                 value={form.groupId}
                 onChange={(e) => set('groupId', e.target.value)}

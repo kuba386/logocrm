@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { onTablistKeyDown } from '@/lib/tablist-keys'
 import { cn } from '@/lib/utils'
 import { timeInZone } from '@/lib/timezone'
 import {
@@ -82,7 +83,14 @@ function WeekColumns({
   const gridHeight = (DAY_END_HOUR - DAY_START_HOUR) * HOUR_HEIGHT
 
   return (
-    <div className="overflow-x-auto">
+    // Сетка шире телефона: в пустую неделю внутри нет кнопок, и без tabIndex
+    // её нельзя прокрутить с клавиатуры (axe: scrollable-region-focusable).
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label="Сетка недели"
+      className="overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <div className="flex min-w-[860px]">
         <div className="w-14 shrink-0 pt-8">
           {hours.map((hour) => (
@@ -191,7 +199,12 @@ function DayList({
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="День недели" className="grid grid-cols-7 gap-1">
+      <div
+        role="tablist"
+        aria-label="День недели"
+        className="grid grid-cols-7 gap-1"
+        onKeyDown={(e) => onTablistKeyDown(e, days.map((c) => c.day), day, setDay)}
+      >
         {days.map((column) => {
           const count = lessons.filter((l) => l.day === column.day && l.status !== 'cancelled').length
           const active = column.day === day
@@ -201,9 +214,10 @@ function DayList({
               type="button"
               role="tab"
               aria-selected={active}
+              tabIndex={active ? 0 : -1}
               onClick={() => setDay(column.day)}
               className={cn(
-                'flex flex-col items-center rounded-md py-1.5 text-xs transition-colors',
+                'flex flex-col items-center rounded-md py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                 active
                   ? 'bg-primary text-primary-foreground'
                   : column.isToday
@@ -228,7 +242,7 @@ function DayList({
               <button
                 type="button"
                 onClick={() => onSelect(lesson)}
-                className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <span className="w-12 shrink-0 pt-0.5 text-sm font-medium tabular-nums">
                   {timeInZone(lesson.startsAt, timeZone)}

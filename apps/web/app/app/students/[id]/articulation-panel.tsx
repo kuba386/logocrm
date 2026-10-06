@@ -221,8 +221,8 @@ export function ArticulationPanel({
             ))}
 
             <div className="space-y-1">
-              <Label htmlFor="notes">Дополнительно</Label>
-              <Textarea id="notes" name="notes" defaultValue={entry?.notes ?? ''} />
+              <Label htmlFor="articulation-notes">Дополнительно</Label>
+              <Textarea id="articulation-notes" name="notes" defaultValue={entry?.notes ?? ''} />
             </div>
 
             <div className="flex gap-2">
