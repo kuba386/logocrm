@@ -12,18 +12,20 @@
  * Деньги — целые тыйыны. Даты — строки YYYY-MM-DD в поясе центра.
  */
 
-export type PaymentState = 'unpaid' | 'partial' | 'paid' | 'overpaid'
+export type PaymentState = 'unpaid' | 'partial' | 'paid' | 'overpaid' | 'closed'
 
 /**
  * Оплачен ли абонемент: сравнение paid_tiyin с ценой. Бесплатный
- * (price 0) считается оплаченным — платить нечего, это не долг.
+ * (price 0) считается оплаченным — платить нечего, это не долг. Закрытый
+ * (есть снимок отработанного, 0090) — рассчитан, а не «частично».
  * Зеркало subscription_payment_summary.payment_state.
  */
-export function paymentState(priceTiyin: number, paidTiyin: number): PaymentState {
+export function paymentState(priceTiyin: number, paidTiyin: number, closed = false): PaymentState {
   assertInteger(priceTiyin, 'priceTiyin')
   assertInteger(paidTiyin, 'paidTiyin')
   if (priceTiyin < 0) throw new RangeError('Цена абонемента не может быть отрицательной')
   if (paidTiyin < 0) throw new RangeError('Оплачено не может быть отрицательным')
+  if (closed) return 'closed'
   if (paidTiyin > priceTiyin) return 'overpaid'
   if (paidTiyin === priceTiyin) return 'paid'
   if (paidTiyin === 0) return 'unpaid'
