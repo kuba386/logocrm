@@ -9,6 +9,7 @@ import { PASSWORD, USERS } from './fixtures'
 
 const ROLES = [
   { name: 'owner', email: USERS.owner },
+  { name: 'admin', email: USERS.admin },
   { name: 'teacher', email: USERS.teacher },
   { name: 'parent', email: USERS.parent },
 ] as const

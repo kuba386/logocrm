@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { formatInTimeZone } from '@/lib/timezone'
 import { archiveDiagnostic, recordDiagnostic, type ClinicalState } from './clinical-actions'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 const SOUNDS = ['р', 'л', 'ш', 'ж', 'с', 'з', 'ц', 'ч', 'щ']
 const SOUND_STATUSES = [
@@ -175,15 +177,7 @@ export function DiagnosticsPanel({
                   {entry.conclusion ? <p>{entry.conclusion}</p> : null}
                 </div>
                 {canWrite ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => archive(entry.id)}
-                  >
-                    Убрать
-                  </Button>
+                  <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeDiagnostic')} onConfirm={() => archive(entry.id)} />
                 ) : null}
               </li>
             ))}
@@ -215,7 +209,7 @@ export function DiagnosticsPanel({
               <Label>Клиническая форма</Label>
               <div className="grid grid-cols-2 gap-1 text-sm sm:grid-cols-3">
                 {forms.map((f) => (
-                  <label key={f.code} className="flex items-center gap-2">
+                  <label key={f.code} className="flex min-h-11 items-center gap-2 sm:min-h-0 sm:py-0.5">
                     <input type="checkbox" name={`form_${f.code}`} />
                     {f.name}
                   </label>
@@ -303,7 +297,7 @@ export function DiagnosticsPanel({
               <div className="space-y-2 text-sm">
                 {referralTargets.map((r) => (
                   <div key={r.code} className="flex flex-wrap items-center gap-2">
-                    <label className="flex w-36 items-center gap-2">
+                    <label className="flex min-h-11 w-36 items-center gap-2 sm:min-h-0">
                       <input type="checkbox" name={`referral_${r.code}`} />
                       {r.name}
                     </label>

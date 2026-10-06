@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { formatSom } from '@logocrm/core'
 import { closeMonth, payInstallment, recordExpense, recordPayment, reopenMonth, type FinanceState } from './finance-actions'
 import { Button } from '@/components/ui/button'
@@ -184,16 +185,20 @@ export function PayInstallmentForm({
   installmentId,
   amountTiyin,
   sources,
+  defaultSourceId,
 }: {
   installmentId: string
   amountTiyin: number
   sources: Option[]
+  /** Источник последнего платежа по этому абонементу — если он ещё активен. */
+  defaultSourceId?: string
 }) {
   const [state, formAction] = useActionState(payInstallment, initial)
+  const initialSource = defaultSourceId && sources.some((s) => s.id === defaultSourceId) ? defaultSourceId : (sources[0]?.id ?? '')
   return (
     <form action={formAction} className="flex flex-wrap items-center justify-end gap-2">
       <input type="hidden" name="installmentId" value={installmentId} />
-      <Select name="sourceId" aria-label={t('finance', 'source')} defaultValue={sources[0]?.id ?? ''} className="w-auto">
+      <Select name="sourceId" aria-label={t('finance', 'source')} defaultValue={initialSource} className="w-auto">
         {sources.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}
@@ -227,7 +232,13 @@ export function ClosePeriodForm({
           ? t('finance', 'closeMonthHintUnknown')
           : t('finance', 'closeMonthHint', { count: openCount })}
       </p>
-      <SubmitButton size="default">{t('finance', 'closeMonth', { month: monthLabel })}</SubmitButton>
+      <ConfirmSubmit
+        size="default"
+        variant="default"
+        confirmVariant="default"
+        label={t('finance', 'closeMonth', { month: monthLabel })}
+        question={t('finance', 'closeMonthConfirm', { month: monthLabel })}
+      />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

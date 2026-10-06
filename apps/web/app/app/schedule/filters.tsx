@@ -35,7 +35,7 @@ export function ScheduleFilters({
         <Select
           value={selectedTeacher}
           onChange={(event) => go({ teacher: event.target.value })}
-          className="h-9 max-w-[220px]"
+          className="sm:h-9 max-w-[220px]"
         >
           <option value="">Все специалисты</option>
           {teachers.map((teacher) => (
@@ -49,7 +49,7 @@ export function ScheduleFilters({
       <Select
         value={selectedRoom}
         onChange={(event) => go({ room: event.target.value })}
-        className="h-9 max-w-[200px]"
+        className="sm:h-9 max-w-[200px]"
       >
         <option value="">Все кабинеты</option>
         {/* Кабинет необязателен, поэтому нужен явный пункт: иначе занятия

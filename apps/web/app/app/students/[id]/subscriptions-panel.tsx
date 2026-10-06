@@ -1,13 +1,18 @@
 'use client'
 
 import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from 'react'
-import { formatSom, installmentDueDates, refundPayout, splitInstallments } from '@logocrm/core'
+import { useRouter } from 'next/navigation'
+import { useFormStatus } from 'react-dom'
+import { formatSom, installmentDueDates, splitInstallments } from '@logocrm/core'
 import {
+  acceptSubscriptionPayment,
+  coverLessonDebt,
   freezeSubscription,
   refundSubscription,
   sellSubscriptionPaid,
   transferRemaining,
   unfreezeSubscription,
+  writeOffSubscription,
   type SubscriptionState,
 } from './subscription-actions'
 import { Button } from '@/components/ui/button'
@@ -65,11 +70,18 @@ export type SubscriptionView = {
   /** Текущая заморозка: с какого дня и по какой включительно. null в freezeTo — открытая, «пока не разморозят». */
   freezeFrom: string | null
   freezeTo: string | null
-  /** Из subscription_payment_summary: внесено и состояние оплаты (unpaid | partial | paid | overpaid). */
+  /** Из subscription_payment_summary: внесено и состояние оплаты (unpaid | partial | paid | overpaid | closed). */
   paidTiyin: number
   paymentState: string
+  /** Из subscription_summary (0090): деньги к выплате при отмене и недоплата за отработанное. */
+  payoutTiyin: number
+  shortfallTiyin: number
+  /** Остаток к оплате (subscription_summary.due_tiyin, 0090) — у закрытого 0. */
+  dueTiyin: number
   /** Живой план рассрочки (installments_view), пустой массив — рассрочки нет. */
   installments: InstallmentRow[]
+  /** Предпросмотр покрытия долга этим абонементом (0088) — только если есть что покрыть. */
+  cover?: { canCover: number; amountTiyin: number; remainingTiyin: number; creditAfterTiyin: number } | null
 }
 
 export type SourceOption = { id: string; name: string }
@@ -208,7 +220,10 @@ function SellForm({
   const [paidSom, setPaidSom] = useState('')
   const [withInstallments, setWithInstallments] = useState(false)
   const [installments, setInstallments] = useState(2)
-  const [firstDue, setFirstDue] = useState(today)
+  // Первый платёж рассрочки — через месяц от сегодня, а не сегодня: в день
+  // продажи семья уже внесла первую часть, и платёж «сегодня» назавтра
+  // становился просрочкой (аудит финансов 5.10.2026).
+  const [firstDue, setFirstDue] = useState(() => installmentDueDates(today, 2, 1)[1] ?? today)
   const [stepMonths, setStepMonths] = useState(1)
   // Не при инициализации: случайный uuid на сервере и клиенте разошёлся бы
   // в гидратации. Новый ключ — на каждый ответ сервера, а не на смену текста
@@ -282,7 +297,7 @@ function SellForm({
       </div>
       <div className="space-y-1">
         <Label htmlFor="startsAt">Дата начала</Label>
-        <Input id="startsAt" name="startsAt" type="date" className="max-w-[200px]" />
+        <Input id="startsAt" name="startsAt" type="date" defaultValue={today} className="max-w-[200px]" />
       </div>
 
       <fieldset className="space-y-3 rounded-md border border-border p-3">
@@ -448,10 +463,9 @@ function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscr
 /**
  * refundTiyin (subscription_summary.refund_tiyin = refund_calc) — стоимость
  * НЕОТРАБОТАННЫХ занятий (lessons) или оставшегося срока (period, 0054), не
- * деньги. Реально вернуть можно не больше внесённого (0030, Р1): по
- * абонементу, оплаченному частично, сервер капнет сумму сам — форма
- * показывает это явно, а не только «к возврату» из одной цифры, которая по
- * частичной оплате её же не покроет.
+ * деньги. Деньгами возвращается внесённое сверх отработанного (0090 Р4,
+ * payout_tiyin с сервера): форма показывает это явно, а не только «к
+ * возврату» из одной цифры.
  *
  * refundTiyin === 0 — законный случай (истёкший срок, исчерпанный пакет), не
  * повод прятать кнопку: «Отменить» доступно всегда, «вернуть деньги» —
@@ -462,14 +476,15 @@ function RefundForm({
   studentId,
   subscriptionId,
   refundTiyin,
-  paidTiyin,
+  payoutTiyin,
   isPeriod,
   sources,
 }: {
   studentId: string
   subscriptionId: string
   refundTiyin: number
-  paidTiyin: number
+  /** subscription_summary.payout_tiyin (0090): внесённое сверх отработанного — считает база. */
+  payoutTiyin: number
   /** ends_at абонемента задан — возврат посчитан по оставшимся дням, не по занятиям (0054). */
   isPeriod: boolean
   sources: SourceOption[]
@@ -477,7 +492,7 @@ function RefundForm({
   const [state, formAction, pending] = useActionState(refundSubscription, initial)
   const { formRef, submit } = useSubmit(state, formAction)
   const [confirming, setConfirming] = useState(false)
-  const moneyBack = refundPayout(refundTiyin, paidTiyin)
+  const moneyBack = payoutTiyin
 
   if (!confirming) {
     return (
@@ -492,6 +507,7 @@ function RefundForm({
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedTiyin" value={refundTiyin} />
+      <input type="hidden" name="expectedPayoutTiyin" value={payoutTiyin} />
       <p className="text-sm">
         {refundTiyin > 0 ? (
           <>
@@ -536,6 +552,167 @@ function RefundForm({
   )
 }
 
+/**
+ * «Принять оплату» по существующему абонементу (0090 Р7): куда ведёт отказ
+ * «сначала примите оплату». Остаток к оплате — с сервера
+ * (subscription_summary.due_tiyin), сервер же сверяет его и не примет больше.
+ */
+function PayForm({
+  studentId,
+  subscriptionId,
+  dueTiyin,
+  sources,
+  today,
+}: {
+  studentId: string
+  subscriptionId: string
+  dueTiyin: number
+  sources: SourceOption[]
+  today: string
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [state, action, pending] = useActionState(acceptSubscriptionPayment, initial)
+
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => action(formData))
+  }
+
+  if (!open) {
+    return (
+      <div className="space-y-1">
+        <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+          Принять оплату
+        </Button>
+        <FormNotice message={state.notice} />
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-md border border-border p-3 text-sm">
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="subscriptionId" value={subscriptionId} />
+      <input type="hidden" name="expectedDueTiyin" value={dueTiyin} />
+      <p>Осталось оплатить {formatSom(dueTiyin)}.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`pay-amount-${subscriptionId}`}>Сумма, сом</Label>
+          <Input
+            id={`pay-amount-${subscriptionId}`}
+            name="amountSom"
+            type="number"
+            min="0.01"
+            step="0.01"
+            required
+            defaultValue={String(dueTiyin / 100)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`pay-source-${subscriptionId}`}>{t('sale', 'source')}</Label>
+          <Select id={`pay-source-${subscriptionId}`} name="sourceId" defaultValue={sources[0]?.id ?? ''}>
+            {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`pay-date-${subscriptionId}`}>Дата</Label>
+          <Input id={`pay-date-${subscriptionId}`} name="paidOn" type="date" defaultValue={today} max={today} />
+        </div>
+      </div>
+      <FormError message={state.message} />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? 'Секунду…' : 'Принять'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Отмена
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Недоплата за отработанное (0090): отмена недоступна, пока не оплачено.
+ * Владельцу — «Списать недоплату и закрыть» с обязательной причиной; сумму
+ * считает база, касса не меняется.
+ */
+function ShortfallBlock({
+  studentId,
+  subscriptionId,
+  shortfallTiyin,
+  isOwner,
+}: {
+  studentId: string
+  subscriptionId: string
+  shortfallTiyin: number
+  isOwner: boolean
+}) {
+  const router = useRouter()
+  const [confirming, setConfirming] = useState(false)
+  const [state, action, pending] = useActionState(writeOffSubscription, initial)
+
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => action(formData))
+  }
+
+  return (
+    <div className="w-full space-y-2 text-sm">
+      <p className="text-muted-foreground">
+        Закрыть абонемент нельзя: за отработанные занятия не заплачено {formatSom(shortfallTiyin)}. Сначала примите
+        оплату{isOwner ? ' или спишите недоплату' : ''}.
+      </p>
+      {isOwner && !confirming ? (
+        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
+          Списать недоплату и закрыть
+        </Button>
+      ) : null}
+      {isOwner && confirming ? (
+        <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
+          <input type="hidden" name="studentId" value={studentId} />
+          <input type="hidden" name="subscriptionId" value={subscriptionId} />
+          <input type="hidden" name="expectedShortfallTiyin" value={shortfallTiyin} />
+          <p>
+            Списать {formatSom(shortfallTiyin)} без денег и закрыть абонемент. В кассе ничего не изменится, отменить
+            списание нельзя.
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor={`writeoff-reason-${subscriptionId}`}>Причина</Label>
+            <Input id={`writeoff-reason-${subscriptionId}`} name="reason" required maxLength={500} />
+          </div>
+          <FormError message={state.message} />
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" variant="destructive" disabled={pending}>
+              {pending ? 'Секунду…' : 'Списать и закрыть'}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Отмена
+            </Button>
+          </div>
+        </form>
+      ) : null}
+      <FormNotice message={state.notice} />
+    </div>
+  )
+}
+
 function TransferForm({
   studentId,
   subscriptionId,
@@ -573,6 +750,70 @@ function TransferForm({
   )
 }
 
+/**
+ * «Покрыть неоплаченные занятия (N)» (0088): занятия списываются с этого
+ * абонемента, долг снимается. Два шага — кнопка и подтверждение с суммой:
+ * действие тратит занятия абонемента. Отказ (23514 «долг изменился») —
+ * перечитать страницу, чтобы предпросмотр и expected стали свежими.
+ */
+function CoverDebtForm({
+  studentId,
+  subscriptionId,
+  cover,
+}: {
+  studentId: string
+  subscriptionId: string
+  cover: NonNullable<SubscriptionView['cover']>
+}) {
+  const router = useRouter()
+  const [confirming, setConfirming] = useState(false)
+  const [state, action, pending] = useActionState(coverLessonDebt, initial)
+
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => action(formData))
+  }
+
+  if (!confirming) {
+    return (
+      <div className="space-y-1">
+        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
+          Покрыть неоплаченные занятия ({cover.canCover})
+        </Button>
+        <FormNotice message={state.notice} />
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/50 p-3 text-sm">
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="subscriptionId" value={subscriptionId} />
+      <input type="hidden" name="count" value={cover.canCover} />
+      <input type="hidden" name="expectedRemainingTiyin" value={cover.remainingTiyin} />
+      <p>
+        Списать с абонемента {cover.canCover} {cover.canCover === 1 ? 'занятие' : 'занятия'} в счёт долга на{' '}
+        {formatSom(cover.amountTiyin)}. Долг сейчас — {formatSom(cover.remainingTiyin)}.
+        {cover.creditAfterTiyin > 0 ? ` После покрытия ${formatSom(cover.creditAfterTiyin)} уже внесённых денег станут авансом.` : ''}
+      </p>
+      <FormError message={state.message} />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? 'Секунду…' : 'Покрыть'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+          Отмена
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 function SubscriptionCard({
   studentId,
   subscription,
@@ -580,6 +821,8 @@ function SubscriptionCard({
   sources,
   timeZone,
   canManage,
+  isOwner,
+  today,
 }: {
   studentId: string
   subscription: SubscriptionView
@@ -588,6 +831,9 @@ function SubscriptionCard({
   timeZone: string
   /** Родитель видит те же цифры, что администратор, но без продажи/заморозки/возврата/переноса (Backlog.md, 23.09.2026). */
   canManage: boolean
+  /** Владелец центра — может списать недоплату (0090). Подсказка интерфейса; право проверяет база. */
+  isOwner: boolean
+  today: string
 }) {
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
@@ -632,6 +878,10 @@ function SubscriptionCard({
             </li>
           ))}
         </ol>
+      ) : null}
+
+      {canManage && subscription.cover && subscription.cover.canCover > 0 ? (
+        <CoverDebtForm studentId={studentId} subscriptionId={subscription.id} cover={subscription.cover} />
       ) : null}
 
       {/* freezeFrom, не state === 'frozen': subscription_summary отдаёт
@@ -682,14 +932,32 @@ function SubscriptionCard({
           (Backlog.md, 23.09.2026). */}
       {canManage && subscription.state !== 'cancelled' ? (
         <div className="flex flex-wrap items-start gap-2 border-t border-border pt-3">
-          <RefundForm
-            studentId={studentId}
-            subscriptionId={subscription.id}
-            refundTiyin={subscription.refundTiyin}
-            paidTiyin={subscription.paidTiyin}
-            isPeriod={subscription.endsAt != null}
-            sources={sources}
-          />
+          {subscription.dueTiyin > 0 ? (
+            <PayForm
+              studentId={studentId}
+              subscriptionId={subscription.id}
+              dueTiyin={subscription.dueTiyin}
+              sources={sources}
+              today={today}
+            />
+          ) : null}
+          {subscription.shortfallTiyin > 0 ? (
+            <ShortfallBlock
+              studentId={studentId}
+              subscriptionId={subscription.id}
+              shortfallTiyin={subscription.shortfallTiyin}
+              isOwner={isOwner}
+            />
+          ) : (
+            <RefundForm
+              studentId={studentId}
+              subscriptionId={subscription.id}
+              refundTiyin={subscription.refundTiyin}
+              payoutTiyin={subscription.payoutTiyin}
+              isPeriod={subscription.endsAt != null}
+              sources={sources}
+            />
+          )}
           {subscription.lessonsLeft != null && subscription.lessonsLeft > 0 ? (
             <TransferForm studentId={studentId} subscriptionId={subscription.id} siblings={siblings} />
           ) : null}
@@ -734,6 +1002,7 @@ export function SubscriptionsPanel({
   attendanceHistory,
   timeZone,
   canManage,
+  isOwner = false,
   hideBalance = false,
 }: {
   studentId: string
@@ -754,6 +1023,8 @@ export function SubscriptionsPanel({
    * (Backlog.md, 23.09.2026).
    */
   canManage: boolean
+  /** Владелец центра — кнопка «Списать недоплату» (0090); право проверяет база. */
+  isOwner?: boolean
   /** Остаток и долг уже показаны в шапке карточки (StudentSummary) — второй раз не рисуем. */
   hideBalance?: boolean
 }) {
@@ -775,6 +1046,8 @@ export function SubscriptionsPanel({
               sources={sources}
               timeZone={timeZone}
               canManage={canManage}
+              isOwner={isOwner}
+              today={today}
             />
           ))}
         </div>

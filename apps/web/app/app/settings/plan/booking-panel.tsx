@@ -13,7 +13,7 @@ function ToggleButton({ enabled }: { enabled: boolean }) {
   const { pending } = useFormStatus()
   return (
     <Button type="submit" variant={enabled ? 'outline' : 'default'} disabled={pending}>
-      {enabled ? t('bookingQueue', 'publishOff') : t('bookingQueue', 'publishOn')}
+      {enabled ? t('bookingQueue', 'closeAction') : t('bookingQueue', 'openAction')}
     </Button>
   )
 }

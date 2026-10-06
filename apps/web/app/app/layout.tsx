@@ -98,7 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       label: 'Деньги',
       links: [
         { href: '/app/payers', label: 'Плательщики', show: isAdmin },
-        { href: '/app/debts', label: 'Долги', show: isAdmin },
+        { href: '/app/debts', label: 'Долги', show: payments },
         { href: '/app/finance', label: 'Финансы', show: payments },
         { href: '/app/salary', label: 'Зарплата', show: finance },
         { href: '/app/my-salary', label: 'Моя зарплата', show: role === 'teacher' },
@@ -146,7 +146,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const planLabel = limits ? limits.planName : center?.plan ? `тариф ${center.plan}` : null
   const centerHeader = (
-    <Link href="/app" className="block min-w-0 leading-tight">
+    <Link href="/app" className="flex min-h-11 min-w-0 flex-col justify-center leading-tight">
       <span className="block truncate font-display text-sm font-medium">{center?.name ?? 'LogoCRM'}</span>
       <span className="block truncate text-xs text-muted-foreground">
         {roleLabel(role)}

@@ -24,7 +24,7 @@ export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
             href={section.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'shrink-0 whitespace-nowrap border-b-2 px-3 pb-2 text-sm font-medium transition-colors',
+              'inline-flex min-h-11 shrink-0 items-end whitespace-nowrap border-b-2 px-3 pb-2 text-sm font-medium transition-colors sm:min-h-0',
               active
                 ? 'border-primary text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground',

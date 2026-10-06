@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError, type ConflictDay } from '@/lib/errors'
+import { centerTimeZone, zonedDateTimeToIso } from '@/lib/timezone'
 
 export type ScheduleState = AppError & { notice?: string }
 
@@ -146,20 +147,34 @@ export async function substituteTeacher(
 }
 
 /** Перенос — через RPC: ошибка о накладке приходит тем же форматом. */
+/** «2026-10-06T11:00» из <input type="datetime-local">. */
+const LOCAL_DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/
+
 export async function rescheduleLesson(
   _prev: ScheduleState,
   formData: FormData,
 ): Promise<ScheduleState> {
   const lessonId = String(formData.get('lessonId') ?? '')
-  const startsAt = String(formData.get('startsAt') ?? '')
-  const endsAt = String(formData.get('endsAt') ?? '')
-  if (!lessonId || !startsAt || !endsAt) return { message: 'Укажите новое время' }
+  const startsLocal = LOCAL_DATETIME.exec(String(formData.get('startsAt') ?? ''))
+  const endsLocal = LOCAL_DATETIME.exec(String(formData.get('endsAt') ?? ''))
+  if (!lessonId || !startsLocal || !endsLocal) return { message: 'Укажите новое время' }
 
   const supabase = await createClient()
+
+  // <input type="datetime-local"> отдаёт время без пояса — это время центра.
+  // Раньше строка уходила в timestamptz как есть и база читала её как UTC:
+  // «11:00» сохранялось как 17:00 по Бишкеку. Пояс — из базы, не из браузера.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const centerId = (user?.app_metadata as { center_id?: string } | undefined)?.center_id ?? ''
+  const { data: center } = await supabase.from('centers').select('settings').eq('id', centerId).maybeSingle()
+  const timeZone = centerTimeZone(center?.settings)
+
   const { error } = await supabase.rpc('reschedule_lesson', {
     p_lesson_id: lessonId,
-    p_starts_at: startsAt,
-    p_ends_at: endsAt,
+    p_starts_at: zonedDateTimeToIso(startsLocal[1]!, startsLocal[2]!, timeZone),
+    p_ends_at: zonedDateTimeToIso(endsLocal[1]!, endsLocal[2]!, timeZone),
   })
 
   if (error) return toAppError(error, 'Не удалось перенести занятие')

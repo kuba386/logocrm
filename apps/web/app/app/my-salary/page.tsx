@@ -9,6 +9,8 @@ import { buttonVariants } from '@/components/ui/button'
 import { PeriodNav } from '@/components/ui/period-nav'
 import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { loadErrorMessage } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 
 export const metadata = { title: 'Моя зарплата — LogoCRM' }
 
@@ -42,7 +44,7 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
   if (role !== 'teacher') redirect('/app')
 
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? ''
-  const [{ data: center }, { data: teacherId }] = await Promise.all([
+  const [{ data: center }, { data: teacherId, error: teacherIdError }] = await Promise.all([
     supabase.from('centers').select('settings').eq('id', centerId).maybeSingle(),
     supabase.rpc('my_teacher_id'),
   ])
@@ -51,11 +53,14 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
   const month = /^\d{4}-\d{2}$/.test(params.month ?? '') ? params.month! : today.slice(0, 7)
   const first = `${month}-01`
 
-  const [{ data: summary }, { data: details }] = await Promise.all([
+  const [{ data: summary, error: summaryError }, { data: details, error: detailsError }] = await Promise.all([
     supabase.rpc('salary_summary', { p_month: first }),
-    teacherId ? supabase.rpc('calc_salary', { p_teacher_id: teacherId, p_month: first }) : Promise.resolve({ data: null }),
+    teacherId ? supabase.rpc('calc_salary', { p_teacher_id: teacherId, p_month: first }) : Promise.resolve({ data: null, error: null }),
   ])
   const mine = summary?.[0]
+  // Сбой загрузки — не «карточка не привязана, обратитесь к администратору»:
+  // это ложный диагноз, специалист пошёл бы к администратору зря.
+  const loadError = teacherIdError ?? summaryError ?? detailsError ?? null
   const rows = details ?? []
 
   return (
@@ -73,7 +78,9 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
         nextLabel="Следующий месяц"
       />
 
-      {!teacherId || !mine ? (
+      {loadError ? (
+        <FormError message={loadErrorMessage(loadError, t('mySalary', 'loadFailed'))} />
+      ) : !teacherId || !mine ? (
         <p className="text-sm text-muted-foreground">{t('mySalary', 'noCard')}</p>
       ) : (
         <>
@@ -121,7 +128,11 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
                   <TableBody>
                     {rows.map((r) => (
                       <TableRow key={r.attendance_id}>
-                        <TableCell className="whitespace-nowrap">{calendarDate(r.lesson_date, timeZone)}</TableCell>
+                        <TableCell>
+                          <span className="whitespace-nowrap">{calendarDate(r.lesson_date, timeZone)}</span>
+                          {/* Колонка «Примечание» на телефоне скрыта, а именно оно объясняет ноль. */}
+                          {r.note ? <span className="block text-xs text-muted-foreground sm:hidden">{r.note}</span> : null}
+                        </TableCell>
                         <TableCell>{r.model ? label('salary', `model_${r.model}`) : '—'}</TableCell>
                         <TableCell className="text-right font-medium">{formatSom(r.amount_tiyin)}</TableCell>
                         <TableCell className="text-muted-foreground">{r.note ?? ''}</TableCell>

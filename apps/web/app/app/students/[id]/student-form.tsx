@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 const initialState: StudentState = {}
 
@@ -142,9 +144,11 @@ export function StudentForm({
         ) : (
           <form action={archiveAction}>
             <input type="hidden" name="id" value={student.id} />
-            <Button type="submit" variant="outline">
-              В архив
-            </Button>
+            <ConfirmSubmit
+              size="default"
+              label={t('students', 'archive')}
+              question={t('students', 'archiveConfirm', { name: student.fullName })}
+            />
           </form>
         )}
       </div>

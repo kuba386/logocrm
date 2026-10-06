@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
+import { monthBounds, shiftMonth } from '@/lib/month'
 import { centerTimeZone, dayInZone, formatInTimeZone, isoDayInZone, startOfDayInZone } from '@/lib/timezone'
 import { canPayments, isFinance } from '@/lib/roles'
 import { label, t } from '@/lib/messages'
@@ -11,25 +12,15 @@ import { PeriodNav } from '@/components/ui/period-nav'
 import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { loadErrorMessage } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm } from './finance-forms'
 
 export const metadata = { title: 'Финансы — LogoCRM' }
 
 type Tab = 'payments' | 'expenses' | 'installments' | 'periods'
 
-/** «2026-09» → первое число и первое число следующего месяца. */
-function monthBounds(month: string): { first: string; next: string } {
-  const [y, m] = month.split('-').map(Number)
-  const nextY = m === 12 ? y! + 1 : y!
-  const nextM = m === 12 ? 1 : m! + 1
-  return { first: `${month}-01`, next: `${nextY}-${String(nextM).padStart(2, '0')}-01` }
-}
 
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number)
-  const total = y! * 12 + (m! - 1) + delta
-  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
-}
 
 /** «сентябрь 2026 г.» — полдень UTC, чтобы пояс не сдвинул месяц. */
 
@@ -77,13 +68,15 @@ export default async function FinancePage({
   const fromIso = startOfDayInZone(first, timeZone)
   const toIso = startOfDayInZone(next, timeZone)
 
-  const [{ data: sourceRows }, { data: cashRows }] = await Promise.all([
+  const [{ data: sourceRows }, { data: cashRows, error: cashLoadError }] = await Promise.all([
     supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
     supabase.from('cash_by_source').select('*').eq('month', first),
   ])
   const sources = (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name }))
   const sourceName = new Map(sources.map((s) => [s.id, s.name]))
   const cash = cashRows ?? []
+  // Касса не загрузилась — не «0 сом»: нули читались бы как настоящие цифры.
+  const cashError = cashLoadError ? loadErrorMessage(cashLoadError, t('finance', 'loadCashFailed')) : null
   const sum = (pick: (r: (typeof cash)[number]) => number | null) => cash.reduce((acc, r) => acc + (pick(r) ?? 0), 0)
 
   const tabs: { key: Tab; title: string }[] = [
@@ -113,7 +106,7 @@ export default async function FinancePage({
               key={item.key}
               href={`/app/finance?tab=${item.key}&month=${month}`}
               className={cn(
-                'border-b-2 px-1 pb-2 text-sm font-medium',
+                'inline-flex min-h-11 items-end border-b-2 px-1 pb-2 text-sm font-medium sm:min-h-0',
                 tab === item.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground',
               )}
             >
@@ -141,10 +134,12 @@ export default async function FinancePage({
           today={today}
           sources={sources}
           sourceName={sourceName}
+          cashError={cashError}
           totals={{
             received: sum((r) => r.received_tiyin),
             refunded: sum((r) => r.refunded_tiyin),
             corrections: sum((r) => r.corrections_tiyin),
+            spent: sum((r) => r.spent_tiyin),
             total: sum((r) => r.total_tiyin),
           }}
           bySource={cash.map((r) => ({
@@ -162,6 +157,7 @@ export default async function FinancePage({
           today={today}
           sources={sources}
           sourceName={sourceName}
+          cashError={cashError}
           spent={sum((r) => r.spent_tiyin)}
         />
       ) : null}
@@ -181,6 +177,7 @@ async function PaymentsTab({
   today,
   sources,
   sourceName,
+  cashError,
   totals,
   bySource,
 }: {
@@ -191,10 +188,11 @@ async function PaymentsTab({
   today: string
   sources: { id: string; name: string }[]
   sourceName: Map<string, string>
-  totals: { received: number; refunded: number; corrections: number; total: number }
+  cashError: string | null
+  totals: { received: number; refunded: number; corrections: number; spent: number; total: number }
   bySource: { name: string; total: number }[]
 }) {
-  const [{ data: payments }, { data: payers }, { data: students }] = await Promise.all([
+  const [{ data: payments, error: paymentsError }, { data: payers }, { data: students }] = await Promise.all([
     supabase
       .from('payments')
       .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment')
@@ -213,7 +211,16 @@ async function PaymentsTab({
 
   return (
     <div className="space-y-4">
-      <dl className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-4">
+      {/* «Итого в кассе» из cash_by_source — уже за вычетом расходов. Без
+          строки «Расходы» сумма над итогом не сходилась: получено 5 500,
+          итого 5 000, а куда делись 500 — не видно. Знаки как в базе:
+          возвраты и расходы отрицательные, строки складываются в итог. */}
+      {cashError ? <FormError message={cashError} /> : null}
+      <dl
+        hidden={Boolean(cashError)}
+        data-testid="cash-totals"
+        className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-5"
+      >
         <div>
           <dt className="text-xs text-muted-foreground">{t('finance', 'received')}</dt>
           <dd className="font-medium">{formatSom(totals.received)}</dd>
@@ -227,11 +234,15 @@ async function PaymentsTab({
           <dd className="font-medium">{formatSom(totals.corrections)}</dd>
         </div>
         <div>
+          <dt className="text-xs text-muted-foreground">{t('finance', 'spent')}</dt>
+          <dd className="font-medium">{formatSom(totals.spent)}</dd>
+        </div>
+        <div>
           <dt className="text-xs text-muted-foreground">{t('finance', 'total')}</dt>
           <dd className="font-medium">{formatSom(totals.total)}</dd>
         </div>
       </dl>
-      {bySource.length ? (
+      {bySource.length && !cashError ? (
         <p className="text-sm text-muted-foreground">
           {t('finance', 'bySource')}: {bySource.map((s) => `${s.name} ${formatSom(s.total)}`).join(' · ')}
         </p>
@@ -240,10 +251,12 @@ async function PaymentsTab({
       <Card>
         <CardHeader>
           <CardTitle>{t('finance', 'tabPayments')}</CardTitle>
-          <CardDescription>Всего: {rows.length}</CardDescription>
+          {paymentsError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {paymentsError ? (
+            <FormError message={loadErrorMessage(paymentsError, t('finance', 'loadPaymentsFailed'))} />
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('finance', 'paymentsEmpty')}</p>
           ) : (
             <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(7)]:hidden">
@@ -269,8 +282,12 @@ async function PaymentsTab({
                           {studentName.get(p.student_id) ?? '—'}
                         </Link>
                       ) : (
-                        '—'
+                        <span className="sm:hidden">{payerName.get(p.payer_id) ?? '—'}</span>
                       )}
+                      {p.student_id ? null : <span className="hidden sm:inline">—</span>}
+                      {/* На телефоне колонки «Вид» и «Плательщик» скрыты — без этой строки
+                          корректировку не отличить от оплаты (UX-аудит, UX71). */}
+                      <span className="block text-xs text-muted-foreground sm:hidden">{label('paymentKind', p.kind)}</span>
                     </TableCell>
                     <TableCell>{label('paymentKind', p.kind)}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -279,7 +296,9 @@ async function PaymentsTab({
                     <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
                       {formatSom(p.amount_tiyin)}
                     </TableCell>
-                    <TableCell className="max-w-[16rem] truncate text-muted-foreground">{p.comment ?? ''}</TableCell>
+                    <TableCell className="max-w-[16rem] truncate text-muted-foreground" title={p.comment ?? undefined}>
+                      {p.comment ?? ''}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -306,6 +325,7 @@ async function ExpensesTab({
   today,
   sources,
   sourceName,
+  cashError,
   spent,
 }: {
   supabase: Supabase
@@ -315,9 +335,10 @@ async function ExpensesTab({
   today: string
   sources: { id: string; name: string }[]
   sourceName: Map<string, string>
+  cashError: string | null
   spent: number
 }) {
-  const [{ data: expenses }, { data: categories }] = await Promise.all([
+  const [{ data: expenses, error: expensesError }, { data: categories }] = await Promise.all([
     supabase
       .from('expenses')
       .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment')
@@ -332,16 +353,22 @@ async function ExpensesTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm">
-        {t('finance', 'spent')}: <strong>{formatSom(Math.abs(spent))}</strong>
-      </p>
+      {cashError ? (
+        <FormError message={cashError} />
+      ) : (
+        <p className="text-sm">
+          {t('finance', 'spent')}: <strong>{formatSom(Math.abs(spent))}</strong>
+        </p>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>{t('finance', 'tabExpenses')}</CardTitle>
-          <CardDescription>Всего: {rows.length}</CardDescription>
+          {expensesError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {expensesError ? (
+            <FormError message={loadErrorMessage(expensesError, t('finance', 'loadExpensesFailed'))} />
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('finance', 'expensesEmpty')}</p>
           ) : (
             <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(6)]:hidden">
@@ -387,7 +414,7 @@ async function InstallmentsTab({
   timeZone: string
   sources: { id: string; name: string }[]
 }) {
-  const { data: rows } = await supabase
+  const { data: rows, error: installmentsError } = await supabase
     .from('installments_view')
     .select('id, subscription_id, student_id, payer_id, seq, due_date, amount_tiyin, state, cancelled_at')
     .is('cancelled_at', null)
@@ -408,14 +435,35 @@ async function InstallmentsTab({
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
   const payerById = new Map((payers ?? []).map((p) => [p.id, p]))
 
+  // Источник по умолчанию — тот, которым по этому абонементу платили последним:
+  // семья обычно платит одним способом. Раньше всегда стояли «Наличные».
+  const subscriptionIds = [...new Set(live.map((r) => r.subscription_id).filter((v): v is string => Boolean(v)))]
+  const { data: lastPayments } = subscriptionIds.length
+    ? await supabase
+        .from('payments')
+        .select('subscription_id, source_id, paid_at')
+        .in('subscription_id', subscriptionIds)
+        .eq('kind', 'payment')
+        .not('source_id', 'is', null)
+        .order('paid_at', { ascending: false })
+    : { data: [] as { subscription_id: string | null; source_id: string | null; paid_at: string }[] }
+  const lastSourceBySubscription = new Map<string, string>()
+  for (const p of lastPayments ?? []) {
+    if (p.subscription_id && p.source_id && !lastSourceBySubscription.has(p.subscription_id)) {
+      lastSourceBySubscription.set(p.subscription_id, p.source_id)
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('finance', 'tabInstallments')}</CardTitle>
-        <CardDescription>Всего: {live.length}</CardDescription>
+        {installmentsError ? null : <CardDescription>Всего: {live.length}</CardDescription>}
       </CardHeader>
       <CardContent>
-        {live.length === 0 ? (
+        {installmentsError ? (
+          <FormError message={loadErrorMessage(installmentsError, t('finance', 'loadInstallmentsFailed'))} />
+        ) : live.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('finance', 'installmentsEmpty')}</p>
         ) : (
           <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden">
@@ -473,7 +521,12 @@ async function InstallmentsTab({
                             {t('finance', 'whatsapp')}
                           </a>
                         ) : null}
-                        <PayInstallmentForm installmentId={r.id as string} amountTiyin={r.amount_tiyin as number} sources={sources} />
+                        <PayInstallmentForm
+                          installmentId={r.id as string}
+                          amountTiyin={r.amount_tiyin as number}
+                          sources={sources}
+                          defaultSourceId={r.subscription_id ? lastSourceBySubscription.get(r.subscription_id) : undefined}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -504,12 +557,27 @@ async function PeriodsTab({
 
   // Тот же счётчик, по которому откажет close_month (0031): не только
   // planned, но и проведённые без отметки участника.
-  const [{ data: periods }, { data: openCount, error: openCountError }] = await Promise.all([
+  const [{ data: periods, error: periodsError }, { data: openCount, error: openCountError }] = await Promise.all([
     supabase.from('financial_periods').select('month, closed_at').order('month', { ascending: false }).limit(12),
     supabase.rpc('month_open_lessons_count', { p_month: prevFirst }),
   ])
   const rows = periods ?? []
   const previousClosed = rows.some((p) => p.month === prevFirst && p.closed_at)
+
+  // Без списка периодов previousClosed — всегда false, и форма «Закрыть месяц»
+  // показалась бы и у уже закрытого месяца. Отказ — только ошибка.
+  if (periodsError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('finance', 'tabPeriods')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FormError message={loadErrorMessage(periodsError, t('finance', 'loadPeriodsFailed'))} />
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-4">

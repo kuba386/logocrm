@@ -11,6 +11,8 @@ import { PeriodNav } from '@/components/ui/period-nav'
 import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { toAppError } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 import { AdjustmentForm, ApproveForm, CancelRunForm } from './salary-forms'
 
 export const metadata = { title: 'Зарплата — LogoCRM' }
@@ -56,7 +58,7 @@ export default async function SalaryPage({
   const isPastMonth = month < today.slice(0, 7)
   const expanded = params.teacher && /^[0-9a-f-]{36}$/.test(params.teacher) ? params.teacher : null
 
-  const [{ data: summary }, { data: teachers }, { data: adjustments }] = await Promise.all([
+  const [{ data: summary, error: summaryError }, { data: teachers }, { data: adjustments }] = await Promise.all([
     supabase.rpc('salary_summary', { p_month: first }),
     supabase.from('teachers').select('id, full_name').is('deleted_at', null).order('full_name'),
     supabase
@@ -94,7 +96,11 @@ export default async function SalaryPage({
           <CardDescription>{t('salary', 'approveHint')}</CardDescription>
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {/* Отказ salary_summary — не «специалистов нет»: раньше любая ошибка
+              базы выглядела здесь как пустой центр. */}
+          {summaryError ? (
+            <FormError message={toAppError(summaryError, 'Не удалось посчитать зарплату за месяц').message} />
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('salary', 'empty')}</p>
           ) : (
             <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(3)]:hidden">
@@ -157,11 +163,11 @@ export default async function SalaryPage({
                             {isExpanded ? t('salary', 'hideDetails') : t('salary', 'details')}
                           </Link>
                           {!r.approved_run_id && isPastMonth ? (
-                            <ApproveForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} />
+                            <ApproveForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} teacherName={name} totalLabel={formatSom(r.total_tiyin)} />
                           ) : null}
                           {r.approved_run_id ? (
                             isOwner ? (
-                              <CancelRunForm teacherId={r.teacher_id} month={first} />
+                              <CancelRunForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} teacherName={name} totalLabel={formatSom(r.total_tiyin)} />
                             ) : (
                               <span className="text-xs text-muted-foreground">{t('salary', 'ownerOnly')}</span>
                             )

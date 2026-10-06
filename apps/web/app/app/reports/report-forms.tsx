@@ -57,11 +57,11 @@ export function PeriodReportForm({ report, from, to }: { report: Extract<ExportR
       <input type="hidden" name="report" value={report} />
       <div className="space-y-1">
         <Label htmlFor={`${report}-from`} className="text-xs">{t('reports', 'from')}</Label>
-        <Input id={`${report}-from`} name="from" type="date" defaultValue={from} required className="h-9 w-40" />
+        <Input id={`${report}-from`} name="from" type="date" defaultValue={from} required className="sm:h-9 w-40" />
       </div>
       <div className="space-y-1">
         <Label htmlFor={`${report}-to`} className="text-xs">{t('reports', 'to')}</Label>
-        <Input id={`${report}-to`} name="to" type="date" defaultValue={to} required className="h-9 w-40" />
+        <Input id={`${report}-to`} name="to" type="date" defaultValue={to} required className="sm:h-9 w-40" />
       </div>
       <SubmitButton>{t('reports', 'download')}</SubmitButton>
       {state.message ? <FormError message={state.message} /> : null}
@@ -82,7 +82,7 @@ export function SalaryReportForm({ month }: { month: string }) {
     <form action={action} className="flex flex-wrap items-end gap-3">
       <div className="space-y-1">
         <Label htmlFor="salary-month" className="text-xs">{t('reports', 'month')}</Label>
-        <Input id="salary-month" name="month" type="month" defaultValue={month} required className="h-9 w-40" />
+        <Input id="salary-month" name="month" type="month" defaultValue={month} required className="sm:h-9 w-40" />
       </div>
       <Button type="submit" size="sm" name="report" value="salary_summary" disabled={pending}>
         {t('reports', 'salarySummary')}

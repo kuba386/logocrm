@@ -261,8 +261,22 @@ export default async function StudentPage({
       (subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id })),
     )
 
+    // Покрытие долга абонементом (0088): спрашиваем базу, только когда есть
+    // что покрыть и абонемент действует. Сколько занятий и на какую сумму —
+    // из cover_lesson_debt_preview, браузер не подбирает отметки сам.
+    const hasLessonDebt = (balanceRow?.debt_tiyin ?? 0) + (balanceRow?.overdrawn_tiyin ?? 0) > 0
+    const covers = await Promise.all(
+      (subsRows ?? []).map((row, index) => {
+        const summary = summaries[index]?.data?.[0]
+        return hasLessonDebt && summary?.state === 'active' && (summary.lessons_left ?? 0) > 0
+          ? supabase.rpc('cover_lesson_debt_preview', { p_subscription_id: row.id })
+          : Promise.resolve({ data: null })
+      }),
+    )
+
     const subscriptions: SubscriptionView[] = (subsRows ?? []).map((row, index) => {
       const summary = summaries[index]?.data?.[0]
+      const cover = covers[index]?.data?.[0]
       return {
         id: row.id,
         typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
@@ -282,6 +296,9 @@ export default async function StudentPage({
         freezeTo: summary?.freeze_to ?? null,
         paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
         paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        payoutTiyin: summary?.payout_tiyin ?? 0,
+        shortfallTiyin: summary?.shortfall_tiyin ?? 0,
+        dueTiyin: summary?.due_tiyin ?? 0,
         installments: (installmentRows ?? [])
           .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
           .map((r) => ({
@@ -290,6 +307,14 @@ export default async function StudentPage({
             amountTiyin: r.amount_tiyin as number,
             state: r.state ?? '',
           })),
+        cover: cover
+          ? {
+              canCover: cover.can_cover,
+              amountTiyin: cover.amount_tiyin,
+              remainingTiyin: cover.remaining_tiyin,
+              creditAfterTiyin: cover.credit_after_tiyin,
+            }
+          : null,
       }
     })
 
@@ -430,6 +455,9 @@ export default async function StudentPage({
         freezeTo: summary?.freeze_to ?? null,
         paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
         paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        payoutTiyin: summary?.payout_tiyin ?? 0,
+        shortfallTiyin: summary?.shortfall_tiyin ?? 0,
+        dueTiyin: summary?.due_tiyin ?? 0,
         installments: (installmentRows ?? [])
           .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
           .map((r) => ({
@@ -997,7 +1025,7 @@ export default async function StudentPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SubscriptionsPanel studentId={id} {...subscriptionsSection} hideBalance={Boolean(summary)} />
+              <SubscriptionsPanel studentId={id} {...subscriptionsSection} isOwner={role === 'owner'} hideBalance={Boolean(summary)} />
             </CardContent>
           </Card>
         ) : subscriptionBadge ? (

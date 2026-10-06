@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
 import { previewTemplate, resetTemplate, saveTemplate, type TemplateState } from './actions'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 
 const initial: TemplateState = {}
 
@@ -101,9 +102,11 @@ export function TemplateForm({
           {t('notifications', 'preview')}
         </ActionButton>
         {isOwn ? (
-          <ActionButton formAction={resetAction} variant="outline">
-            {t('notifications', 'reset')}
-          </ActionButton>
+          <ConfirmSubmit
+            formAction={resetAction}
+            label={t('notifications', 'reset')}
+            question={t('notifications', 'resetConfirm')}
+          />
         ) : null}
       </div>
 

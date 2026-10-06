@@ -87,9 +87,15 @@ export default async function NotificationLogPage() {
                       <TableCell className="text-muted-foreground">{label('notificationChannel', row.channel)}</TableCell>
                       <TableCell className={cn(row.status === 'failed' && 'text-destructive')}>
                         {label('notificationStatus', row.status)}
+                        {/* Колонка ошибки на телефоне скрыта — причину сбоя показываем здесь. */}
+                        {row.error ? <span className="block text-xs sm:hidden">{row.error}</span> : null}
                       </TableCell>
-                      <TableCell className="max-w-[24rem] truncate text-muted-foreground">{row.text ?? ''}</TableCell>
-                      <TableCell className="max-w-[16rem] truncate text-destructive">{row.error ?? ''}</TableCell>
+                      <TableCell className="max-w-[24rem] truncate text-muted-foreground" title={row.text ?? undefined}>
+                        {row.text ?? ''}
+                      </TableCell>
+                      <TableCell className="max-w-[16rem] truncate text-destructive" title={row.error ?? undefined}>
+                        {row.error ?? ''}
+                      </TableCell>
                     </TableRow>
                   )
                 })}

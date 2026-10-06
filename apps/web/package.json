@@ -17,6 +17,7 @@
     "@logocrm/contracts": "workspace:*",
     "@logocrm/core": "workspace:*",
     "@logocrm/db": "workspace:*",
+    "@sentry/nextjs": "^11.4.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.58.0",
     "class-variance-authority": "^0.7.1",

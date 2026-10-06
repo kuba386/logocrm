@@ -48,6 +48,25 @@ jobs:
               - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
 
+  # Репозиторий публичный: ключ Supabase, Vercel или бота, попавший в коммит,
+  # видят все через минуты. gitleaks проверяет только новые коммиты (PR или
+  # пуш), а не всю историю. Для личного аккаунта лицензия не нужна.
+  secrets:
+    name: Секреты в коммитах
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+
   app:
     name: Приложение (lint, typecheck, tests)
     runs-on: ubuntu-latest
@@ -305,10 +324,20 @@ jobs:
                 `не найден ни один из ключей ${names.join(", ")}; доступны: ${Object.keys(s).join(", ")}`,
               )
             }
+            // Токен роли public_booking для /book/[slug] (0057) — тот же
+            // выпуск, что на staging/prod, но подписан секретом локального
+            // стека: он фиксированный и публичный, это не секрет.
+            const crypto = require("crypto")
+            const b64 = (x) => Buffer.from(JSON.stringify(x)).toString("base64url")
+            const now = Math.floor(Date.now() / 1000)
+            const head = b64({ alg: "HS256", typ: "JWT" })
+            const body = b64({ iss: "supabase", role: "public_booking", iat: now, exp: now + 24 * 3600 })
+            const sig = crypto.createHmac("sha256", pick(["JWT_SECRET", "JwtSecret"])).update(head + "." + body).digest("base64url")
             const out = {
               E2E_DB_URL: pick(["DB_URL", "DB_URL_POSTGRES", "DbUrl"]),
               NEXT_PUBLIC_SUPABASE_URL: pick(["API_URL", "ApiUrl"]),
               NEXT_PUBLIC_SUPABASE_ANON_KEY: pick(["ANON_KEY", "PUBLISHABLE_KEY", "AnonKey"]),
+              SUPABASE_BOOKING_JWT: head + "." + body + "." + sig,
             }
             require("fs").appendFileSync(
               process.env.GITHUB_ENV,
@@ -329,6 +358,7 @@ jobs:
             echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY"
             echo "NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000"
+            echo "SUPABASE_BOOKING_JWT=$SUPABASE_BOOKING_JWT"
           } > apps/web/.env.local
 
       # Инкрементальная сборка Next.js: ключ по lockfile и исходникам, а

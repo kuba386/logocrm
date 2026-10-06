@@ -63,6 +63,10 @@ const CHECK_MESSAGES: Record<string, string> = {
   payments_sign_matches_kind: 'Сумма не соответствует типу операции',
   payments_subscription_needs_student: 'Платёж на абонемент обязан быть привязан к ученику',
   subscriptions_paid_not_negative: 'Возврат превышает оплаченную по абонементу сумму',
+  subscriptions_settled_paid: 'За отработанные занятия закрытого абонемента должно остаться оплаченным не меньше их стоимости',
+  subscriptions_shortfall_written_off_check: 'Списанная недоплата не может быть отрицательной',
+  subscription_shortfall_writeoffs_amount_tiyin_check: 'Сумма списания должна быть больше нуля',
+  subscription_shortfall_writeoffs_reason_check: 'Причина списания — от 1 до 500 символов',
   financial_periods_month_is_first_of_month: 'Месяц периода — первое число месяца',
   subscriptions_status_no_frozen_check: 'Статус абонемента меняется только действиями карточки — заморозка и срок считаются по датам',
   subscription_types_lessons_no_period_check: 'У типа абонемента на количество занятий срок действия не указывается',
@@ -352,4 +356,17 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
   }
 
   return { message: message || fallback }
+}
+
+/**
+ * Сообщение для отказа при ЗАГРУЗКЕ данных страницы (не действия). Наши
+ * SQL-функции отказывают по-русски — такой текст показываем как есть; всё
+ * остальное (PostgREST, сеть, «column … does not exist») — техническое, его
+ * человеку не показываем, вместо него — fallback («Не удалось загрузить
+ * платежи. Обновите страницу.»). Иначе сбой выглядел бы как «пусто» или
+ * «0 сом» (UX-аудит 6.10.2026, пакет 4).
+ */
+export function loadErrorMessage(error: { message?: string | null } | null | undefined, fallback: string): string {
+  const message = error?.message ?? ''
+  return /[А-Яа-яЁё]/.test(message) ? message : fallback
 }
