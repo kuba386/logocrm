@@ -21,11 +21,11 @@ export function PeriodNav({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <Link href={prev} aria-label={prevLabel} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'px-2' })}>
+      <Link href={prev} aria-label={prevLabel} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-11 px-0 sm:w-auto sm:px-2' })}>
         <ChevronLeft className="size-4" />
       </Link>
       <span className="min-w-[10rem] px-2 text-center text-sm font-medium tabular-nums">{label}</span>
-      <Link href={next} aria-label={nextLabel} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'px-2' })}>
+      <Link href={next} aria-label={nextLabel} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-11 px-0 sm:w-auto sm:px-2' })}>
         <ChevronRight className="size-4" />
       </Link>
       {today && !today.current ? (

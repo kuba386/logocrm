@@ -153,7 +153,7 @@ export function GlobalSearch({ canSeeContacts, timeZone, compact }: { canSeeCont
           aria-controls="global-search-results"
           role="combobox"
           autoComplete="off"
-          className="h-9 pl-8"
+          className="sm:h-9 pl-8"
         />
       </div>
 

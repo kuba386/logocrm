@@ -32,12 +32,16 @@ function StatusButton({ statusCode, color, active, name }: { statusCode: string;
     <button
       type="submit"
       disabled={pending}
+      aria-pressed={active}
       className={cn(
-        'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-wait',
+        // На телефоне отмечают прямо на занятии — 44px, как у остальных кнопок (UX66);
+        // выбранный статус — не только цветом, но и галочкой (UX37).
+        'inline-flex min-h-11 items-center gap-1 rounded-md border px-3 text-sm font-medium transition-colors disabled:cursor-wait sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-xs',
         statusClass(color, active),
         isThisPending && 'opacity-60',
       )}
     >
+      {active ? <span aria-hidden="true">✓</span> : null}
       {name}
     </button>
   )
