@@ -61,7 +61,7 @@ export function PaymentForm({
   const newMonth = validMonths ? Math.trunc(amount / months) : price
   const switchDays = switching ? planSwitchDays(current.daysLeft ?? 0, current.priceTiyin, newMonth) : 0
   // Потолок 24 мес. (Р3) — примерно, в днях; точный срок считает база.
-  const capped = switching && validMonths && switchDays + months * 30 > 24 * 30
+  const capped = switching && validMonths && switchDays + months * 30.4 > 730
   const shorter = switching && validMonths && switchDays + months * 30 < (current.daysLeft ?? 0)
   const overTeachers = target && target.teachers >= 0 && current.teachers > target.teachers
   const overStudents = target && target.students >= 0 && current.students > target.students

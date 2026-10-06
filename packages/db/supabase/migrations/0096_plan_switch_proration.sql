@@ -14,10 +14,12 @@
 --       месяцы. Тот же тариф, trial (0051 Р14) и просроченный центр — как
 --       раньше.
 --   Р2. Цена — фактически уплаченная (решение владельца): у старого тарифа —
---       последняя подтверждённая оплата этого тарифа (сумма / месяцы, со
---       скидкой 0084), если её нет — прайс; у нового — сумма этой оплаты /
---       месяцы. Скидка за долгий срок не переезжает на другой тариф.
---   Р3. Потолок (решение владельца): при смене тарифа новый срок — не дальше
+--       средняя цена месяца по подтверждённым оплатам этого тарифа подряд
+--       (сумма / месяцы, со скидкой 0084; после последней оплаты другого
+--       тарифа), если их нет — прайс; у нового — сумма этой оплаты / месяцы.
+--       Скидка за долгий срок не переезжает на другой тариф, и докупка месяца
+--       по прайсу не переоценивает купленный со скидкой остаток.
+--   Р3. Потолок (решение владельца): ТОЛЬКО при смене тарифа новый срок — не дальше
 --       24 месяцев от подтверждения (максимум оплаты). Излишек в днях и
 --       ориентировочная сумма к возврату по цене дня нового тарифа уходят в
 --       событие и предпросмотр /admin — возврат платформа делает вручную.
@@ -75,7 +77,9 @@ create or replace function public.platform_switch_calc(
   )
   language plpgsql
   stable
-  security definer
+  -- Не definer (ревью): без проверки сессии отдаёт финансовые условия любого
+  -- центра; зовут её только definer-функции платформы, им прав хватает, а
+  -- случайный грант упрётся в RLS.
   set search_path = ''
 as $$
 declare
@@ -97,13 +101,18 @@ begin
   end;
 
   if v_c.plan <> 'trial' and v_c.plan <> p_plan and v_c.subscription_until > now() then
-    -- Р2: цена месяца — уплаченная.
-    select (pp.amount_tiyin / pp.months) into v_old
+    -- Р2: цена месяца — уплаченная, средняя по всем подтверждённым оплатам
+    -- текущего тарифа подряд (после последней оплаты другого тарифа). Не по
+    -- одной последней: иначе докупка месяца по прайсу переоценивала бы весь
+    -- остаток, купленный со скидкой (ревью).
+    select (sum(pp.amount_tiyin) / nullif(sum(pp.months), 0))::integer into v_old
       from public.platform_payments pp
      where pp.center_id = p_center_id and pp.confirmed_at is not null and pp.plan = v_c.plan
        and pp.months > 0
-     order by pp.confirmed_at desc
-     limit 1;
+       and pp.confirmed_at > coalesce((
+             select max(q.confirmed_at) from public.platform_payments q
+              where q.center_id = p_center_id and q.confirmed_at is not null and q.plan <> v_c.plan),
+           '-infinity'::timestamptz);
     if v_old is null then
       select p.price_tiyin into v_old from public.plans p where p.code = v_c.plan;
     end if;
@@ -132,7 +141,7 @@ begin
 end;
 $$;
 comment on function public.platform_switch_calc(uuid, text, integer, integer) is
-  'Новый срок подписки центра при подтверждении оплаты (0096): тот же тариф/trial/просрочка — как 0051 Р14; смена платного — пересчёт остатка по уплаченной цене, потолок 24 месяца, излишек в днях и тыйынах. Один расчёт для extend_subscription и platform_payment_preview. Без проверки сессии; грантов нет.';
+  'Новый срок подписки центра при подтверждении оплаты (0096): тот же тариф/trial/просрочка — как 0051 Р14; смена платного — пересчёт остатка по уплаченной цене, потолок 24 месяца, излишек в днях и тыйынах. Один расчёт для extend_subscription и platform_payment_preview. Не definer и без проверки сессии — зовут только definer-функции платформы; грантов нет.';
 
 revoke all on function public.platform_switch_calc(uuid, text, integer, integer) from public, anon, authenticated, service_role;
 
@@ -216,7 +225,7 @@ begin
       'plan',       p_plan,
       'months',     p_months,
       'until',      v_until,
-      'previous_until', v_c.subscription_until,
+      'previous_until', case when v_c.plan = 'trial' then v_c.trial_ends_at else v_c.subscription_until end,
       'converted_days', v_calc.converted_days,
       'excess_days',    v_calc.excess_days,
       'excess_tiyin',   v_calc.excess_tiyin
@@ -271,8 +280,20 @@ begin
   end if;
   select * into v_c from public.centers c where c.id = v_pp.center_id;
 
+  -- Те же границы, что у extend_subscription: иначе p_months = 0 дал бы
+  -- перенос дней 1:1 в предпросмотре.
+  if not exists (select 1 from public.plans where code = coalesce(p_plan, v_pp.claimed_plan) and code <> 'trial') then
+    raise exception 'Выберите платный тариф' using errcode = '22023';
+  end if;
+  if coalesce(p_months, v_pp.claimed_months) not between 1 and 24 then
+    raise exception 'Срок продления — от 1 до 24 месяцев' using errcode = '22023';
+  end if;
+  if coalesce(p_amount_tiyin, v_pp.claimed_amount_tiyin) <= 0 then
+    raise exception 'Сумма должна быть больше нуля' using errcode = '22023';
+  end if;
+
   return query
-    select v_c.plan, v_c.subscription_until, x.switching, x.remaining_days, x.converted_days,
+    select v_c.plan, case when v_c.plan = 'trial' then v_c.trial_ends_at else v_c.subscription_until end, x.switching, x.remaining_days, x.converted_days,
            x.new_until, x.excess_days, x.excess_tiyin
       from public.platform_switch_calc(
              v_pp.center_id,
@@ -284,5 +305,5 @@ $$;
 comment on function public.platform_payment_preview(uuid, text, integer, integer) is
   'Что сделает подтверждение заявки (0096 Р6): текущий и новый срок, пересчёт остатка, излишек сверх 24 месяцев. Только is_platform_admin; по умолчанию — заявленные тариф, месяцы и сумма.';
 
-revoke all on function public.platform_payment_preview(uuid, text, integer, integer) from public, anon;
+revoke all on function public.platform_payment_preview(uuid, text, integer, integer) from public, anon, service_role;
 grant execute on function public.platform_payment_preview(uuid, text, integer, integer) to authenticated;

@@ -16,7 +16,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(17);
+select plan(20);
 
 
 -- 1. Общий набор случаев (Р1, Р4) — те же, что в packages/core/src/platform-payment.test.ts --------
@@ -53,13 +53,24 @@ select x.id::uuid, x.name, x.slug, x.plan,
     ('96000000-0000-0000-0000-0000000000c2', 'Center → Studio 0096', 'centr-0096-b', 'center'),
     ('96000000-0000-0000-0000-0000000000c3', 'Studio → Studio 0096', 'centr-0096-c', 'studio'),
     ('96000000-0000-0000-0000-0000000000c4', 'Studio со скидкой 0096', 'centr-0096-d', 'studio'),
-    ('96000000-0000-0000-0000-0000000000c5', 'Center → Solo 24 0096', 'centr-0096-e', 'center')
+    ('96000000-0000-0000-0000-0000000000c5', 'Center → Solo 24 0096', 'centr-0096-e', 'center'),
+    ('96000000-0000-0000-0000-0000000000c6', 'Studio 24+1 → Center 0096', 'centr-0096-f', 'studio'),
+    ('96000000-0000-0000-0000-0000000000c7', 'Заявка Studio, подтверждён Center 0096', 'centr-0096-g', 'studio')
   ) as x(id, name, slug, plan);
+-- C8: trial, конец trial через 10 дней.
+insert into public.centers (id, name, slug, plan, trial_ends_at, settings) values
+  ('96000000-0000-0000-0000-0000000000c8', 'Trial 0096', 'centr-0096-h', 'trial', now() + interval '10 days', '{"timezone":"Asia/Bishkek"}'::jsonb);
 
 -- C4: Studio оплачен на 12 мес. со скидкой 20% — 3 744 000 тыйын, 312 000 в месяц.
 insert into public.platform_payments (center_id, claimed_plan, claimed_months, claimed_amount_tiyin, source,
                                       confirmed_at, plan, months, amount_tiyin)
 values ('96000000-0000-0000-0000-0000000000c4', 'studio', 12, 3744000, 'mbank', now() - interval '335 days', 'studio', 12, 3744000);
+-- C6: Studio на 24 мес. со скидкой (7 488 000), потом докуплен 1 мес. по прайсу (390 000):
+-- средняя цена месяца 7 878 000 / 25 = 315 120, а не 390 000 последней оплаты.
+insert into public.platform_payments (center_id, claimed_plan, claimed_months, claimed_amount_tiyin, source,
+                                      confirmed_at, plan, months, amount_tiyin) values
+  ('96000000-0000-0000-0000-0000000000c6', 'studio', 24, 7488000, 'mbank', now() - interval '700 days', 'studio', 24, 7488000),
+  ('96000000-0000-0000-0000-0000000000c6', 'studio', 1, 390000, 'mbank', now() - interval '20 days', 'studio', 1, 390000);
 
 insert into public.memberships (user_id, center_id, role)
 select '96000000-0000-0000-0000-000000000001', c.id, 'owner'
@@ -99,6 +110,18 @@ select public.tests_claims('96000000-0000-0000-0000-000000000001', '96000000-000
 set local role authenticated;
 select public.submit_platform_payment('solo', 24, 'mbank', null);
 reset role;
+select public.tests_claims('96000000-0000-0000-0000-000000000001', '96000000-0000-0000-0000-0000000000c6');
+set local role authenticated;
+select public.submit_platform_payment('center', 1, 'mbank', null);
+reset role;
+select public.tests_claims('96000000-0000-0000-0000-000000000001', '96000000-0000-0000-0000-0000000000c7');
+set local role authenticated;
+select public.submit_platform_payment('studio', 1, 'mbank', null);
+reset role;
+select public.tests_claims('96000000-0000-0000-0000-000000000001', '96000000-0000-0000-0000-0000000000c8');
+set local role authenticated;
+select public.submit_platform_payment('solo', 1, 'mbank', null);
+reset role;
 
 
 -- 3. Предпросмотр /admin (Р6) ---------------------------------------------------------------------
@@ -112,13 +135,28 @@ reset role;
 
 select public.tests_claims('96000000-0000-0000-0000-000000000002', null);
 set local role authenticated;
+select is(
+  (select x.current_until from public.platform_payments p, public.platform_payment_preview(p.id) x
+    where p.center_id = '96000000-0000-0000-0000-0000000000c8' and p.confirmed_at is null),
+  (select c.trial_ends_at from public.centers c where c.id = '96000000-0000-0000-0000-0000000000c8'),
+  'У trial текущий срок в предпросмотре — конец trial, а не пусто');
+
+-- C7: заявка на Studio, платформа подтверждает Center на 1 мес. за 7 900 — предпросмотр с теми же значениями.
 insert into t_prev
 select p.center_id, x.new_until
-  from public.platform_payments p, public.platform_payment_preview(p.id) x
+  from public.platform_payments p,
+       public.platform_payment_preview(p.id,
+         case when p.center_id = '96000000-0000-0000-0000-0000000000c7' then 'center' end,
+         null,
+         case when p.center_id = '96000000-0000-0000-0000-0000000000c7' then 790000 end) x
  where p.center_id::text like '96000000-0000-0000-0000-0000000000c_' and p.confirmed_at is null;
 
--- Подтверждение платформой заявленного.
-select public.extend_subscription(p.id, p.claimed_plan, p.claimed_months, p.claimed_amount_tiyin, false)
+-- Подтверждение платформой (C7 — с переопределением тарифа и суммы).
+select public.extend_subscription(p.id,
+         case when p.center_id = '96000000-0000-0000-0000-0000000000c7' then 'center' else p.claimed_plan end,
+         p.claimed_months,
+         case when p.center_id = '96000000-0000-0000-0000-0000000000c7' then 790000 else p.claimed_amount_tiyin end,
+         false)
   from public.platform_payments p
  where p.center_id::text like '96000000-0000-0000-0000-0000000000c_' and p.confirmed_at is null
  order by p.center_id;
@@ -147,6 +185,10 @@ select is(
   (select c.subscription_until from public.centers c where c.id = '96000000-0000-0000-0000-0000000000c5'),
   now() + interval '24 months',
   'Center → Solo на 24 мес.: срок упёрся в потолок 24 месяца (Р3)');
+select is(
+  (select c.subscription_until from public.centers c where c.id = '96000000-0000-0000-0000-0000000000c6'),
+  now() + interval '12 days' + interval '1 month',
+  'Средняя уплаченная цена (24 мес. со скидкой + 1 по прайсу): 30 × 3151,2 / 7900 = 11,97 → 12, а не 15 по последней оплате');
 select ok(
   (select (e.payload ->> 'excess_days')::int between 290 and 305 and (e.payload ->> 'excess_tiyin')::int > 0
      from public.events e
@@ -160,7 +202,7 @@ select ok(
 select is(
   (select count(*)::int from public.centers c join t_prev p on p.center_id = c.id
     where c.id::text like '96000000-0000-0000-0000-0000000000c_' and c.subscription_until <> p.new_until),
-  0, 'Предпросмотр /admin совпал с подтверждением у всех пяти центров (Р6)');
+  0, 'Предпросмотр /admin совпал с подтверждением у всех центров, в том числе с переопределённым тарифом и суммой (Р6)');
 
 
 -- 5. Гранты ---------------------------------------------------------------------------------------
@@ -170,8 +212,12 @@ select ok(
   and not has_function_privilege('authenticated', 'public.platform_switch_calc(uuid,text,integer,integer)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.platform_switch_calc(uuid,text,integer,integer)', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.platform_payment_preview(uuid,text,integer,integer)', 'EXECUTE')
-  and not has_function_privilege('anon', 'public.platform_payment_preview(uuid,text,integer,integer)', 'EXECUTE'),
+  and not has_function_privilege('anon', 'public.platform_payment_preview(uuid,text,integer,integer)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.platform_payment_preview(uuid,text,integer,integer)', 'EXECUTE'),
   'Внутренние расчёты закрыты, предпросмотр — authenticated (проверка платформы внутри)');
+select ok(
+  not (select p.prosecdef from pg_proc p where p.oid = 'public.platform_switch_calc(uuid,text,integer,integer)'::regprocedure),
+  'platform_switch_calc — не definer: без проверки сессии она не должна обходить RLS');
 
 select * from finish();
 rollback;
