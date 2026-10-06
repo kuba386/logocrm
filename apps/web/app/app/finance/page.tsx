@@ -203,6 +203,9 @@ async function PaymentsTab({
       .gte('paid_at', fromIso)
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
+      // У отмены та же дата, что у исходного (0093): вторичный порядок держит
+      // пару рядом и не режет её границей limit.
+      .order('created_at', { ascending: false })
       .limit(200),
     // Имена — из definer-источников без заметок (0031): таблицы students и
     // payers бухгалтеру закрыты, а экран один на все роли.
@@ -299,14 +302,11 @@ async function PaymentsTab({
                     <TableCell className="text-muted-foreground">
                       {p.source_id ? (sourceName.get(p.source_id) ?? '—') : t('finance', 'noSource')}
                     </TableCell>
+                    {/* Метка «отменён» и кнопка — в колонке суммы: она видна и на
+                        телефоне, где комментарий скрыт (0093). */}
                     <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
                       {formatSom(p.amount_tiyin)}
-                    </TableCell>
-                    <TableCell className="max-w-[16rem] text-muted-foreground">
-                      <span className="block truncate" title={p.comment ?? undefined}>
-                        {voidedIds.has(p.id) ? <span className="font-medium text-destructive">отменён · </span> : null}
-                        {p.comment ?? ''}
-                      </span>
+                      {voidedIds.has(p.id) ? <span className="block text-xs font-normal text-destructive">отменён</span> : null}
                       {isOwner &&
                       p.kind === 'payment' &&
                       !p.subscription_id &&
@@ -314,6 +314,9 @@ async function PaymentsTab({
                       !voidedIds.has(p.id) ? (
                         <VoidPaymentForm paymentId={p.id} amountTiyin={p.amount_tiyin} />
                       ) : null}
+                    </TableCell>
+                    <TableCell className="max-w-[16rem] truncate text-muted-foreground" title={p.comment ?? undefined}>
+                      {p.comment ?? ''}
                     </TableCell>
                   </TableRow>
                 ))}
