@@ -30,7 +30,7 @@ export async function AdminDashboard({
   timeZone: string
   finance?: boolean
   showLessons?: boolean
-  /** Ссылка «Все долги →»: тем же условием, что редирект /app/debts (owner/admin). */
+  /** Ссылка «Все долги →»: тем же условием, что редирект /app/debts (can_payments, 0087). */
   canOpenDebts?: boolean
   /** Плашка «Настройка центра» — только owner/admin: шаги ведут в их настройки. */
   setupCenterId?: string | null
@@ -140,7 +140,7 @@ export async function AdminDashboard({
           label={t('dashboard', 'lowBalance')}
           hint={t('dashboard', 'lowBalanceHint')}
         />
-        {/* /app/debts открыт owner/admin (страница редиректит остальных). */}
+        {/* /app/debts открыт can_payments (страница редиректит остальных). */}
         <StatTile
           icon={Wallet}
           tone={debt.debtorsN > 0 ? 'danger' : 'neutral'}

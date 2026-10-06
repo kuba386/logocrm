@@ -418,6 +418,9 @@ const paymentPayload = z.object({
   subscription_id: z.string().uuid().nullable(),
   amount_tiyin: z.number().int(),
   kind: z.enum(['payment', 'refund', 'correction']),
+  // Оплата/возврат аванса долга за занятия (0087). Optional: события до 0087
+  // поля не несут; без него в схеме zod молча срезал бы его (прецедент 0030 Р12).
+  covers_lesson_debt: z.boolean().optional(),
 })
 
 export const paymentReceivedSchema = z.object({
@@ -431,6 +434,22 @@ export const paymentRefundedSchema = z.object({
   payload: paymentPayload,
 })
 export type PaymentRefunded = z.infer<typeof paymentRefundedSchema>
+
+/**
+ * Долг за занятия/перерасход списан владельцем без денег (0087,
+ * write_off_lesson_debt). Причины в payload нет намеренно: outbox уходит
+ * наружу, причина живёт в lesson_debt_writeoffs под RLS.
+ */
+export const lessonDebtWrittenOffSchema = z.object({
+  type: z.literal('lesson_debt.written_off'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    writeoff_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    amount_tiyin: z.number().int().positive(),
+  }),
+})
+export type LessonDebtWrittenOff = z.infer<typeof lessonDebtWrittenOffSchema>
 
 /** Замок месяца (close_month / reopen_month, 0013-0014). month — первое число. */
 const periodPayload = z.object({
@@ -598,6 +617,7 @@ export const digestDailySchema = z.object({
     lessons_today: z.number().int().nonnegative(),
     low_balance: z.number().int().nonnegative(),
     // Пишется daily_digest, но не читается: {debt} считает digest_debt_text (0077).
+    // Валовой: без оплат и списаний долга (0087) и с отменёнными занятиями.
     debt_tiyin: z.number().int(),
     installments_overdue: z.number().int().nonnegative(),
   }),
@@ -1075,6 +1095,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   centerExportedSchema,
   reportExportedSchema,
   studentSpeechCardOpenedSchema,
+  lessonDebtWrittenOffSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,
