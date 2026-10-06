@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LinkPending } from './link-pending'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ICONS } from './nav-icons'
@@ -44,6 +45,7 @@ export function NavGroups({ groups, onNavigate }: { groups: NavGroup[]; onNaviga
               >
                 {Icon ? <Icon className="size-4 shrink-0" /> : null}
                 {link.label}
+                <LinkPending className="ml-auto" />
               </Link>
             )
           })}

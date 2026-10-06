@@ -7,7 +7,7 @@ import { SETUP_STEPS, setupHiddenCookie, setupProgress, type SetupStepKey } from
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { hideSetupChecklist } from './setup-actions'
+import { hideSetupChecklist, showSetupChecklist } from './setup-actions'
 
 /**
  * Плашка «Настройка центра» над дашбордом owner/admin: что ещё сделать,
@@ -20,7 +20,7 @@ import { hideSetupChecklist } from './setup-actions'
  */
 export async function SetupChecklist({ centerId }: { centerId: string }) {
   const store = await cookies()
-  if (store.get(setupHiddenCookie(centerId))) return null
+  const hidden = Boolean(store.get(setupHiddenCookie(centerId)))
 
   const supabase = await createClient()
   const exists = { count: 'exact', head: true } as const
@@ -54,6 +54,19 @@ export async function SetupChecklist({ centerId }: { centerId: string }) {
   }
   const progress = setupProgress(state)
   if (progress.complete) return null
+
+  // Скрытая плашка сворачивается в строку, а не исчезает навсегда: вернуть
+  // её было некуда (UX-аудит, пакет 8). Заголовка здесь нет намеренно.
+  if (hidden) {
+    return (
+      <form action={showSetupChecklist} className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+        <span>{t('setup', 'hiddenLine', { done: progress.done, total: progress.total })}</span>
+        <Button type="submit" variant="link" size="sm" className="h-auto px-0">
+          {t('setup', 'show')}
+        </Button>
+      </form>
+    )
+  }
 
   const percent = Math.round((progress.done / progress.total) * 100)
 

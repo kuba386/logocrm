@@ -13,11 +13,7 @@ import { setupHiddenCookie } from '@/lib/setup-checklist'
  * другом, куда тот же человек переключится.
  */
 export async function hideSetupChecklist(): Promise<void> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  const centerId = (user?.app_metadata as { center_id?: string } | undefined)?.center_id
+  const centerId = await currentCenterId()
   if (!centerId) return
 
   const store = await cookies()
@@ -31,3 +27,21 @@ export async function hideSetupChecklist(): Promise<void> {
   revalidatePath('/app')
 }
 
+
+/** «Показать» в строке скрытой плашки — снять cookie, плашка возвращается целиком. */
+export async function showSetupChecklist(): Promise<void> {
+  const centerId = await currentCenterId()
+  if (!centerId) return
+
+  const store = await cookies()
+  store.delete({ name: setupHiddenCookie(centerId), path: '/app' })
+  revalidatePath('/app')
+}
+
+async function currentCenterId(): Promise<string | undefined> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return (user?.app_metadata as { center_id?: string } | undefined)?.center_id
+}
