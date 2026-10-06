@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { loadErrorMessage } from '@/lib/errors'
+import { FormError } from '@/components/ui/alert'
 
 export const metadata = { title: 'Плательщики — LogoCRM' }
 
@@ -19,7 +21,7 @@ export default async function PayersPage() {
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
 
-  const { data: payers } = await supabase
+  const { data: payers, error: loadError } = await supabase
     .from('payers_with_stats')
     .select('*')
     .order('full_name')
@@ -38,10 +40,13 @@ export default async function PayersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Список</CardTitle>
-          <CardDescription>Всего: {rows.length}</CardDescription>
+          {loadError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
         </CardHeader>
         <CardContent>
-          {rows.length === 0 ? (
+          {/* Отказ базы — не «плательщики появятся, когда добавите ученика». */}
+          {loadError ? (
+            <FormError message={loadErrorMessage(loadError, 'Не удалось загрузить плательщиков. Обновите страницу.')} />
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Плательщики появятся, когда добавите первого ученика.
             </p>
