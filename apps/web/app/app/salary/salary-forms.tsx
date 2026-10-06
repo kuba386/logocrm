@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initial: SalaryState = { message: '' }
 
@@ -23,8 +24,9 @@ function SubmitButton({ children, variant }: { children: React.ReactNode; varian
 
 export function AdjustmentForm({ teacherId, month }: { teacherId: string; month: string }) {
   const [state, formAction] = useActionState(recordSalaryAdjustment, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2">
+    <form action={formAction} className="flex flex-wrap items-end gap-2" {...keep}>
       <input type="hidden" name="teacherId" value={teacherId} />
       <input type="hidden" name="month" value={month} />
       <div className="space-y-1">

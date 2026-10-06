@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initialState: StudentState = {}
 
@@ -43,6 +44,7 @@ export function StudentForm({
   canEdit: boolean
 }) {
   const [state, formAction] = useActionState(updateStudent, initialState)
+  const keep = useKeepValuesOnError(state, Boolean(state.error))
   const [archiveState, archiveAction] = useActionState(archiveStudent, initialState)
   const [restoreState, restoreAction] = useActionState(restoreStudent, initialState)
 
@@ -67,7 +69,7 @@ export function StudentForm({
 
   return (
     <div className="space-y-4">
-      <form action={formAction} className="space-y-4">
+      <form action={formAction} className="space-y-4" {...keep}>
         <input type="hidden" name="id" value={student.id} />
 
         <div className="grid gap-4 sm:grid-cols-2">

@@ -1,12 +1,13 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useMemo, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
 import { previewTemplate, resetTemplate, saveTemplate, type TemplateState } from './actions'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initial: TemplateState = {}
 
@@ -19,14 +20,17 @@ function ActionButton({
   children,
   formAction,
   variant,
+  intent,
 }: {
   children: React.ReactNode
   formAction?: (formData: FormData) => void
   variant?: 'outline'
+  /** Какое из действий формы нажато — от этого зависит, восстанавливать ли текст после ответа. */
+  intent: 'save' | 'preview'
 }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" size="sm" variant={variant} formAction={formAction} disabled={pending}>
+    <Button type="submit" size="sm" variant={variant} formAction={formAction} disabled={pending} data-intent={intent}>
       {children}
     </Button>
   )
@@ -54,8 +58,23 @@ export function TemplateForm({
   const [previewState, previewAction] = useActionState(previewTemplate, initial)
   const [resetState, resetAction] = useActionState(resetTemplate, initial)
 
+  // React 19 сбрасывает форму после любого из трёх действий. Предпросмотр
+  // не меняет базу — после него набранный текст возвращаем всегда (раньше
+  // правка пропадала, а превью показывало уже отредактированный текст).
+  // Сохранение — только при отказе. «Вернуть текст платформы» — никогда:
+  // поле должно показать текст платформы.
+  const intent = useRef<string>('')
+  const states = useMemo(() => [saveState, previewState, resetState], [saveState, previewState, resetState])
+  const keep = useKeepValuesOnError(
+    states,
+    intent.current === 'preview' || (intent.current === 'save' && Boolean(saveState.message)),
+    (event) => {
+      intent.current = (event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-intent') ?? ''
+    },
+  )
+
   return (
-    <form action={saveAction} className="space-y-2">
+    <form action={saveAction} className="space-y-2" {...keep}>
       <input type="hidden" name="eventType" value={eventType} />
       <input type="hidden" name="channel" value={channel} />
 
@@ -70,6 +89,9 @@ export function TemplateForm({
 
       <textarea
         name="text"
+        aria-label={t('notifications', 'textLabel', {
+          channel: channel === 'telegram' ? t('notifications', 'channelTelegram') : t('notifications', 'channelWhatsapp'),
+        })}
         defaultValue={body}
         rows={3}
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -97,8 +119,8 @@ export function TemplateForm({
       </p>
 
       <div className="flex flex-wrap gap-2">
-        <ActionButton>{t('notifications', 'save')}</ActionButton>
-        <ActionButton formAction={previewAction} variant="outline">
+        <ActionButton intent="save">{t('notifications', 'save')}</ActionButton>
+        <ActionButton intent="preview" formAction={previewAction} variant="outline">
           {t('notifications', 'preview')}
         </ActionButton>
         {isOwn ? (

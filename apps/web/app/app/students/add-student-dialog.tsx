@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { PAYER_RELATIONS } from '@/lib/students'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initialState: StudentState = {}
 
@@ -35,6 +36,7 @@ export function AddStudentDialog({
 }) {
   const [open, setOpen] = useState(false)
   const [state, formAction] = useActionState(createStudent, initialState)
+  const keep = useKeepValuesOnError(state, Boolean(state.error))
 
   const [phone, setPhone] = useState('')
   const [match, setMatch] = useState<PayerMatch | null>(null)
@@ -66,7 +68,7 @@ export function AddStudentDialog({
         title="Новый ученик"
         description="Сначала плательщик — родитель или опекун, потом сам ребёнок."
       >
-        <form action={formAction} className="space-y-5">
+        <form action={formAction} className="space-y-5" {...keep}>
           {payerId ? <input type="hidden" name="payerId" value={payerId} /> : null}
 
           <section className="space-y-3">

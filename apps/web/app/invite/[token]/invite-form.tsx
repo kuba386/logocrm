@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useMemo, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import {
   acceptSignedIn,
@@ -18,6 +18,7 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
 import { EmailCodeStep } from '@/components/email-code-step'
 import { signOut } from '@/app/login/actions'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initialState: InviteState = {}
 
@@ -54,6 +55,9 @@ export function InviteForm({ token }: { token: string }) {
   const [signUpState, signUpAction] = useActionState(signUpAndAccept, initialState)
   const [signInState, signInAction] = useActionState(signInAndAccept, initialState)
   const [magicState, magicAction] = useActionState(magicLinkAndAccept, initialState)
+  const formStates = useMemo(() => [signUpState, signInState], [signUpState, signInState])
+  const keepForm = useKeepValuesOnError(formStates, Boolean(signUpState.error ?? signInState.error))
+  const keepMagic = useKeepValuesOnError(magicState, Boolean(magicState.error))
   const [codeStep, setCodeStep] = useState<{ email: string; purpose: 'signup' | 'magic' } | null>(null)
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export function InviteForm({ token }: { token: string }) {
 
   if (mode === 'magic') {
     return (
-      <form action={magicAction} className="space-y-4">
+      <form action={magicAction} className="space-y-4" {...keepMagic}>
         <input type="hidden" name="token" value={token} />
 
         <div className="space-y-2">
@@ -105,7 +109,7 @@ export function InviteForm({ token }: { token: string }) {
   const state = isSignUp ? signUpState : signInState
 
   return (
-    <form action={isSignUp ? signUpAction : signInAction} className="space-y-4">
+    <form action={isSignUp ? signUpAction : signInAction} className="space-y-4" {...keepForm}>
       <input type="hidden" name="token" value={token} />
 
       <div className="space-y-2">

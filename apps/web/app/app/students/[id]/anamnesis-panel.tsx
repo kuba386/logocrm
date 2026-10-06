@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { setAnamnesis, type ClinicalState } from './clinical-actions'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 export type AnamnesisEntry = {
   updatedAt: string
@@ -70,6 +71,7 @@ export function AnamnesisPanel({
 }) {
   const [formOpen, setFormOpen] = useState(false)
   const [state, action] = useActionState(setAnamnesis, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
 
   return (
     <div className="space-y-4">
@@ -113,6 +115,7 @@ export function AnamnesisPanel({
             key={entry?.updatedAt ?? 'new'}
             action={action}
             className="space-y-3 border-t border-border pt-4"
+            {...keep}
           >
             {/* key на updatedAt — после сохранения revalidatePath даёт новый
                 entry, форма должна показать свежие значения, а не то, что

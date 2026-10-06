@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import type { CatalogState } from '@/app/app/settings/services/actions'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initial: CatalogState = { message: '' }
 
@@ -36,15 +37,13 @@ export function CatalogForm({
   confirm?: string
 }) {
   const [state, formAction] = useActionState(action, initial)
+  // Отказ сервера не откатывает правку строки справочника к сохранённой.
+  const keep = useKeepValuesOnError(state, Boolean(state.message), (event) => {
+    if (confirm && !window.confirm(confirm)) event.preventDefault()
+  })
 
   return (
-    <form
-      action={formAction}
-      className="space-y-3"
-      onSubmit={(event) => {
-        if (confirm && !window.confirm(confirm)) event.preventDefault()
-      }}
-    >
+    <form action={formAction} className="space-y-3" {...keep}>
       {children}
       <FormError message={state.message || undefined} />
       <FormNotice message={state.notice} />

@@ -13,6 +13,7 @@ import { formatInTimeZone } from '@/lib/timezone'
 import { archiveDiagnostic, recordDiagnostic, type ClinicalState } from './clinical-actions'
 import { ConfirmAction } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const SOUNDS = ['р', 'л', 'ш', 'ж', 'с', 'з', 'ц', 'ч', 'щ']
 const SOUND_STATUSES = [
@@ -73,6 +74,7 @@ export function DiagnosticsPanel({
   const router = useRouter()
   const [formOpen, setFormOpen] = useState(false)
   const [state, action] = useActionState(recordDiagnostic, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
   const [archiveState, setArchiveState] = useState<ClinicalState>(initial)
   const [pending, startTransition] = useTransition()
   const [areaScores, setAreaScores] = useState<Partial<Record<SpeechAreaKey, number>>>({})
@@ -190,7 +192,7 @@ export function DiagnosticsPanel({
 
       {canWrite ? (
         formOpen ? (
-          <form action={action} className="space-y-3 border-t border-border pt-4">
+          <form action={action} className="space-y-3 border-t border-border pt-4" {...keep}>
             <input type="hidden" name="studentId" value={studentId} />
 
             <div className="space-y-1">
