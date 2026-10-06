@@ -357,3 +357,16 @@ export function toAppError(error: PostgrestLike | null | undefined, fallback: st
 
   return { message: message || fallback }
 }
+
+/**
+ * Сообщение для отказа при ЗАГРУЗКЕ данных страницы (не действия). Наши
+ * SQL-функции отказывают по-русски — такой текст показываем как есть; всё
+ * остальное (PostgREST, сеть, «column … does not exist») — техническое, его
+ * человеку не показываем, вместо него — fallback («Не удалось загрузить
+ * платежи. Обновите страницу.»). Иначе сбой выглядел бы как «пусто» или
+ * «0 сом» (UX-аудит 6.10.2026, пакет 4).
+ */
+export function loadErrorMessage(error: { message?: string | null } | null | undefined, fallback: string): string {
+  const message = error?.message ?? ''
+  return /[А-Яа-яЁё]/.test(message) ? message : fallback
+}
