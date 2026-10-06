@@ -294,7 +294,7 @@ select set_eq(
     ('mark_attendance(uuid,uuid,text,text)'),
     ('mark_attendance_bulk(uuid,jsonb)'),
     ('refund_calc(uuid)'),
-    ('refund_subscription(uuid,integer,uuid)'),
+    ('refund_subscription(uuid,integer,integer,uuid)'),
     ('sell_subscription(uuid,uuid,integer,date)'),
     ('student_subscription_badge(uuid)'),
     ('student_balance_pick(uuid)'),
@@ -421,7 +421,10 @@ select set_eq(
     -- 0088: покрытие долга абонементом
     ('cover_lesson_debt_preview(uuid)'),
     ('cover_lesson_debt(uuid,integer,integer)'),
-    ('uncover_lesson_debt(uuid)')
+    ('uncover_lesson_debt(uuid)'),
+    -- 0090: оплата по абонементу с карточки, списание недоплаты владельцем.
+    ('accept_subscription_payment(uuid,integer,uuid,date,integer)'),
+    ('write_off_subscription(uuid,integer,text)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

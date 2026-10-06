@@ -377,6 +377,10 @@ select is(
   1, 'subscription.exhausted — один раз, когда покрытие съело последнее занятие');
 
 -- Исчерпанный абонемент уходит в архив — оплаченное им занятие остаётся оплаченным.
+-- 0090: архив только оплаченного за отработанное — вносим цену пакета.
+insert into public.payments (center_id, payer_id, student_id, subscription_id, amount_tiyin, kind)
+values ('88000000-0000-0000-0000-0000000000c1', '88000000-0000-0000-0000-00000000dd01',
+        '88000000-0000-0000-0000-00000000ee04', '88000000-0000-0000-0000-0000000055b5', 50000, 'payment');
 update public.subscriptions set deleted_at = now() where id = '88000000-0000-0000-0000-0000000055b5';
 select is(
   (select count(*)::int from public.lesson_debt_covers c

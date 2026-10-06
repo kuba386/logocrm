@@ -408,11 +408,16 @@ select throws_ok(
   '42704', null, 'Перенос ребёнку чужого центра отклонён');
 
 -- 46–48. Возврат: защита от гонки по ожидаемой сумме
+-- 0090: два отработанных занятия оплачены — закрыть можно, выплата 0.
+select public.record_payment(
+  (select s.payer_id from public.subscriptions s where s.id = '88888888-0000-0000-0000-000000000001'), 100000, 'payment',
+  (select s.student_id from public.subscriptions s where s.id = '88888888-0000-0000-0000-000000000001'),
+  '88888888-0000-0000-0000-000000000001');
 select throws_ok(
-  $q$ select public.refund_subscription('88888888-0000-0000-0000-000000000001', 1) $q$,
+  $q$ select public.refund_subscription('88888888-0000-0000-0000-000000000001', 1, 0) $q$,
   '23514', null, 'Возврат с устаревшей суммой отклонён');
 select lives_ok(
-  $q$ select public.refund_subscription('88888888-0000-0000-0000-000000000001', 100000) $q$,
+  $q$ select public.refund_subscription('88888888-0000-0000-0000-000000000001', 100000, 0) $q$,
   'Возврат с верной суммой (2 × 500 сом) проходит');
 select ok((select status = 'cancelled' and lessons_written_off = 2
              from public.subscriptions where id = '88888888-0000-0000-0000-000000000001'),

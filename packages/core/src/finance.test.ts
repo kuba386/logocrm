@@ -34,6 +34,10 @@ describe('paymentState — зеркало subscription_payment_summary', () => {
     expect(paymentState(0, 0)).toBe('paid')
   })
 
+  it('закрытый абонемент (0090): внесено 1 000 из 4 000 за отработанное — closed, не partial', () => {
+    expect(paymentState(400_000, 100_000, true)).toBe('closed')
+  })
+
   it('дробные и отрицательные значения — ошибка', () => {
     expect(() => paymentState(400_000.5, 0)).toThrow(TypeError)
     expect(() => paymentState(-1, 0)).toThrow(RangeError)

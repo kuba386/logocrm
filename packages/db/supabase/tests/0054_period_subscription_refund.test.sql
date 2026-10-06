@@ -104,13 +104,21 @@ select is(
   public.refund_calc((select id from t_ins where name = 'p10')), 40000,
   'period, 4 из 10 дней осталось: 100 000 * 4/10 = 40 000'
 );
+-- 0090: прошедшие 6 дней — отработанное (60 000); без оплаты закрыть нельзя.
+select throws_like(
+  $q$ select public.refund_subscription((select id from t_ins where name = 'p10'), 40000, 0) $q$,
+  'За отработанные занятия не заплачено: не хватает%',
+  'refund_subscription на неоплаченном period — отказ: 6 из 10 дней отработаны (решение владельца 0090)'
+);
+select public.record_payment((select s.payer_id from public.subscriptions s where s.id = (select id from t_ins where name = 'p10')),
+  60000, 'payment', 'eeeeeeee-0000-0000-0000-000000000001', (select id from t_ins where name = 'p10'), (select id from t_src));
 select is(
-  public.refund_subscription((select id from t_ins where name = 'p10'), 40000), 40000,
-  'refund_subscription на неоплаченном period — считает и отменяет без источника'
+  public.refund_subscription((select id from t_ins where name = 'p10'), 40000, 0), 40000,
+  'Отработанное оплачено — отмена проходит, выплата 0, источник не нужен'
 );
 select is(
   (select status from public.subscriptions where id = (select id from t_ins where name = 'p10')), 'cancelled',
-  'period-абонемент можно закрыть даже без единого платежа — раньше кнопки не было вовсе'
+  'period-абонемент закрыт'
 );
 
 
@@ -122,7 +130,7 @@ select is(
 );
 
 
--- 5-6. Возврат капается внесённым, не расчётной стоимостью срока (0030, Р1, без изменений) --
+-- 5-6. Возврат — внесённое сверх отработанного (0090 Р4, было least(к возврату, внесено) 0030 Р1) --
 
 insert into t_ins values ('p10b',
   public.sell_subscription('77777777-0000-0000-0000-000000000010', 'eeeeeeee-0000-0000-0000-000000000002',
@@ -134,13 +142,19 @@ select is(
   public.refund_calc((select id from t_ins where name = 'p10b')), 50000,
   'refund_calc: 5 из 10 дней осталось — 100 000 * 5/10 = 50 000 (стоимость срока, не деньги)'
 );
+insert into t_ins select 'p10b_pay2', public.record_payment('dddddddd-0000-0000-0000-0000000000a3', 30000, 'payment',
+  'eeeeeeee-0000-0000-0000-000000000002', (select id from t_ins where name = 'p10b'), (select id from t_src));
 select is(
-  public.refund_subscription((select id from t_ins where name = 'p10b'), 50000, (select id from t_src)), 50000,
+  (select x.payout_tiyin from public.subscription_summary((select id from t_ins where name = 'p10b')) x), 10000,
+  'subscription_summary.payout_tiyin: внесено 60 000, отработано 50 000 — к выплате 10 000'
+);
+select is(
+  public.refund_subscription((select id from t_ins where name = 'p10b'), 50000, 10000, (select id from t_src)), 50000,
   'refund_subscription возвращает refund_calc целиком (контракт не менялся)'
 );
 select is(
   (select amount_tiyin from public.payments where subscription_id = (select id from t_ins where name = 'p10b') and kind = 'refund'),
-  -30000, 'Деньгами вернулось ровно внесённое (30 000), не расчётная стоимость срока (50 000)'
+  -10000, 'Деньгами вернулось внесённое сверх отработанного (60 000 − 50 000), не стоимость срока и не всё внесённое'
 );
 
 
@@ -154,8 +168,11 @@ select is(
   public.refund_calc((select id from t_ins where name = 'p5')), 0,
   'period истёк ровно сегодня (ends_at = today): остаток 0, не отрицательное число'
 );
+select public.record_payment((select s.payer_id from public.subscriptions s where s.id = (select id from t_ins where name = 'p5')),
+  (select s.price_tiyin from public.subscriptions s where s.id = (select id from t_ins where name = 'p5')), 'payment',
+  'eeeeeeee-0000-0000-0000-000000000003', (select id from t_ins where name = 'p5'), (select id from t_src));
 select lives_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'p5'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'p5'), 0, 0) $q$,
   'Отмена истёкшего абонемента без возврата — не падает и не требует источника'
 );
 
@@ -282,7 +299,11 @@ select ok(
   (select count(*)::int from public.installment_plans where subscription_id = (select id from t_ins where name = 'p20_inst') and cancelled_at is null) = 1,
   'План рассрочки на period-абонементе живой сразу после продажи'
 );
-select public.refund_subscription((select id from t_ins where name = 'p20_inst'), 190000);
+-- 0090: прошедший день (10 000) оплачен — иначе закрыть нельзя.
+select public.record_payment((select s.payer_id from public.subscriptions s where s.id = (select id from t_ins where name = 'p20_inst')),
+  (select x.worked_tiyin from public.subscription_summary((select id from t_ins where name = 'p20_inst')) x), 'payment',
+  'eeeeeeee-0000-0000-0000-000000000003', (select id from t_ins where name = 'p20_inst'), (select id from t_src));
+select public.refund_subscription((select id from t_ins where name = 'p20_inst'), 190000, 0);
 select ok(
   (select count(*)::int from public.installment_plans where subscription_id = (select id from t_ins where name = 'p20_inst') and cancelled_at is null) = 0,
   'Отмена period-абонемента гасит его план рассрочки — тем же AFTER-триггером subscriptions_cancel_installments (0018/0020), без правки в этой миграции (Р8)'

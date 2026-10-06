@@ -149,15 +149,19 @@ export async function refundSubscription(
   const studentId = String(formData.get('studentId') ?? '')
   const subscriptionId = String(formData.get('subscriptionId') ?? '')
   const expectedTiyin = Number(formData.get('expectedTiyin') ?? '')
+  const expectedPayoutTiyin = Number(formData.get('expectedPayoutTiyin') ?? '')
   const sourceId = optional(formData, 'sourceId')
-  if (!subscriptionId || !Number.isInteger(expectedTiyin)) {
+  if (!subscriptionId || !Number.isInteger(expectedTiyin) || !Number.isInteger(expectedPayoutTiyin)) {
     return { message: t('sale', 'recalcRefund') }
   }
 
+  // Выплату считает база (subscription_summary.payout_tiyin, 0090): сверка
+  // p_expected_payout_tiyin — та сумма, что показали в форме.
   const supabase = await createClient()
   const { error } = await supabase.rpc('refund_subscription', {
     p_id: subscriptionId,
     p_expected_tiyin: expectedTiyin,
+    p_expected_payout_tiyin: expectedPayoutTiyin,
     p_source_id: sourceId,
   })
 
@@ -215,4 +219,69 @@ export async function coverLessonDebt(_prev: SubscriptionState, formData: FormDa
   revalidatePath('/app/debts')
   revalidatePath('/app')
   return { message: '', notice: count === 1 ? 'Занятие покрыто абонементом' : `Покрыто занятий: ${count}` }
+}
+
+/**
+ * Оплата по существующему абонементу с карточки (0090 Р7). expected — остаток
+ * к оплате, который показали в форме: изменился — 23514, без автоповтора.
+ */
+export async function acceptSubscriptionPayment(
+  _prev: SubscriptionState,
+  formData: FormData,
+): Promise<SubscriptionState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const subscriptionId = String(formData.get('subscriptionId') ?? '')
+  const amountTiyin = optionalTiyin(formData, 'amountSom')
+  const expectedDueTiyin = Number(formData.get('expectedDueTiyin'))
+  const sourceId = optional(formData, 'sourceId')
+  const paidOn = optional(formData, 'paidOn')
+  if (!subscriptionId || !Number.isInteger(expectedDueTiyin)) {
+    return { message: 'Обновите страницу и попробуйте снова' }
+  }
+  if (amountTiyin == null || amountTiyin <= 0) return { message: 'Укажите сумму больше нуля' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('accept_subscription_payment', {
+    p_subscription_id: subscriptionId,
+    p_amount_tiyin: amountTiyin,
+    p_source_id: sourceId as string,
+    p_paid_on: paidOn as string,
+    p_expected_due_tiyin: expectedDueTiyin,
+  })
+  if (error) return toAppError(error, 'Не удалось принять оплату')
+
+  revalidatePath(`/app/students/${studentId}`)
+  revalidatePath('/app/debts')
+  revalidatePath('/app/finance')
+  return { message: '', notice: 'Оплата принята' }
+}
+
+/**
+ * Списать недоплату за отработанное и закрыть абонемент (0090 Р5) — только
+ * владелец, с причиной. Сумму считает база; expected — показанная в форме.
+ */
+export async function writeOffSubscription(
+  _prev: SubscriptionState,
+  formData: FormData,
+): Promise<SubscriptionState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const subscriptionId = String(formData.get('subscriptionId') ?? '')
+  const expectedShortfallTiyin = Number(formData.get('expectedShortfallTiyin'))
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!subscriptionId || !Number.isInteger(expectedShortfallTiyin)) {
+    return { message: 'Обновите страницу и попробуйте снова' }
+  }
+  if (!reason) return { message: 'Укажите причину списания' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('write_off_subscription', {
+    p_id: subscriptionId,
+    p_expected_shortfall_tiyin: expectedShortfallTiyin,
+    p_reason: reason,
+  })
+  if (error) return toAppError(error, 'Не удалось списать недоплату')
+
+  revalidatePath(`/app/students/${studentId}`)
+  revalidatePath('/app/debts')
+  return { message: '', notice: 'Недоплата списана, абонемент закрыт' }
 }

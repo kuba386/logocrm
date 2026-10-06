@@ -39,7 +39,8 @@
     "unpaid": "не оплачен",
     "partial": "оплачен частично",
     "paid": "оплачен",
-    "overpaid": "переплата"
+    "overpaid": "переплата",
+    "closed": "рассчитан"
   },
   "installmentState": {
     "upcoming": "ожидается",
