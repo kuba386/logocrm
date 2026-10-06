@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { loadErrorMessage } from '@/lib/errors'
 import { FormError } from '@/components/ui/alert'
-import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm } from './finance-forms'
+import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm, VoidPaymentForm } from './finance-forms'
 
 export const metadata = { title: 'Финансы — LogoCRM' }
 
@@ -128,6 +128,7 @@ export default async function FinancePage({
       {tab === 'payments' ? (
         <PaymentsTab
           supabase={supabase}
+          isOwner={isOwner}
           fromIso={fromIso}
           toIso={toIso}
           timeZone={timeZone}
@@ -171,6 +172,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 
 async function PaymentsTab({
   supabase,
+  isOwner,
   fromIso,
   toIso,
   timeZone,
@@ -182,6 +184,8 @@ async function PaymentsTab({
   bySource,
 }: {
   supabase: Supabase
+  /** Владелец — «Отменить» у ошибочного поступления (0093); право проверяет база. */
+  isOwner: boolean
   fromIso: string
   toIso: string
   timeZone: string
@@ -195,7 +199,7 @@ async function PaymentsTab({
   const [{ data: payments, error: paymentsError }, { data: payers }, { data: students }] = await Promise.all([
     supabase
       .from('payments')
-      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment')
+      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment, covers_lesson_debt, voids_payment_id')
       .gte('paid_at', fromIso)
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
@@ -208,6 +212,8 @@ async function PaymentsTab({
   const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
   const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
   const rows = payments ?? []
+  // Отменённые (0093): у отмены та же дата, что у исходного, — пара всегда в одном периоде.
+  const voidedIds = new Set(rows.map((p) => p.voids_payment_id).filter((v): v is string => Boolean(v)))
 
   return (
     <div className="space-y-4">
@@ -296,8 +302,18 @@ async function PaymentsTab({
                     <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
                       {formatSom(p.amount_tiyin)}
                     </TableCell>
-                    <TableCell className="max-w-[16rem] truncate text-muted-foreground" title={p.comment ?? undefined}>
-                      {p.comment ?? ''}
+                    <TableCell className="max-w-[16rem] text-muted-foreground">
+                      <span className="block truncate" title={p.comment ?? undefined}>
+                        {voidedIds.has(p.id) ? <span className="font-medium text-destructive">отменён · </span> : null}
+                        {p.comment ?? ''}
+                      </span>
+                      {isOwner &&
+                      p.kind === 'payment' &&
+                      !p.subscription_id &&
+                      !p.covers_lesson_debt &&
+                      !voidedIds.has(p.id) ? (
+                        <VoidPaymentForm paymentId={p.id} amountTiyin={p.amount_tiyin} />
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

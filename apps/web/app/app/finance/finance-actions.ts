@@ -139,3 +139,23 @@ export async function reopenMonth(_prev: FinanceState, formData: FormData): Prom
   revalidatePath('/app/finance')
   return { message: '', notice: t('finance', 'monthReopened') }
 }
+
+/**
+ * Отменить ошибочное поступление без абонемента (void_payment, 0093) —
+ * только владелец, с причиной. База пишет корректировку на ту же сумму с
+ * минусом той же датой; исходная строка остаётся в истории.
+ */
+export async function voidPayment(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const paymentId = String(formData.get('paymentId') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!paymentId) return { message: 'Обновите страницу и попробуйте снова' }
+  if (!reason) return { message: 'Укажите причину отмены' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('void_payment', { p_payment_id: paymentId, p_reason: reason })
+  if (error) return toAppError(error, 'Не удалось отменить платёж')
+
+  revalidatePath('/app/finance')
+  revalidatePath('/app/payers')
+  return { message: '', notice: 'Платёж отменён' }
+}

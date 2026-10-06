@@ -2917,6 +2917,7 @@ export type Database = {
           student_id: string | null
           subscription_id: string | null
           updated_at: string
+          voids_payment_id: string | null
         }
         Insert: {
           amount_tiyin: number
@@ -2933,6 +2934,7 @@ export type Database = {
           student_id?: string | null
           subscription_id?: string | null
           updated_at?: string
+          voids_payment_id?: string | null
         }
         Update: {
           amount_tiyin?: number
@@ -2949,6 +2951,7 @@ export type Database = {
           student_id?: string | null
           subscription_id?: string | null
           updated_at?: string
+          voids_payment_id?: string | null
         }
         Relationships: [
           {
@@ -6498,6 +6501,10 @@ export type Database = {
         Returns: string
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
+      void_payment: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: string
+      }
       was_access_revoked: { Args: never; Returns: boolean }
       withdraw_platform_payment: {
         Args: { p_payment_id: string }
