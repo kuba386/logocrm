@@ -86,6 +86,13 @@ insert into public.subscriptions (id, center_id, student_id, payer_id, lessons_t
   ('89000000-0000-0000-0000-0000000055a3', '89000000-0000-0000-0000-0000000000c1', '89000000-0000-0000-0000-00000000ee03',
    '89000000-0000-0000-0000-00000000dd01', 4, 200000, 50000, current_date - 40, null, true, 3, 3);
 
+-- 0090: закрыть можно только оплаченное за отработанное — пакеты оплачены целиком.
+-- Оплата абонемента долг за перерасход не гасит (covers_lesson_debt = false).
+insert into public.payments (center_id, payer_id, student_id, subscription_id, amount_tiyin, kind) values
+  ('89000000-0000-0000-0000-0000000000c1', '89000000-0000-0000-0000-00000000dd01', '89000000-0000-0000-0000-00000000ee01', '89000000-0000-0000-0000-0000000055a1', 400000, 'payment'),
+  ('89000000-0000-0000-0000-0000000000c1', '89000000-0000-0000-0000-00000000dd01', '89000000-0000-0000-0000-00000000ee02', '89000000-0000-0000-0000-0000000055a2', 40000,  'payment'),
+  ('89000000-0000-0000-0000-0000000000c1', '89000000-0000-0000-0000-00000000dd01', '89000000-0000-0000-0000-00000000ee03', '89000000-0000-0000-0000-0000000055a3', 200000, 'payment');
+
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$
 begin
@@ -126,7 +133,7 @@ select is(
   (select x.refund_tiyin from public.subscription_summary('89000000-0000-0000-0000-0000000055a1') x), 0,
   'И в карточке (subscription_summary.refund_tiyin) — 0');
 select lives_ok(
-  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a1', 0, null) $$,
+  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a1', 0, 0) $$,
   'Перерасходованный пакет отменяется (раньше — CHECK lessons_written_off >= 0)');
 reset role;
 
@@ -139,7 +146,7 @@ select is(
     where e.type = 'subscription.refunded' and e.payload ->> 'subscription_id' = '89000000-0000-0000-0000-0000000055a1'),
   '(0,0,0)', 'subscription.refunded: 0 занятий, 0 к возврату, 0 выплачено — не минусы');
 select is(
-  (select count(*)::int from public.payments p where p.subscription_id = '89000000-0000-0000-0000-0000000055a1'),
+  (select count(*)::int from public.payments p where p.subscription_id = '89000000-0000-0000-0000-0000000055a1' and p.kind = 'refund'),
   0, 'Платёжной строки возврата нет — возвращать нечего');
 
 update public.subscriptions set deleted_at = now() where id = '89000000-0000-0000-0000-0000000055a1';
@@ -182,7 +189,7 @@ reset role;
 select public.tests_claims('89000000-0000-0000-0000-000000000001', '89000000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 select lives_ok(
-  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a3', 0, null) $$,
+  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a3', 0, 0) $$,
   'Возврат пакета с written_off > 0 и перерасходом проходит (подделанное состояние)');
 reset role;
 
@@ -203,10 +210,10 @@ select is_empty(
      union all
      select 'refund_subscription ' || r
        from unnest(array['public', 'anon']) r
-      where has_function_privilege(r, 'public.refund_subscription(uuid,integer,uuid)'::regprocedure, 'EXECUTE')
+      where has_function_privilege(r, 'public.refund_subscription(uuid,integer,integer,uuid)'::regprocedure, 'EXECUTE')
      union all
      select 'refund_subscription authenticated'
-      where not has_function_privilege('authenticated', 'public.refund_subscription(uuid,integer,uuid)'::regprocedure, 'EXECUTE') $$,
+      where not has_function_privilege('authenticated', 'public.refund_subscription(uuid,integer,integer,uuid)'::regprocedure, 'EXECUTE') $$,
   'Гранты: возврат — только authenticated, внутренние счётчики — ни одной роли, включая service_role');
 
 select ok(
@@ -220,7 +227,7 @@ select ok(
 select set_config('request.jwt.claims', '{}', true);
 set local role authenticated;
 select throws_ok(
-  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a2', 0, null) $$,
+  $$ select public.refund_subscription('89000000-0000-0000-0000-0000000055a2', 0, 0) $$,
   '42501', 'Требуется авторизация', 'refund_subscription без сессии — 42501 до любых проверок');
 reset role;
 select public.tests_claims('89000000-0000-0000-0000-000000000001', '89000000-0000-0000-0000-0000000000c1');

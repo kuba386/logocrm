@@ -281,6 +281,10 @@ select pass('Статус «болел» не списывает занятие'
 
 -- 18. Долг: отметка без абонемента ---------------------------------------------------------
 
+-- 0090: закрыть можно только оплаченное за отработанное — оплачиваем целиком.
+insert into public.payments (center_id, payer_id, student_id, subscription_id, amount_tiyin, kind)
+select s.center_id, s.payer_id, s.student_id, s.id, s.price_tiyin, 'payment'
+  from public.subscriptions s where s.id = '88888888-0000-0000-0000-000000000001';
 update public.subscriptions set status = 'cancelled' where id = '88888888-0000-0000-0000-000000000001';
 
 insert into public.attendance (center_id, lesson_id, student_id, status_id)

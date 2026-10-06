@@ -296,6 +296,9 @@ export default async function StudentPage({
         freezeTo: summary?.freeze_to ?? null,
         paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
         paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        payoutTiyin: summary?.payout_tiyin ?? 0,
+        shortfallTiyin: summary?.shortfall_tiyin ?? 0,
+        dueTiyin: summary?.due_tiyin ?? 0,
         installments: (installmentRows ?? [])
           .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
           .map((r) => ({
@@ -452,6 +455,9 @@ export default async function StudentPage({
         freezeTo: summary?.freeze_to ?? null,
         paidTiyin: paymentSummaries[index]?.data?.[0]?.paid_tiyin ?? 0,
         paymentState: paymentSummaries[index]?.data?.[0]?.payment_state ?? '',
+        payoutTiyin: summary?.payout_tiyin ?? 0,
+        shortfallTiyin: summary?.shortfall_tiyin ?? 0,
+        dueTiyin: summary?.due_tiyin ?? 0,
         installments: (installmentRows ?? [])
           .filter((r) => r.subscription_id === row.id && r.seq != null && r.due_date && r.amount_tiyin != null)
           .map((r) => ({
@@ -1019,7 +1025,7 @@ export default async function StudentPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SubscriptionsPanel studentId={id} {...subscriptionsSection} hideBalance={Boolean(summary)} />
+              <SubscriptionsPanel studentId={id} {...subscriptionsSection} isOwner={role === 'owner'} hideBalance={Boolean(summary)} />
             </CardContent>
           </Card>
         ) : subscriptionBadge ? (

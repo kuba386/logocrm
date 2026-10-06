@@ -109,7 +109,7 @@ select is(
   'refund_calc: ничего не отработано — стоимость неотработанных занятий равна полной цене'
 );
 select is(
-  public.refund_subscription((select id from t_ins where name = 'sub1'), 400000, (select id from t_src)),
+  public.refund_subscription((select id from t_ins where name = 'sub1'), 400000, 200000, (select id from t_src)),
   400000,
   'refund_subscription возвращает refund_calc (стоимость занятий), не капнутую сумму денег'
 );
@@ -160,7 +160,7 @@ create temporary table t_sale2 as
 insert into t_ins select 'sub2', subscription_id from t_sale2 limit 1;
 
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub2'), 400000) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub2'), 400000, 200000) $q$,
   '22023', 'Укажите источник оплаты',
   'Возврат 2 000 без источника — отказ (деньги реально возвращаются)'
 );
@@ -189,7 +189,7 @@ select is(
   'sub3 не оплачен вовсе'
 );
 select is(
-  public.refund_subscription((select id from t_ins where name = 'sub3'), 400000), 400000,
+  public.refund_subscription((select id from t_ins where name = 'sub3'), 400000, 0), 400000,
   'Возврат по неоплаченному абонементу проходит без источника — реальных денег 0'
 );
 select is(
@@ -205,7 +205,7 @@ select is(
 -- 20. Повторный возврат — явный отказ до расчёта (Р4) ---------------------------------------
 
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub3'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub3'), 0, 0) $q$,
   '22023', 'Абонемент уже отменён',
   'Повторный возврат — отказ раньше пересчёта (lessons_written_off не списывается второй раз)'
 );
@@ -214,6 +214,9 @@ reset role;
 
 -- 21. Повторная строка возврата в обход RPC — частичный unique (Р3) -----------------------
 
+-- 0090 Р6: строку возврата по абонементу пишет только refund_subscription — флаг
+-- поднимаем вручную, чтобы проверить именно индекс.
+select set_config('logocrm.subscription_refund', '1', true);
 select throws_like(
   format($q$ insert into public.payments (center_id, payer_id, student_id, subscription_id, amount_tiyin, kind)
       values ('cccccccc-0000-0000-0000-00000000000a', 'dddddddd-0000-0000-0000-000000000001',
@@ -222,6 +225,7 @@ select throws_like(
   '%payments_refund_once_key%',
   'Вторая строка kind=refund на тот же абонемент невозможна даже в обход RPC'
 );
+select set_config('logocrm.subscription_refund', '', true);
 
 
 -- 22-27. Переплата — инвариант для kind=payment, не для correction (Р6, Р16) --------------
@@ -352,7 +356,7 @@ select public.tests_claims('66666666-6666-6666-6666-666666666666','cccccccc-0000
 set local role authenticated;
 insert into t_ins values ('sub5', public.sell_subscription('77777777-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000005'));
 select lives_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub5'), 400000) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub5'), 400000, 0) $q$,
   'registrar — возврат (can_front_desk)'
 );
 reset role;
@@ -360,7 +364,7 @@ reset role;
 select public.tests_claims('33333333-3333-3333-3333-333333333333','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0, 0) $q$,
   '42501', null, 'finance не оформляет возврат (Р7 из 0026)'
 );
 reset role;
@@ -368,7 +372,7 @@ reset role;
 select public.tests_claims('44444444-4444-4444-4444-444444444444','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0, 0) $q$,
   '42501', null, 'teacher не оформляет возврат'
 );
 reset role;
@@ -376,7 +380,7 @@ reset role;
 select public.tests_claims('55555555-5555-5555-5555-555555555555','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0, 0) $q$,
   '42501', null, 'parent не оформляет возврат'
 );
 reset role;
@@ -384,7 +388,7 @@ reset role;
 select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000b');
 set local role authenticated;
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub4'), 0, 0) $q$,
   '42704', null, 'Владелец центра Б по абонементу центра А — не найден'
 );
 reset role;
@@ -393,12 +397,12 @@ reset role;
 -- 41-46. Гранты и последнее определение ---------------------------------------------------
 
 select ok(
-  has_function_privilege('authenticated', 'public.refund_subscription(uuid,integer,uuid)', 'EXECUTE'),
-  'refund_subscription(uuid,integer,uuid) — исполняется authenticated (грант явный, не унаследован)'
+  has_function_privilege('authenticated', 'public.refund_subscription(uuid,integer,integer,uuid)', 'EXECUTE'),
+  'refund_subscription(uuid,integer,integer,uuid) — исполняется authenticated (грант явный, не унаследован)'
 );
 select ok(
-  not has_function_privilege('anon', 'public.refund_subscription(uuid,integer,uuid)', 'EXECUTE')
-  and not has_function_privilege('public', 'public.refund_subscription(uuid,integer,uuid)', 'EXECUTE'),
+  not has_function_privilege('anon', 'public.refund_subscription(uuid,integer,integer,uuid)', 'EXECUTE')
+  and not has_function_privilege('public', 'public.refund_subscription(uuid,integer,integer,uuid)', 'EXECUTE'),
   'anon и public — нет'
 );
 select ok(

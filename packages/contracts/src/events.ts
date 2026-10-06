@@ -467,6 +467,22 @@ export const lessonDebtCoveredSchema = z.object({
 })
 export type LessonDebtCovered = z.infer<typeof lessonDebtCoveredSchema>
 
+/**
+ * Владелец списал недоплату за отработанное и закрыл абонемент
+ * (write_off_subscription, 0090). Причина в payload не уходит.
+ */
+export const subscriptionShortfallWrittenOffSchema = z.object({
+  type: z.literal('subscription.shortfall_written_off'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    writeoff_id: z.string().uuid(),
+    amount_tiyin: z.number().int().positive(),
+  }),
+})
+export type SubscriptionShortfallWrittenOff = z.infer<typeof subscriptionShortfallWrittenOffSchema>
+
 /** Замок месяца (close_month / reopen_month, 0013-0014). month — первое число. */
 const periodPayload = z.object({
   center_id: z.string().uuid(),
@@ -1113,6 +1129,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   studentSpeechCardOpenedSchema,
   lessonDebtWrittenOffSchema,
   lessonDebtCoveredSchema,
+  subscriptionShortfallWrittenOffSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,

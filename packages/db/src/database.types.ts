@@ -4728,6 +4728,16 @@ export type Database = {
         }
         Returns: string
       }
+      accept_subscription_payment: {
+        Args: {
+          p_amount_tiyin: number
+          p_expected_due_tiyin: number
+          p_paid_on: string
+          p_source_id: string
+          p_subscription_id: string
+        }
+        Returns: string
+      }
       ack_events: { Args: { p_ids: number[] }; Returns: number }
       age_years: { Args: { p_birth_date: string }; Returns: number }
       ai_job_begin: { Args: { p_event_id: number }; Returns: Json }
@@ -5863,7 +5873,12 @@ export type Database = {
         Returns: string
       }
       refund_subscription: {
-        Args: { p_expected_tiyin: number; p_id: string; p_source_id?: string }
+        Args: {
+          p_expected_payout_tiyin: number
+          p_expected_tiyin: number
+          p_id: string
+          p_source_id?: string
+        }
         Returns: number
       }
       reject_platform_payment: {
@@ -6281,12 +6296,16 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: {
           allow_negative: boolean
+          due_tiyin: number
           freeze_days: number
           freeze_from: string
           freeze_to: string
           lessons_left: number
+          payout_tiyin: number
           refund_tiyin: number
+          shortfall_tiyin: number
           state: string
+          worked_tiyin: number
         }[]
       }
       subscription_visible_to_caller: {
@@ -6439,6 +6458,14 @@ export type Database = {
           p_expected_remaining_tiyin: number
           p_reason: string
           p_student_id: string
+        }
+        Returns: string
+      }
+      write_off_subscription: {
+        Args: {
+          p_expected_shortfall_tiyin: number
+          p_id: string
+          p_reason: string
         }
         Returns: string
       }
