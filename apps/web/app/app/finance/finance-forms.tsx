@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { formatSom } from '@logocrm/core'
 import { closeMonth, payInstallment, recordExpense, recordPayment, reopenMonth, type FinanceState } from './finance-actions'
 import { Button } from '@/components/ui/button'
@@ -231,7 +232,13 @@ export function ClosePeriodForm({
           ? t('finance', 'closeMonthHintUnknown')
           : t('finance', 'closeMonthHint', { count: openCount })}
       </p>
-      <SubmitButton size="default">{t('finance', 'closeMonth', { month: monthLabel })}</SubmitButton>
+      <ConfirmSubmit
+        size="default"
+        variant="default"
+        confirmVariant="default"
+        label={t('finance', 'closeMonth', { month: monthLabel })}
+        question={t('finance', 'closeMonthConfirm', { month: monthLabel })}
+      />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

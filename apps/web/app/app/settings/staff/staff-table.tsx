@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from 'react'
 import { changeMemberRole, linkParentPayer, revokeMembership, type StaffState } from './actions'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { assignableRoles, roleLabel } from '@/lib/roles'
+import { t } from '@/lib/messages'
 import { VacationDialog } from './vacation-dialog'
 import type { PayerOption } from './invite-dialog'
 
@@ -93,7 +94,22 @@ function LinkPayerDialog({ member, payers }: { member: StaffMember; payers: Paye
 }
 
 function RoleSelect({ member, actorRole }: { member: StaffMember; actorRole: string }) {
-  const [state, formAction] = useActionState(changeMemberRole, initialState)
+  const [state, formAction, pending] = useActionState(changeMemberRole, initialState)
+  // Выбор в списке больше не отправляет форму сам: раньше роль менялась в
+  // момент выбора (и стрелкой на закрытом списке в Chrome под Windows — на
+  // каждом шаге), в том числе на «Владелец». Теперь — вопрос и подтверждение.
+  const [role, setRole] = useState(member.role)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  // Сервер принял — новая роль приходит в member.role; отказ — возвращаем исходную.
+  useEffect(() => {
+    setRole(member.role)
+  }, [member.role, state])
+
+  const changing = role !== member.role
+  useEffect(() => {
+    if (changing) cancelRef.current?.focus()
+  }, [changing])
 
   // Администратор не трогает владельцев и других администраторов —
   // то же правило стоит в change_member_role.
@@ -105,14 +121,25 @@ function RoleSelect({ member, actorRole }: { member: StaffMember; actorRole: str
 
   const options = assignableRoles(actorRole)
   const known = options.some((option) => option.value === member.role)
+  const who = member.fullName ?? member.email ?? 'участник'
+
+  // onSubmit, а не <form action>: React 19 после действия сбрасывает форму, и
+  // контролируемый список визуально прыгал бы на первый вариант (#198).
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => formAction(formData))
+  }
 
   return (
-    <form action={formAction} className="space-y-1">
+    <form onSubmit={submit} className="space-y-2">
       <input type="hidden" name="userId" value={member.userId} />
       <Select
         name="role"
-        defaultValue={member.role}
-        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+        aria-label={t('staff', 'roleOf', { name: who })}
+        value={role}
+        disabled={pending}
+        onChange={(event) => setRole(event.target.value)}
         className="h-9 w-44"
       >
         {!known ? <option value={member.role}>{roleLabel(member.role)}</option> : null}
@@ -122,6 +149,22 @@ function RoleSelect({ member, actorRole }: { member: StaffMember; actorRole: str
           </option>
         ))}
       </Select>
+      {changing ? (
+        <div className="w-full max-w-xs space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+          <p className="text-sm">
+            {t('staff', 'roleConfirm', { name: who, from: roleLabel(member.role), to: roleLabel(role) })}
+            {role === 'owner' ? ` ${t('staff', 'roleOwnerWarning')}` : ''}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" variant="destructive" disabled={pending}>
+              {pending ? t('common', 'pending') : t('common', 'confirm')}
+            </Button>
+            <Button ref={cancelRef} type="button" size="sm" variant="outline" disabled={pending} onClick={() => setRole(member.role)}>
+              {t('common', 'cancel')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <FormError message={state.error} />
     </form>
   )

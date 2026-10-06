@@ -9,6 +9,8 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { formatInTimeZone } from '@/lib/timezone'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 import {
   archiveReadingWritingAssessment,
   recordReadingWritingAssessment,
@@ -304,15 +306,7 @@ export function ReadingWritingAssessmentPanel({
                 <Button type="button" variant="ghost" size="sm" onClick={() => setFormTarget(latest.id)}>
                   Редактировать
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => archive(latest.id)}
-                >
-                  Убрать
-                </Button>
+                <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeAssessment')} onConfirm={() => archive(latest.id)} />
               </div>
             ) : null}
           </div>
@@ -342,15 +336,7 @@ export function ReadingWritingAssessmentPanel({
                       <Button type="button" variant="ghost" size="sm" onClick={() => setFormTarget(entry.id)}>
                         Редактировать
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => archive(entry.id)}
-                      >
-                        Убрать
-                      </Button>
+                      <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeAssessment')} onConfirm={() => archive(entry.id)} />
                     </div>
                   ) : null}
                 </div>

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
 import { issueLinkCode, unlinkTelegram, type TelegramState } from './actions'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
 
 /**
  * Код показывается один раз и живёт 15 минут. Ссылка t.me собирается здесь,
@@ -23,9 +24,14 @@ export function TelegramPanel({ linked, botName }: { linked: boolean; botName: s
       <FormNotice message={state.notice} />
 
       {linked ? (
-        <Button variant="outline" disabled={pending} onClick={() => run(unlinkTelegram)}>
-          {t('integrations', 'unlink')}
-        </Button>
+        <ConfirmAction
+          variant="outline"
+          size="default"
+          pending={pending}
+          label={t('integrations', 'unlink')}
+          question={t('integrations', 'unlinkConfirm')}
+          onConfirm={() => run(unlinkTelegram)}
+        />
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{t('integrations', 'linkHint')}</p>

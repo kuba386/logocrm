@@ -97,7 +97,9 @@ test('2. Серия создаётся целиком, отменяется с �
   await lessonCard(page, '11:00', STUDENTS.ailin).click()
   await page.getByRole('button', { name: 'Отменить', exact: true }).click()
   await page.getByPlaceholder('Причина отмены серии').fill('Переезд семьи')
-  await actAndAwait(page, 'Отменить серию с этого дня', 'Отменено занятий: 5')
+  // Массовая отмена — через подтверждение (ConfirmSubmit): первое нажатие лишь спрашивает.
+  await page.getByRole('button', { name: 'Отменить серию с этого дня' }).click()
+  await actAndAwait(page, 'Подтвердить', 'Отменено занятий: 5')
 
   await openWeek(page, '2027-03-15')
   await lessonCard(page, '11:00', STUDENTS.ailin).click()

@@ -163,11 +163,11 @@ export default async function SalaryPage({
                             {isExpanded ? t('salary', 'hideDetails') : t('salary', 'details')}
                           </Link>
                           {!r.approved_run_id && isPastMonth ? (
-                            <ApproveForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} />
+                            <ApproveForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} teacherName={name} totalLabel={formatSom(r.total_tiyin)} />
                           ) : null}
                           {r.approved_run_id ? (
                             isOwner ? (
-                              <CancelRunForm teacherId={r.teacher_id} month={first} />
+                              <CancelRunForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} teacherName={name} totalLabel={formatSom(r.total_tiyin)} />
                             ) : (
                               <span className="text-xs text-muted-foreground">{t('salary', 'ownerOnly')}</span>
                             )

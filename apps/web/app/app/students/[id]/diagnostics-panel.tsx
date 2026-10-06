@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { formatInTimeZone } from '@/lib/timezone'
 import { archiveDiagnostic, recordDiagnostic, type ClinicalState } from './clinical-actions'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 const SOUNDS = ['р', 'л', 'ш', 'ж', 'с', 'з', 'ц', 'ч', 'щ']
 const SOUND_STATUSES = [
@@ -175,15 +177,7 @@ export function DiagnosticsPanel({
                   {entry.conclusion ? <p>{entry.conclusion}</p> : null}
                 </div>
                 {canWrite ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => archive(entry.id)}
-                  >
-                    Убрать
-                  </Button>
+                  <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeDiagnostic')} onConfirm={() => archive(entry.id)} />
                 ) : null}
               </li>
             ))}
