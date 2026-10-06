@@ -188,3 +188,31 @@ export async function transferRemaining(
   revalidatePath(`/app/students/${toStudentId}`)
   return { message: '', notice: 'Остаток перенесён' }
 }
+
+/**
+ * Покрыть неоплаченные занятия этим абонементом (0088). Число и сумму считает
+ * база (cover_lesson_debt_preview); expected — остаток долга, по которому
+ * открыли форму: изменился — 23514 со свежей суммой, без автоповтора.
+ */
+export async function coverLessonDebt(_prev: SubscriptionState, formData: FormData): Promise<SubscriptionState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const subscriptionId = String(formData.get('subscriptionId') ?? '')
+  const count = Number(formData.get('count'))
+  const expected = Number(formData.get('expectedRemainingTiyin'))
+  if (!subscriptionId || !Number.isInteger(count) || count < 1 || !Number.isInteger(expected)) {
+    return { message: 'Обновите страницу и попробуйте снова' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('cover_lesson_debt', {
+    p_subscription_id: subscriptionId,
+    p_count: count,
+    p_expected_remaining_tiyin: expected,
+  })
+  if (error) return toAppError(error, 'Не удалось покрыть долг абонементом')
+
+  revalidatePath(`/app/students/${studentId}`)
+  revalidatePath('/app/debts')
+  revalidatePath('/app')
+  return { message: '', notice: count === 1 ? 'Занятие покрыто абонементом' : `Покрыто занятий: ${count}` }
+}

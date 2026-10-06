@@ -152,3 +152,35 @@ test('4. Отпуск отменяет занятия и показывает п
   await lessonCard(page, '10:00', STUDENTS.ailin).click()
   await expect(page.getByText('Отменено')).toBeVisible()
 })
+
+test('5. Перенос занятия — в поясе центра, а не UTC', async ({ page }) => {
+  // Браузер теста в Москве (UTC+3), центр в Бишкеке (UTC+6), база в UTC.
+  // До исправления поле «Начало» показывало UTC (15:00 → 09:00), а введённое
+  // время уходило в базу как UTC — занятие уезжало на 6 часов.
+  const THURSDAY = '2027-03-25'
+  await openWeek(page, THURSDAY)
+
+  await fillLessonDialog(page, {
+    service: SERVICES.individual,
+    teacher: TEACHERS.nurgul,
+    student: STUDENTS.ailin,
+    firstDay: THURSDAY,
+    time: '15:00',
+    weekdays: ['Чт'],
+  })
+  await submitLessonDialog(page, 'Занятие создано')
+
+  await openWeek(page, THURSDAY)
+  await lessonCard(page, '15:00', STUDENTS.ailin).click()
+  await page.getByRole('button', { name: 'Перенести', exact: true }).click()
+
+  await expect(page.locator('#startsAt')).toHaveValue(`${THURSDAY}T15:00`)
+  await expect(page.locator('#endsAt')).toHaveValue(`${THURSDAY}T15:45`)
+
+  await page.locator('#startsAt').fill(`${THURSDAY}T16:30`)
+  await page.locator('#endsAt').fill(`${THURSDAY}T17:15`)
+  await actAndAwait(page, 'Перенести', 'Занятие перенесено')
+
+  await openWeek(page, THURSDAY)
+  await expect(lessonCard(page, '16:30', STUDENTS.ailin)).toBeVisible()
+})
