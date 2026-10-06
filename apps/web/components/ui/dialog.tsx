@@ -53,7 +53,7 @@ export function Dialog({
             type="button"
             aria-label="Закрыть окно"
             onClick={onClose}
-            className="-mr-2 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="-mr-2 -mt-1 rounded-md p-3 text-muted-foreground sm:p-1.5 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
           </button>

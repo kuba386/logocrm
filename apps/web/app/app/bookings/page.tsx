@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { formatKgPhone } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -71,7 +72,9 @@ export default async function BookingsPage() {
           ) : !rows || rows.length === 0 ? (
             <EmptyState title={t('bookingQueue', 'empty')} />
           ) : (
-            <Table>
+            // На телефоне 7 колонок не помещались — кнопки уезжали за край. Там
+            // родитель, телефон, специалист и услуга идут под именем ребёнка.
+            <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(6)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('bookingQueue', 'colTime')}</TableHead>
@@ -87,9 +90,24 @@ export default async function BookingsPage() {
                 {rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>{formatInTimeZone(r.starts_at, timezone, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</TableCell>
-                    <TableCell>{r.child_name}</TableCell>
+                    <TableCell>
+                      {r.child_name}
+                      <span className="block text-xs text-muted-foreground sm:hidden">
+                        {r.parent_name} ·{' '}
+                        <a href={`tel:${r.parent_phone}`} className="text-primary underline-offset-4 hover:underline">
+                          {formatKgPhone(r.parent_phone)}
+                        </a>
+                      </span>
+                      <span className="block text-xs text-muted-foreground sm:hidden">
+                        {(r.teacher_id && teacherNames.get(r.teacher_id)) ?? '—'} · {(r.service_id && serviceNames.get(r.service_id)) ?? '—'}
+                      </span>
+                    </TableCell>
                     <TableCell>{r.parent_name}</TableCell>
-                    <TableCell>{r.parent_phone}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <a href={`tel:${r.parent_phone}`} className="hover:underline">
+                        {formatKgPhone(r.parent_phone)}
+                      </a>
+                    </TableCell>
                     <TableCell>{(r.teacher_id && teacherNames.get(r.teacher_id)) ?? '—'}</TableCell>
                     <TableCell>{(r.service_id && serviceNames.get(r.service_id)) ?? '—'}</TableCell>
                     <TableCell>

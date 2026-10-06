@@ -108,10 +108,14 @@ export async function TeacherDashboard({ timeZone }: { timeZone: string }) {
                 const row = (
                   <>
                     <span className="w-12 shrink-0 font-medium tabular-nums">{timeInZone(lesson.starts_at, timeZone)}</span>
-                    <span className={cn('min-w-0 flex-1 truncate', cancelled && 'text-muted-foreground line-through')}>
-                      {lessonTitle(lesson)}
+                    {/* На телефоне бейдж уходит под имя: в одну строку с «Посещение
+                        отмечено» имени ребёнка оставалось ~40px — «А…» (UX-аудит). */}
+                    <span className="flex min-w-0 flex-1 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      <span className={cn('w-full min-w-0 truncate sm:w-auto sm:flex-1', cancelled && 'text-muted-foreground line-through')}>
+                        {lessonTitle(lesson)}
+                      </span>
+                      {status ? <StatusBadge tone={status.tone}>{status.label}</StatusBadge> : null}
                     </span>
-                    {status ? <StatusBadge tone={status.tone}>{status.label}</StatusBadge> : null}
                   </>
                 )
                 // Провести можно только начавшееся занятие: complete_lesson (0039)
@@ -121,13 +125,13 @@ export async function TeacherDashboard({ timeZone }: { timeZone: string }) {
                     {started && !cancelled ? (
                       <Link
                         href={`/app/schedule/lessons/${lesson.id}/complete`}
-                        className="flex min-h-12 items-center gap-3 px-6 py-2 text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                        className="flex min-h-12 items-center gap-3 px-4 py-2 text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-6"
                       >
                         {row}
                         <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                       </Link>
                     ) : (
-                      <div className="flex min-h-12 items-center gap-3 px-6 py-2 text-sm">{row}</div>
+                      <div className="flex min-h-12 items-center gap-3 px-4 py-2 text-sm sm:px-6">{row}</div>
                     )}
                   </li>
                 )

@@ -422,7 +422,7 @@ export function CompleteLessonForm({
                 />
                 <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2">
                   {filteredExercises.map((exercise) => (
-                    <label key={exercise.id} className="flex items-start gap-2 text-sm">
+                    <label key={exercise.id} className="flex min-h-11 items-start gap-2 py-2 text-sm sm:min-h-0 sm:py-0.5">
                       <input
                         type="checkbox"
                         className="mt-1"
