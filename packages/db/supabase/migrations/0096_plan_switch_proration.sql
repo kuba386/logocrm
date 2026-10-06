@@ -109,9 +109,13 @@ begin
       from public.platform_payments pp
      where pp.center_id = p_center_id and pp.confirmed_at is not null and pp.plan = v_c.plan
        and pp.months > 0
+       -- confirmed_at < now(): extend_subscription уже отметил текущую заявку
+       -- подтверждённой (now() транзакции) до расчёта — она не история.
+       and pp.confirmed_at < now()
        and pp.confirmed_at > coalesce((
              select max(q.confirmed_at) from public.platform_payments q
-              where q.center_id = p_center_id and q.confirmed_at is not null and q.plan <> v_c.plan),
+              where q.center_id = p_center_id and q.confirmed_at is not null and q.confirmed_at < now()
+                and q.plan <> v_c.plan),
            '-infinity'::timestamptz);
     if v_old is null then
       select p.price_tiyin into v_old from public.plans p where p.code = v_c.plan;

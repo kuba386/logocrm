@@ -138,8 +138,8 @@ set local role authenticated;
 select is(
   (select x.current_until from public.platform_payments p, public.platform_payment_preview(p.id) x
     where p.center_id = '96000000-0000-0000-0000-0000000000c8' and p.confirmed_at is null),
-  (select c.trial_ends_at from public.centers c where c.id = '96000000-0000-0000-0000-0000000000c8'),
-  'У trial текущий срок в предпросмотре — конец trial, а не пусто');
+  now() + interval '10 days',
+  'У trial текущий срок в предпросмотре — конец trial (now() + 10 дней в фикстуре), а не пусто');
 
 -- C7: заявка на Studio, платформа подтверждает Center на 1 мес. за 7 900 — предпросмотр с теми же значениями.
 insert into t_prev
