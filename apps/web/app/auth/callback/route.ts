@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { acceptInvitation } from '@/app/invite/[token]/actions'
-import { INVITE_COOKIE } from '@/lib/invite'
+import { INVITE_COOKIE, INVITE_ERROR_COOKIE } from '@/lib/invite'
 
 /**
  * Обмен кода из письма на сессию. Если пользователь пришёл по приглашению,
@@ -37,8 +37,14 @@ export async function GET(request: NextRequest) {
       // Кука больше не нужна: токен — в адресе. Иначе в течение часа любой
       // заход через callback (например, сброс пароля) снова пытался бы принять.
       store.delete(INVITE_COOKIE)
-      const reason = encodeURIComponent(accepted.error.slice(0, 300))
-      return NextResponse.redirect(`${origin}/invite/${encodeURIComponent(inviteToken)}?error=${reason}`)
+      store.set(INVITE_ERROR_COOKIE, accepted.error.slice(0, 300), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: origin.startsWith('https://'),
+        path: '/invite',
+        maxAge: 120,
+      })
+      return NextResponse.redirect(`${origin}/invite/${encodeURIComponent(inviteToken)}`)
     }
   }
 

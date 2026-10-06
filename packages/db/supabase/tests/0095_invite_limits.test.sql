@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(15);
+select plan(18);
 
 
 -- 1. Фикстура: Studio (лимит 5) — 2 работающих специалиста и 1 свободная карточка ------------------
@@ -98,13 +98,16 @@ reset role;
 
 -- 4. Срок только сокращается (Р2) -----------------------------------------------------------------
 
+-- Путь владельца — PATCH expires_at по колоночному гранту (0024), не postgres.
 select public.tests_claims('95000000-0000-0000-0000-000000000001', '95000000-0000-0000-0000-0000000000c1');
+set local role authenticated;
 select throws_ok(
   $$ update public.invitations set expires_at = now() + interval '30 days' where id = (select id from t_inv where name = 'b') $$,
   '22023', 'Срок приглашения продлить нельзя — отправьте новое приглашение', 'Продлить срок нельзя — бронь не обойти');
 select lives_ok(
   $$ update public.invitations set expires_at = now() where id = (select id from t_inv where name = 'b') $$,
   'Отменить (сократить срок) можно');
+reset role;
 
 
 -- 5. Принятие (Р1, Р4) ----------------------------------------------------------------------------
@@ -151,6 +154,9 @@ select is(
 select public.tests_claims('95000000-0000-0000-0000-000000000001', '95000000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 insert into t_inv select 'c', invitation_id, token from public.create_invitation('teacher', 'Последний');
+select is(
+  (select v.full_name from public.pending_invitations_view v where v.id = (select id from t_inv where name = 'c')),
+  'Последний', 'Список ожидающих показывает ФИО из приглашения, пока карточки нет');
 reset role;
 -- Пятое место заняли вручную до принятия.
 select public.tests_claims(null, null);
@@ -170,6 +176,30 @@ select throws_ok(
   $$ insert into public.memberships (user_id, center_id, role, teacher_id)
      values ('95000000-0000-0000-0000-000000000006', '95000000-0000-0000-0000-0000000000c1', 'teacher', '95000000-0000-0000-0000-00000000aa02') $$,
   '23505', null, 'Вторая запись членства на ту же карточку — отказ уникального индекса');
+
+
+
+-- 7. Прежняя карточка участника в архиве — перепривязка (Р4) --------------------------------------
+
+select public.tests_claims(null, null);
+update public.invitations set expires_at = now() where id = (select id from t_inv where name = 'c');
+update public.teachers set deleted_at = now() where id = '95000000-0000-0000-0000-00000000aa03';
+
+select public.tests_claims('95000000-0000-0000-0000-000000000001', '95000000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+insert into t_inv select 'z', invitation_id, token from public.create_invitation('teacher', 'Работает 2 (снова)');
+reset role;
+select public.tests_claims('95000000-0000-0000-0000-000000000003', '95000000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select lives_ok(
+  $$ select public.accept_invitation((select token from t_inv where name = 'z')) $$,
+  'Специалист с архивной карточкой принимает новую ссылку (раньше — тупик «попросите новую ссылку»)');
+reset role;
+select is(
+  (select row(t.full_name, t.profile_id = m.user_id, t.id <> '95000000-0000-0000-0000-00000000aa03')::text
+     from public.memberships m join public.teachers t on t.id = m.teacher_id
+    where m.user_id = '95000000-0000-0000-0000-000000000003'),
+  '("Работает 2 (снова)",t,t)', 'Членство перепривязано на новую живую карточку');
 
 select * from finish();
 rollback;

@@ -23,8 +23,10 @@
 --       свободна и на неё нет другой живой ссылки.
 --   Р4. Принятие: прежняя карточка участника (повторное приглашение
 --       работающего больше не падает на teachers_profile_uniq), иначе карточка
---       приглашения под for update — архивная или чужая отказывает, иначе
---       новая. Одна карточка — одно членство: частичный unique на
+--       приглашения — архивная отказывает, иначе живая карточка этого
+--       аккаунта, иначе новая (лимит заранее, текст для приглашённого). Если
+--       прежняя карточка участника в архиве — членство перепривязывается.
+--       Чужую карточку (profile_id другого) привязать нельзя. Одна карточка — одно членство: частичный unique на
 --       memberships (center_id, teacher_id).
 --   Р5. Пустые карточки прошлых ссылок (не привязаны, выключены, без занятий,
 --       членств и живых приглашений) уходят в архив — prod 6.10.2026: 1.
@@ -75,6 +77,8 @@ update public.teachers t
  where t.deleted_at is null and t.profile_id is null and not t.is_active
    and not exists (select 1 from public.lessons l where l.teacher_id = t.id or l.substitute_teacher_id = t.id)
    and not exists (select 1 from public.memberships m where m.teacher_id = t.id)
+   and not exists (select 1 from public.groups g where g.teacher_id = t.id)
+   and not exists (select 1 from public.students st where st.primary_teacher_id = t.id)
    and not exists (select 1 from public.invitations i where i.teacher_id = t.id and i.accepted_at is null and i.expires_at > now());
 
 
@@ -285,6 +289,7 @@ declare
   v_existing public.memberships;
   v_teacher  uuid;
   v_card     public.teachers;
+  v_limit    integer;
 begin
   if v_uid is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -333,17 +338,31 @@ begin
       using errcode = '22023';
   end if;
 
-  -- 0095 Р4: карточка специалиста — прежняя карточка участника, карточка
-  -- приглашения или новая. v_existing пуст (все поля null), если участника нет.
+  -- 0095 Р4: карточка специалиста — по порядку: прежняя живая карточка
+  -- участника; карточка приглашения; живая карточка, уже привязанная к этому
+  -- аккаунту (рассинхрон до 0095); новая. v_existing пуст (все поля null),
+  -- если участника нет.
   if v_inv.role = 'teacher' then
-    v_teacher := coalesce(v_existing.teacher_id, v_inv.teacher_id);
-    if v_teacher is not null then
+    if v_existing.teacher_id is not null then
+      select t.id into v_teacher from public.teachers t
+       where t.id = v_existing.teacher_id and t.center_id = v_inv.center_id and t.deleted_at is null;
+    end if;
+    if v_teacher is null and v_inv.teacher_id is not null then
       select * into v_card from public.teachers t
-       where t.id = v_teacher and t.center_id = v_inv.center_id
-         for update;
+       where t.id = v_inv.teacher_id and t.center_id = v_inv.center_id;
       if v_card.id is null or v_card.deleted_at is not null then
-        raise exception 'Карточка специалиста в архиве — попросите администратора прислать новую ссылку' using errcode = '22023';
+        raise exception 'Карточка специалиста из приглашения в архиве — попросите администратора прислать новую ссылку' using errcode = '22023';
       end if;
+      v_teacher := v_card.id;
+    end if;
+    if v_teacher is null then
+      select t.id into v_teacher from public.teachers t
+       where t.center_id = v_inv.center_id and t.profile_id = v_uid and t.deleted_at is null
+       limit 1;
+    end if;
+
+    if v_teacher is not null then
+      select * into v_card from public.teachers t where t.id = v_teacher for update;
       if v_card.profile_id is not null and v_card.profile_id <> v_uid then
         raise exception 'Карточка специалиста уже привязана к другому сотруднику — попросите администратора прислать новую ссылку'
           using errcode = '22023';
@@ -352,22 +371,25 @@ begin
          set profile_id = v_uid, is_active = true
        where id = v_teacher;
     else
-      -- Р1: новая карточка здесь; лимит проверяет триггер teachers_check_limit (0049).
-      begin
-        insert into public.teachers (center_id, full_name, phone, profile_id, is_active)
-        values (v_inv.center_id, coalesce(nullif(v_inv.full_name, ''), 'Специалист'), v_inv.phone, v_uid, true)
-        returning id into v_teacher;
-      exception
-        when check_violation then
-          raise exception 'В центре закончились места специалистов по тарифу — попросите администратора освободить место или сменить тариф'
-            using errcode = '23514';
-      end;
+      -- Р1: новая карточка. Лимит — заранее, тем же счётом и замком, что
+      -- триггер 0049, с текстом для приглашённого; триггер — страховка.
+      perform pg_advisory_xact_lock(hashtextextended('center_limit:' || v_inv.center_id::text, 0));
+      v_limit := public.plan_limit(v_inv.center_id, 'teachers');
+      if v_limit >= 0 and (select count(*) from public.teachers t
+                            where t.center_id = v_inv.center_id and t.deleted_at is null) + 1 > v_limit then
+        raise exception 'В центре закончились места специалистов по тарифу — попросите администратора освободить место или сменить тариф'
+          using errcode = '23514';
+      end if;
+      insert into public.teachers (center_id, full_name, phone, profile_id, is_active)
+      values (v_inv.center_id, coalesce(nullif(v_inv.full_name, ''), 'Специалист'), v_inv.phone, v_uid, true)
+      returning id into v_teacher;
     end if;
   end if;
 
   if v_existing.user_id is not null then
+    -- Специалисту — актуальная карточка (прежняя могла уйти в архив).
     update public.memberships
-       set teacher_id = coalesce(teacher_id, v_teacher),
+       set teacher_id = case when v_inv.role = 'teacher' then v_teacher else coalesce(teacher_id, v_teacher) end,
            payer_id   = coalesce(payer_id, v_inv.payer_id)
      where user_id = v_uid and center_id = v_inv.center_id;
   else
