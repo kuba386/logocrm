@@ -16,7 +16,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(44);
+select plan(50);
 
 
 -- 1. Фикстура -------------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ insert into auth.users (
 )
 select '00000000-0000-0000-0000-000000000000', ('94000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid,
        'authenticated', 'authenticated', 'u' || n || '-0094@test.kg', '', '', '', '', '', '', '', ''
-  from generate_series(1, 7) n;
+  from generate_series(1, 8) n;
 
 insert into public.centers (id, name, slug, settings) values
   ('94000000-0000-0000-0000-0000000000c1', 'Центр 0094', 'centr-0094', '{"timezone":"Asia/Bishkek"}'::jsonb),
@@ -42,7 +42,8 @@ insert into public.payers (id, center_id, full_name, phone) values
   ('94000000-0000-0000-0000-00000000dd01', '94000000-0000-0000-0000-0000000000c1', 'Плательщик 0094', '+996700009401');
 
 -- 1 owner c1 и admin c2 · 2 admin c1 · 3 teacher c1 · 4 finance c1 · 5 parent c1 ·
--- 6 без членства (отозван, claim c1 остался) · 7 owner просроченного c3.
+-- 6 без членства (отозван, claim c1 остался) · 7 owner просроченного c3 ·
+-- 8 registrar c1 — единственная роль в обоих списках saved_filter_pages.
 insert into public.memberships (user_id, center_id, role, payer_id) values
   ('94000000-0000-0000-0000-000000000001', '94000000-0000-0000-0000-0000000000c1', 'owner', null),
   ('94000000-0000-0000-0000-000000000001', '94000000-0000-0000-0000-0000000000c2', 'admin', null),
@@ -50,7 +51,8 @@ insert into public.memberships (user_id, center_id, role, payer_id) values
   ('94000000-0000-0000-0000-000000000003', '94000000-0000-0000-0000-0000000000c1', 'teacher', null),
   ('94000000-0000-0000-0000-000000000004', '94000000-0000-0000-0000-0000000000c1', 'finance', null),
   ('94000000-0000-0000-0000-000000000005', '94000000-0000-0000-0000-0000000000c1', 'parent', '94000000-0000-0000-0000-00000000dd01'),
-  ('94000000-0000-0000-0000-000000000007', '94000000-0000-0000-0000-0000000000c3', 'owner', null);
+  ('94000000-0000-0000-0000-000000000007', '94000000-0000-0000-0000-0000000000c3', 'owner', null),
+  ('94000000-0000-0000-0000-000000000008', '94000000-0000-0000-0000-0000000000c1', 'registrar', null);
 
 -- Строка parent, вставленная владельцем таблицы: политика всё равно её не покажет.
 insert into public.saved_filters (id, center_id, user_id, page, name, params) values
@@ -109,8 +111,8 @@ select is_empty(
 select ok(
   exists (select 1 from pg_trigger tg
            where tg.tgrelid = 'public.saved_filters'::regclass and tg.tgname = 'a00_readonly_guard'
-             and (tg.tgtype & 2) = 2 and (tg.tgtype & 28) = 28),
-  'readonly-guard: BEFORE на insert, update и delete');
+             and (tg.tgtype & 1) = 1 and (tg.tgtype & 2) = 2 and (tg.tgtype & 28) = 28),
+  'readonly-guard: BEFORE ROW на insert, update и delete');
 
 select ok(
   exists (select 1 from public.export_center_excluded_tables() x where x.table_name = 'saved_filters')
@@ -194,6 +196,14 @@ select throws_ok(
   '23514', 'Укажите название фильтра',
   'Пустое имя — отказ');
 select throws_ok(
+  $$ select public.save_filter('schedule', repeat('я', 61), '{}') $$,
+  '23514', 'Название фильтра — до 60 символов, одной строкой',
+  'Имя длиннее 60 символов — отказ');
+select throws_ok(
+  $$ select public.save_filter('schedule', 'Две' || chr(10) || 'строки', '{}') $$,
+  '23514', 'Название фильтра — до 60 символов, одной строкой',
+  'Имя с переводом строки — отказ');
+select throws_ok(
   $$ select public.save_filter('reports', 'Чужая страница', '{}') $$,
   '42501', 'Недостаточно прав',
   'Неизвестная страница — отказ');
@@ -260,9 +270,31 @@ set local role authenticated;
 select lives_ok(
   $$ select public.save_filter('debts', 'Просрочки', '{"filter":"debt"}') $$,
   'finance сохраняет набор долгов (can_payments)');
+select is(
+  (select count(*)::int from public.saved_filters), 1,
+  'finance видит свой набор долгов — политика пропускает, а не только функция');
 select throws_ok(
   $$ select public.save_filter('schedule', 'Расписание', '{}') $$,
   '42501', 'Недостаточно прав', 'finance не сохраняет набор расписания — страница его не пускает');
+reset role;
+
+-- registrar — в обоих списках; после понижения до teacher видит только расписание.
+select public.tests_claims('94000000-0000-0000-0000-000000000008', '94000000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select lives_ok(
+  $$ select public.save_filter('schedule', 'Стойка', '{}'), public.save_filter('debts', 'Стойка', '{"sort":"name"}') $$,
+  'registrar сохраняет наборы обеих страниц');
+select is(
+  (select count(*)::int from public.saved_filters), 2,
+  'registrar видит наборы обеих страниц');
+reset role;
+update public.memberships set role = 'teacher'
+ where user_id = '94000000-0000-0000-0000-000000000008' and center_id = '94000000-0000-0000-0000-0000000000c1';
+select public.tests_claims('94000000-0000-0000-0000-000000000008', '94000000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+select is(
+  (select string_agg(page, ',') from public.saved_filters), 'schedule',
+  'Понижен до teacher — набор долгов скрыт политикой, расписание видно');
 reset role;
 
 select public.tests_claims('94000000-0000-0000-0000-000000000005', '94000000-0000-0000-0000-0000000000c1');
