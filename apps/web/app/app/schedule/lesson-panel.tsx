@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormNotice } from '@/components/ui/alert'
 import { ConflictList } from './conflict-list'
-import { dayInZone, timeInZone } from '@/lib/timezone'
+import { dayInZone, isoDayInZone, timeInZone } from '@/lib/timezone'
 import { lessonStatusLabel } from '@/lib/schedule'
 import type { TeacherOption } from './create-dialog'
 
@@ -179,7 +179,7 @@ export function LessonPanel({
                       id="startsAt"
                       name="startsAt"
                       type="datetime-local"
-                      defaultValue={lesson.startsAt.slice(0, 16)}
+                      defaultValue={localDateTimeValue(lesson.startsAt, timeZone)}
                       required
                     />
                   </div>
@@ -189,7 +189,7 @@ export function LessonPanel({
                       id="endsAt"
                       name="endsAt"
                       type="datetime-local"
-                      defaultValue={lesson.endsAt.slice(0, 16)}
+                      defaultValue={localDateTimeValue(lesson.endsAt, timeZone)}
                       required
                     />
                   </div>
@@ -287,4 +287,13 @@ export function LessonPanel({
       </div>
     </Dialog>
   )
+}
+
+/**
+ * Значение для <input type="datetime-local"> в поясе центра. Раньше сюда
+ * шёл срез ISO из базы — это UTC: занятие на 11:00 по Бишкеку показывалось
+ * как 05:00, а введённое «11:00» сохранялось как 17:00 по местному.
+ */
+function localDateTimeValue(iso: string, timeZone: string): string {
+  return `${isoDayInZone(iso, timeZone)}T${timeInZone(iso, timeZone)}`
 }
