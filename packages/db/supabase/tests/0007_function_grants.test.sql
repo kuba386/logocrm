@@ -356,6 +356,7 @@ select set_eq(
     ('withdraw_platform_payment(uuid)'),
     ('reject_platform_payment(uuid,text)'),
     ('extend_subscription(uuid,text,integer,integer,boolean)'),
+    ('platform_payment_preview(uuid,text,integer,integer)'),
     ('platform_open_payments()'),
     ('platform_centers()'),
     ('platform_summary()'),

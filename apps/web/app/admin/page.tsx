@@ -87,6 +87,17 @@ export default async function AdminPage() {
       .limit(10),
   ])
 
+  // 0096 Р6: что сделает подтверждение заявленного — тем же расчётом, что
+  // extend_subscription (исправить подтверждение нечем, ADR-011).
+  const previews = new Map(
+    await Promise.all(
+      (open ?? []).map(async (row) => {
+        const { data } = await supabase.rpc('platform_payment_preview', { p_payment_id: row.payment_id })
+        return [row.payment_id, data?.[0] ?? null] as const
+      }),
+    ),
+  )
+
   const summary = parseSummary(summaryJson)
   const planOptions = (plans ?? [])
     .filter((p) => p.code !== 'trial')
@@ -170,6 +181,32 @@ export default async function AdminPage() {
                   <dd className="font-mono text-xs sm:col-span-3">{row.payment_id}</dd>
                 </dl>
 
+                {(() => {
+                  const p = previews.get(row.payment_id)
+                  if (!p) return null
+                  const day = (iso: string | null) =>
+                    iso ? formatInTimeZone(iso, row.center_timezone, { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+                  const shorter = p.current_until && p.new_until && p.new_until < p.current_until
+                  return (
+                    <div className="space-y-1 rounded-md border border-border bg-muted/40 p-2 text-sm">
+                      <p>
+                        Сейчас: {label('plan_names', p.current_plan ?? '')} до {day(p.current_until)}. После подтверждения
+                        заявленного — до <span className="font-medium">{day(p.new_until)}</span>.
+                      </p>
+                      {p.switching ? (
+                        <p className="text-muted-foreground">
+                          Смена тарифа: остаток {p.remaining_days} дн. пересчитан в {p.converted_days} дн. по уплаченной цене.
+                        </p>
+                      ) : null}
+                      {shorter ? <p className="text-destructive">Новый срок раньше нынешнего — центр это видел в форме.</p> : null}
+                      {(p.excess_days ?? 0) > 0 ? (
+                        <p className="text-destructive">
+                          Срок упёрся в потолок 24 мес.: сверх — {p.excess_days} дн., к возврату ≈ {formatSom(p.excess_tiyin ?? 0)}.
+                        </p>
+                      ) : null}
+                    </div>
+                  )
+                })()}
                 <div className="grid gap-4 md:grid-cols-2">
                   <ConfirmForm
                     paymentId={row.payment_id}

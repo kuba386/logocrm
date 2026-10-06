@@ -928,9 +928,13 @@ export const subscriptionExtendedSchema = z.object({
     plan: z.string(),
     months: z.number().int(),
     until: z.string(),
-    // Сколько дней остатка старого тарифа пересчитано в новый (0096); null —
-    // тариф не менялся. Optional: события до 0096 поля не несут.
+    // 0096: прежний срок, сколько дней остатка старого тарифа пересчитано в
+    // новый (null — тариф не менялся), излишек сверх потолка 24 месяцев в днях
+    // и тыйынах (возврат вручную). Optional: события до 0096 полей не несут.
+    previous_until: z.string().nullable().optional(),
     converted_days: z.number().int().nonnegative().nullable().optional(),
+    excess_days: z.number().int().nonnegative().optional(),
+    excess_tiyin: z.number().int().nonnegative().optional(),
   }),
 })
 

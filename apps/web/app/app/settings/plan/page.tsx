@@ -223,7 +223,14 @@ export default async function PlanPage() {
                   currentPlan={limits.plan}
                   current={{
                     name: limits.planName,
-                    priceTiyin: limits.priceTiyin,
+                    // 0096 Р2: цена месяца — из последней подтверждённой оплаты этого
+                    // тарифа (сумма / месяцы, целочисленно, как в SQL), иначе прайс.
+                    priceTiyin: (() => {
+                      const last = (payments ?? []).find((p) => p.confirmed_at && p.plan === limits.plan && (p.months ?? 0) > 0)
+                      return last && last.amount_tiyin != null && last.months
+                        ? Math.trunc(last.amount_tiyin / last.months)
+                        : limits.priceTiyin
+                    })(),
                     isTrial: limits.isTrial,
                     daysLeft: limits.daysLeft,
                     teachers: limits.usage.teachers,

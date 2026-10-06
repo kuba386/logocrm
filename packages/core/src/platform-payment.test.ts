@@ -27,7 +27,9 @@ const SWITCH_CASES: Array<[days: number, oldPrice: number, newPrice: number, res
   [30, 790000, 390000, 61], // Center → Studio: 60,77 → 61
   [10, 390000, 99000, 39], // Studio → Solo: 39,39 → 39
   [0, 390000, 790000, 0],
-  [12, 0, 790000, 12],
+  [12, 0, 790000, 0], // бесплатный старый тариф — остаток сгорает
+  [1, 1, 2, 1], // ровно половина — вверх
+  [3, 1, 2, 2], // 1,5 → 2
 ]
 
 describe('planSwitchDays — зеркало plan_switch_days (0096)', () => {

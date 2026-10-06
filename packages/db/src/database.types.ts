@@ -5889,6 +5889,24 @@ export type Database = {
         Args: { p_months: number; p_price_tiyin: number }
         Returns: number
       }
+      platform_payment_preview: {
+        Args: {
+          p_amount_tiyin?: number
+          p_months?: number
+          p_payment_id: string
+          p_plan?: string
+        }
+        Returns: {
+          converted_days: number
+          current_plan: string
+          current_until: string
+          excess_days: number
+          excess_tiyin: number
+          new_until: string
+          remaining_days: number
+          switching: boolean
+        }[]
+      }
       platform_prepay_discount_pct: {
         Args: { p_months: number }
         Returns: number

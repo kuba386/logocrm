@@ -57,7 +57,12 @@ export function PaymentForm({
   const target = plans.find((p) => p.code === planCode)
   // Подсказка зеркалом plan_switch_days (0096); срок считает база при подтверждении.
   const switching = !current.isTrial && planCode !== currentPlan && (current.daysLeft ?? 0) > 0
-  const switchDays = switching ? planSwitchDays(current.daysLeft ?? 0, current.priceTiyin, price) : 0
+  // 0096 Р2: цена месяца нового тарифа — сумма этой оплаты / месяцы (со скидкой).
+  const newMonth = validMonths ? Math.trunc(amount / months) : price
+  const switchDays = switching ? planSwitchDays(current.daysLeft ?? 0, current.priceTiyin, newMonth) : 0
+  // Потолок 24 мес. (Р3) — примерно, в днях; точный срок считает база.
+  const capped = switching && validMonths && switchDays + months * 30 > 24 * 30
+  const shorter = switching && validMonths && switchDays + months * 30 < (current.daysLeft ?? 0)
   const overTeachers = target && target.teachers >= 0 && current.teachers > target.teachers
   const overStudents = target && target.students >= 0 && current.students > target.students
 
@@ -134,10 +139,21 @@ export function PaymentForm({
       ) : null}
       <p className="text-xs text-muted-foreground">{t('plan', 'amountHint')}</p>
       {switching && target ? (
-        <p className="text-sm">
-          Оставшиеся {current.daysLeft} дн. тарифа {current.name} пересчитаются в {switchDays} дн. тарифа {target.name}.
-          Новый срок — {switchDays} дн. + {validMonths ? months : '…'} мес. с момента подтверждения оплаты.
-        </p>
+        <div className="space-y-1 text-sm">
+          <p>
+            Оставшиеся на сегодня {current.daysLeft} дн. тарифа {current.name} пересчитаются по уплаченной цене примерно в{' '}
+            {switchDays} дн. тарифа {target.name}. Новый срок — эти дни + {validMonths ? months : '…'} мес. с момента
+            подтверждения; дни пересчитаем по остатку на тот день.
+          </p>
+          {shorter ? (
+            <p className="text-amber-700 dark:text-amber-300">Срок станет короче нынешнего: дорогой тариф тратит оплаченное быстрее.</p>
+          ) : null}
+          {capped ? (
+            <p className="text-amber-700 dark:text-amber-300">
+              Срок не может быть больше 24 месяцев — остаток сверх этого платформа вернёт деньгами.
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {overTeachers || overStudents ? (
         <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
