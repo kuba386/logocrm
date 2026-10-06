@@ -34,7 +34,11 @@ export async function GET(request: NextRequest) {
       // приглашения: она покажет «Принять» под этим аккаунтом, и причина
       // отказа (истекла, уже использована, лимит) будет видна, а не молча
       // потеряна на выборе центра (ревью 6.10.2026).
-      return NextResponse.redirect(`${origin}/invite/${encodeURIComponent(inviteToken)}`)
+      // Кука больше не нужна: токен — в адресе. Иначе в течение часа любой
+      // заход через callback (например, сброс пароля) снова пытался бы принять.
+      store.delete(INVITE_COOKIE)
+      const reason = encodeURIComponent(accepted.error.slice(0, 300))
+      return NextResponse.redirect(`${origin}/invite/${encodeURIComponent(inviteToken)}?error=${reason}`)
     }
   }
 
