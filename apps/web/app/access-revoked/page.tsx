@@ -33,7 +33,7 @@ export default async function AccessRevokedPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Доступ к центру отозван</CardTitle>
+          <CardTitle as="h1">Доступ к центру отозван</CardTitle>
           <CardDescription>
             Ваш доступ закрыт администратором центра. Если это ошибка — свяжитесь с ним напрямую.
           </CardDescription>
@@ -50,7 +50,7 @@ export default async function AccessRevokedPage() {
                 Выйти
               </Button>
             </form>
-            <Link href="/onboarding" className={buttonVariants({ variant: 'link' })}>
+            <Link href="/onboarding?own=1" className={buttonVariants({ variant: 'link' })}>
               Открыть собственный центр
             </Link>
           </div>

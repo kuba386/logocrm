@@ -81,7 +81,7 @@ export function Landing() {
           <Link href="/login" className={s.navLink}>
             Войти
           </Link>
-          <Link href="/login" className={s.buttonSmall}>
+          <Link href="/login?mode=signup" className={s.buttonSmall}>
             Попробовать бесплатно
           </Link>
         </nav>
@@ -96,7 +96,7 @@ export function Landing() {
               Telegram. Для логопедических центров и частных логопедов Кыргызстана.
             </p>
             <div className={s.actions}>
-              <Link href="/login" className={s.button}>
+              <Link href="/login?mode=signup" className={s.button}>
                 Попробовать бесплатно
               </Link>
               <span className={s.actionsNote}>14 дней без оплаты, тариф выбираете потом</span>
@@ -200,7 +200,7 @@ export function Landing() {
           <p className={s.closingLead}>
             Нужны только email, пароль и название центра. Специалистов пригласите ссылкой.
           </p>
-          <Link href="/login" className={s.button}>
+          <Link href="/login?mode=signup" className={s.button}>
             Попробовать бесплатно
           </Link>
         </section>

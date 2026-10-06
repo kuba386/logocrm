@@ -57,6 +57,7 @@ const STATIC_ROUTES = [
 const GUEST_ROUTES = [
   '/',
   '/login',
+  '/login?mode=signup',
   '/reset-password',
   '/access-revoked',
   '/invite/nonexistent-token',

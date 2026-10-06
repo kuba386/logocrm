@@ -20,7 +20,7 @@ export default async function ResetPasswordPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Новый пароль</CardTitle>
+          <CardTitle as="h1">Новый пароль</CardTitle>
           <CardDescription>Для {user.email}. После сохранения вы сразу войдёте в LogoCRM.</CardDescription>
         </CardHeader>
         <CardContent>

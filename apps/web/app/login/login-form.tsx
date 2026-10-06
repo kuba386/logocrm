@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { resendCode, sendMagicLink, sendPasswordReset, signIn, signUp, verifyCode, type AuthState } from './actions'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,8 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
 import { EmailCodeStep } from '@/components/email-code-step'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { PasswordInput } from '@/components/ui/password-input'
+import Link from 'next/link'
 
 const initialState: AuthState = {}
 
@@ -22,15 +24,29 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function LoginForm({ next }: { next: string }) {
+/**
+ * Вход и регистрация — разные режимы страницы (/login и /login?mode=signup),
+ * а не две кнопки одной формы: раньше «Попробовать бесплатно» с лендинга
+ * вело на форму с заголовком «Вход», а регистрация была второстепенной
+ * кнопкой под «Войти» и с autocomplete="current-password" — менеджер паролей
+ * не предлагал новый пароль (UX-аудит 6.10.2026, пакет 6).
+ */
+export function LoginForm({ next, signup = false }: { next: string; signup?: boolean }) {
   const [mode, setMode] = useState<'password' | 'magic' | 'reset'>('password')
+  const switchHref = (toSignup: boolean) => {
+    const params = new URLSearchParams()
+    if (toSignup) params.set('mode', 'signup')
+    if (next && next !== '/app') params.set('next', next)
+    const query = params.toString()
+    return query ? `/login?${query}` : '/login'
+  }
   const [passwordState, passwordAction] = useActionState(signIn, initialState)
   const [signUpState, signUpAction] = useActionState(signUp, initialState)
   const [magicState, magicAction] = useActionState(sendMagicLink, initialState)
   const [resetState, resetAction] = useActionState(sendPasswordReset, initialState)
   // Неверный пароль или капча не стирают email (пароль — стирается, так и надо).
-  const passwordStates = useMemo(() => [passwordState, signUpState], [passwordState, signUpState])
-  const keepPassword = useKeepValuesOnError(passwordStates, Boolean(passwordState.error ?? signUpState.error))
+  const keepPassword = useKeepValuesOnError(passwordState, Boolean(passwordState.error))
+  const keepSignUp = useKeepValuesOnError(signUpState, Boolean(signUpState.error))
   const keepMagic = useKeepValuesOnError(magicState, Boolean(magicState.error))
   const keepReset = useKeepValuesOnError(resetState, Boolean(resetState.error))
   const [codeStep, setCodeStep] = useState<{ email: string; purpose: 'signup' | 'magic' } | null>(null)
@@ -105,6 +121,39 @@ export function LoginForm({ next }: { next: string }) {
     )
   }
 
+  if (signup) {
+    return (
+      <form action={signUpAction} className="space-y-4" {...keepSignUp}>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" autoComplete="email" required />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Пароль</Label>
+          <PasswordInput id="password" name="password" autoComplete="new-password" minLength={6} required aria-describedby="password-hint" />
+          <p id="password-hint" className="text-xs text-muted-foreground">
+            Не короче 6 символов. Название центра спросим на следующем шаге.
+          </p>
+        </div>
+
+        <TurnstileField />
+
+        <FormError message={signUpState.error} />
+        <FormNotice message={signUpState.notice} />
+
+        <SubmitButton>Зарегистрировать центр</SubmitButton>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Уже есть аккаунт?{' '}
+          <Link href={switchHref(false)} className="font-medium text-primary underline-offset-4 hover:underline">
+            Войти
+          </Link>
+        </p>
+      </form>
+    )
+  }
+
   return (
     <form action={passwordAction} className="space-y-4" {...keepPassword}>
       <input type="hidden" name="next" value={next} />
@@ -125,24 +174,25 @@ export function LoginForm({ next }: { next: string }) {
             Забыли пароль?
           </button>
         </div>
-        <Input id="password" name="password" type="password" autoComplete="current-password" required />
+        <PasswordInput id="password" name="password" autoComplete="current-password" required />
       </div>
 
       <TurnstileField />
 
-      <FormError message={passwordState.error ?? signUpState.error} />
-      <FormNotice message={signUpState.notice} />
+      <FormError message={passwordState.error} />
 
-      <div className="space-y-2">
-        <SubmitButton>Войти</SubmitButton>
-        <Button type="submit" variant="outline" className="w-full" formAction={signUpAction}>
-          Зарегистрироваться
-        </Button>
-      </div>
+      <SubmitButton>Войти</SubmitButton>
 
       <Button type="button" variant="link" className="w-full" onClick={() => setMode('magic')}>
         Войти по коду из письма
       </Button>
+
+      <p className="text-center text-sm text-muted-foreground">
+        Нет аккаунта?{' '}
+        <Link href={switchHref(true)} className="font-medium text-primary underline-offset-4 hover:underline">
+          Зарегистрировать центр
+        </Link>
+      </p>
     </form>
   )
 }

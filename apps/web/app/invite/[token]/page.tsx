@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { roleLabel } from '@/lib/roles'
 import { AcceptSignedInForm, InviteForm } from './invite-form'
 
-export const metadata = { title: 'Приглашение — LogoCRM' }
+export const metadata = { title: 'Приглашение — LogoCRM', robots: { index: false, follow: false } }
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -21,7 +21,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Ссылка недействительна</CardTitle>
+            <CardTitle as="h1">Ссылка недействительна</CardTitle>
             <CardDescription>
               {preview?.center_name
                 ? 'Срок действия приглашения истёк или им уже воспользовались. Попросите администратора прислать новую ссылку.'
@@ -46,7 +46,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>
+          <CardTitle as="h1">
             «{preview.center_name}» приглашает вас как {roleLabel(preview.role).toLowerCase()}
           </CardTitle>
           <CardDescription>
