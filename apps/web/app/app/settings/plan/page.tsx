@@ -213,8 +213,22 @@ export default async function PlanPage() {
                 </div>
               ) : (
                 <PaymentForm
-                  plans={paidPlans.map((p) => ({ code: p.code, name: p.name, priceTiyin: p.priceTiyin }))}
+                  plans={paidPlans.map((p) => ({
+                    code: p.code,
+                    name: p.name,
+                    priceTiyin: p.priceTiyin,
+                    teachers: p.teachers,
+                    students: p.students,
+                  }))}
                   currentPlan={limits.plan}
+                  current={{
+                    name: limits.planName,
+                    priceTiyin: limits.priceTiyin,
+                    isTrial: limits.isTrial,
+                    daysLeft: limits.daysLeft,
+                    teachers: limits.usage.teachers,
+                    students: limits.usage.students,
+                  }}
                 />
               )}
             </CardContent>
