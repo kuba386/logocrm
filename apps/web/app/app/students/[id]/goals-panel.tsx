@@ -14,6 +14,7 @@ import { archiveGoal, createGoal, setGoalStatus, type ClinicalState } from './cl
 import { ConfirmAction } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 export type GoalStageOption = { id: string; title: string }
 
@@ -216,9 +217,9 @@ export function GoalsPanel({
             <FormError message={state.message} />
             <FormNotice message={state.notice} />
             <div className="flex gap-2">
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm">
                 Завести
-              </Button>
+              </SubmitButton>
               <Button type="button" size="sm" variant="outline" onClick={() => setFormOpen(false)}>
                 Отмена
               </Button>

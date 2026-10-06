@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { setArticulation, type ClinicalState } from './clinical-actions'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 export type ArticulationEntry = {
   updatedAt: string
@@ -225,9 +226,9 @@ export function ArticulationPanel({
             </div>
 
             <div className="flex gap-2">
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm">
                 Сохранить
-              </Button>
+              </SubmitButton>
               <Button type="button" size="sm" variant="outline" onClick={() => setFormOpen(false)}>
                 Отмена
               </Button>

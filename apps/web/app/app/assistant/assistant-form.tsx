@@ -14,11 +14,16 @@ import { askAssistant, type AssistantState } from './actions'
 
 const initial: AssistantState = {}
 
-function AskButton() {
+/**
+ * busy — общий признак «идёт запрос» по всем формам ассистента: основная и
+ * кнопки-примеры шлют одно действие, а useFormStatus видит только свою форму.
+ * Каждый вопрос — платный вызов модели и расход квоты, повтор не нужен.
+ */
+function AskButton({ busy }: { busy: boolean }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" disabled={pending}>
-      {pending ? t('assistant', 'asking') : t('assistant', 'ask')}
+    <Button type="submit" disabled={pending || busy}>
+      {pending || busy ? t('assistant', 'asking') : t('assistant', 'ask')}
     </Button>
   )
 }
@@ -35,12 +40,12 @@ function QuotaLine({ quota }: { quota?: { used: number; limit: number } }) {
 }
 
 export function AssistantForm({ quota, intents }: { quota?: { used: number; limit: number }; intents: string[] }) {
-  const [state, action] = useActionState(askAssistant, initial)
+  const [state, action, busy] = useActionState(askAssistant, initial)
   const examples = ASSISTANT_EXAMPLES.filter((e) => intents.includes(e.intent))
 
   return (
     <div className="space-y-6">
-      <form action={action} className="space-y-3">
+      <form action={action} className="space-y-3" aria-busy={busy || undefined}>
         <div className="flex flex-wrap gap-2">
           <Input
             name="question"
@@ -52,7 +57,7 @@ export function AssistantForm({ quota, intents }: { quota?: { used: number; limi
             className="min-w-64 flex-1"
             aria-label={t('assistant', 'title')}
           />
-          <AskButton />
+          <AskButton busy={busy} />
         </div>
         <p className="text-xs text-muted-foreground">{t('assistant', 'privacy')}</p>
         <QuotaLine quota={state.quota ?? quota} />
@@ -103,7 +108,7 @@ export function AssistantForm({ quota, intents }: { quota?: { used: number; limi
           {examples.map((example) => (
             <form key={example.intent} action={action}>
               <input type="hidden" name="question" value={example.text} />
-              <Button type="submit" variant="outline" size="sm">
+              <Button type="submit" variant="outline" size="sm" disabled={busy}>
                 {example.text}
               </Button>
             </form>

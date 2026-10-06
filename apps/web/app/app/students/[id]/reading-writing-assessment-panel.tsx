@@ -17,6 +17,7 @@ import {
   updateReadingWritingAssessment,
   type ClinicalState,
 } from './clinical-actions'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 // Латинские коды в базе (0068), русские подписи только здесь.
 // reading_method — описательная шкала прогрессии, БЕЗ кода 'normal' (в
@@ -249,9 +250,9 @@ function EntryForm({
 
       <FormError message={state.message} />
       <div className="flex gap-2">
-        <Button type="submit" size="sm">
+        <SubmitButton size="sm">
           Сохранить
-        </Button>
+        </SubmitButton>
         <Button type="button" size="sm" variant="outline" onClick={onCancel}>
           Отмена
         </Button>

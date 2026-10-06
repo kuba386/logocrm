@@ -11,6 +11,7 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const initialState: StudentState = {}
 
@@ -139,9 +140,9 @@ export function StudentForm({
         {student.status === 'archived' ? (
           <form action={restoreAction}>
             <input type="hidden" name="id" value={student.id} />
-            <Button type="submit" variant="outline">
+            <SubmitButton variant="outline">
               Восстановить из архива
-            </Button>
+            </SubmitButton>
           </form>
         ) : (
           <form action={archiveAction}>

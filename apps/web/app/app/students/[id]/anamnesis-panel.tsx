@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { setAnamnesis, type ClinicalState } from './clinical-actions'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 export type AnamnesisEntry = {
   updatedAt: string
@@ -163,9 +164,9 @@ export function AnamnesisPanel({
             ))}
 
             <div className="flex gap-2">
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm">
                 Сохранить
-              </Button>
+              </SubmitButton>
               <Button type="button" size="sm" variant="outline" onClick={() => setFormOpen(false)}>
                 Отмена
               </Button>
