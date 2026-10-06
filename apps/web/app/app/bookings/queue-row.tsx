@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useId, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -26,6 +26,10 @@ export function BookingQueueRow({ requestId }: { requestId: string }) {
   const [match, setMatch] = useState<{ id: string; name: string } | null | undefined>(undefined)
   const [payerChoice, setPayerChoice] = useState<'existing' | 'new'>('existing')
   const [declineOpen, setDeclineOpen] = useState(false)
+  // Поиск плательщика идёт до открытия диалога — без индикатора кнопка
+  // выглядела мёртвой, а второй клик слал второй запрос.
+  const [opening, setOpening] = useState(false)
+  const reasonId = useId()
 
   const [confirmState, confirmAction] = useActionState(
     confirmBooking.bind(null, requestId, match?.id && payerChoice === 'existing' ? match.id : null),
@@ -34,23 +38,30 @@ export function BookingQueueRow({ requestId }: { requestId: string }) {
   const [declineState, declineAction] = useActionState(declineBooking, initialState)
 
   async function openConfirm() {
-    const found = await payerMatch(requestId)
-    setMatch(found)
-    setMatchOpen(true)
+    setOpening(true)
+    try {
+      const found = await payerMatch(requestId)
+      setMatch(found)
+      setMatchOpen(true)
+    } finally {
+      setOpening(false)
+    }
   }
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" onClick={() => void openConfirm()}>
-          {t('bookingQueue', 'confirmButton')}
+        <Button type="button" size="sm" disabled={opening} onClick={() => void openConfirm()}>
+          {opening ? t('bookingQueue', 'checkingPayer') : t('bookingQueue', 'confirmButton')}
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setDeclineOpen(true)}>
           {t('bookingQueue', 'declineButton')}
         </Button>
       </div>
-      <FormError message={confirmState.message} />
-      <FormError message={declineState.message} />
+      {/* Ошибка — и в строке (если диалог уже закрыт), и внутри диалога: под
+          затемнением открытой модалки строка не видна, и диалог «молчал». */}
+      {matchOpen ? null : <FormError message={confirmState.message} />}
+      {declineOpen ? null : <FormError message={declineState.message} />}
 
       <Dialog open={matchOpen} onClose={() => setMatchOpen(false)} title={t('bookingQueue', 'confirmButton')}>
         <form action={confirmAction} className="space-y-4">
@@ -79,6 +90,7 @@ export function BookingQueueRow({ requestId }: { requestId: string }) {
           ) : (
             <p className="text-sm text-muted-foreground">{t('bookingQueue', 'payerMatchNone')}</p>
           )}
+          <FormError message={confirmState.message} />
           <SubmitButton>{t('bookingQueue', 'confirmButton')}</SubmitButton>
         </form>
       </Dialog>
@@ -87,9 +99,10 @@ export function BookingQueueRow({ requestId }: { requestId: string }) {
         <form action={declineAction} className="space-y-4">
           <input type="hidden" name="requestId" value={requestId} />
           <div className="space-y-2">
-            <Label htmlFor="reason">{t('bookingQueue', 'declineReasonLabel')}</Label>
-            <Textarea id="reason" name="reason" rows={2} />
+            <Label htmlFor={reasonId}>{t('bookingQueue', 'declineReasonLabel')}</Label>
+            <Textarea id={reasonId} name="reason" rows={2} />
           </div>
+          <FormError message={declineState.message} />
           <SubmitButton variant="outline">{t('bookingQueue', 'declineButton')}</SubmitButton>
         </form>
       </Dialog>
