@@ -14,6 +14,7 @@ import { archiveDiagnostic, recordDiagnostic, type ClinicalState } from './clini
 import { ConfirmAction } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const SOUNDS = ['р', 'л', 'ш', 'ж', 'с', 'з', 'ц', 'ч', 'щ']
 const SOUND_STATUSES = [
@@ -316,9 +317,9 @@ export function DiagnosticsPanel({
             <FormError message={state.message} />
             <FormNotice message={state.notice} />
             <div className="flex gap-2">
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm">
                 Сохранить
-              </Button>
+              </SubmitButton>
               <Button
                 type="button"
                 size="sm"

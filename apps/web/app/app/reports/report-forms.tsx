@@ -76,7 +76,6 @@ export function PeriodReportForm({ report, from, to }: { report: Extract<ExportR
  */
 export function SalaryReportForm({ month }: { month: string }) {
   const [state, action] = useActionState(exportReport, initial)
-  const { pending } = useFormStatus()
   useDownload(state)
   return (
     <form action={action} className="flex flex-wrap items-end gap-3">
@@ -84,14 +83,26 @@ export function SalaryReportForm({ month }: { month: string }) {
         <Label htmlFor="salary-month" className="text-xs">{t('reports', 'month')}</Label>
         <Input id="salary-month" name="month" type="month" defaultValue={month} required className="sm:h-9 w-40" />
       </div>
-      <Button type="submit" size="sm" name="report" value="salary_summary" disabled={pending}>
+      {/* useFormStatus работает только у потомков формы: вызов в самом
+          SalaryReportForm всегда давал pending=false, и двойной клик собирал
+          два файла и две записи в журнале выгрузок. */}
+      <PendingButton name="report" value="salary_summary">
         {t('reports', 'salarySummary')}
-      </Button>
-      <Button type="submit" size="sm" variant="outline" name="report" value="salary_details" disabled={pending}>
+      </PendingButton>
+      <PendingButton variant="outline" name="report" value="salary_details">
         {t('reports', 'salaryDetails')}
-      </Button>
+      </PendingButton>
       {state.message ? <FormError message={state.message} /> : null}
     </form>
+  )
+}
+
+function PendingButton({ children, variant, name, value }: { children: React.ReactNode; variant?: 'outline'; name: string; value: string }) {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" size="sm" variant={variant} name={name} value={value} disabled={pending}>
+      {children}
+    </Button>
   )
 }
 

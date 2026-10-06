@@ -11,6 +11,7 @@ import { assignableRoles, roleLabel } from '@/lib/roles'
 import { t } from '@/lib/messages'
 import { VacationDialog } from './vacation-dialog'
 import type { PayerOption } from './invite-dialog'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const initialState: StaffState = {}
 
@@ -82,7 +83,7 @@ function LinkPayerDialog({ member, payers }: { member: StaffMember; payers: Paye
           </div>
           <FormError message={state.error} />
           <div className="flex gap-2">
-            <Button type="submit">{payerId ? 'Привязать' : 'Отвязать'}</Button>
+            <SubmitButton>{payerId ? 'Привязать' : 'Отвязать'}</SubmitButton>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Закрыть
             </Button>
@@ -191,9 +192,9 @@ function RevokeButton({ member }: { member: StaffMember }) {
         <div className="flex gap-2">
           <form action={formAction}>
             <input type="hidden" name="userId" value={member.userId} />
-            <Button type="submit" variant="destructive">
+            <SubmitButton variant="destructive">
               Отключить
-            </Button>
+            </SubmitButton>
           </form>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             Отмена

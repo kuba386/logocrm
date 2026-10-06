@@ -16,6 +16,7 @@ import {
   updateSyllableAssessment,
   type ClinicalState,
 } from './clinical-actions'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 // 14 классов слоговой структуры по А.К. Марковой (0066) — латинские коды
 // в базе (текст «1».."14"), русские подписи только здесь.
@@ -172,9 +173,9 @@ function EntryForm({
 
       <FormError message={state.message} />
       <div className="flex gap-2">
-        <Button type="submit" size="sm">
+        <SubmitButton size="sm">
           Сохранить
-        </Button>
+        </SubmitButton>
         <Button type="button" size="sm" variant="outline" onClick={onCancel}>
           Отмена
         </Button>

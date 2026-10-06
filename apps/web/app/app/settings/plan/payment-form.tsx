@@ -7,6 +7,7 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { formatSom, platformPaymentAmountTiyin, prepayDiscountPercent } from '@logocrm/core'
 import { label, t } from '@/lib/messages'
 import { submitPayment, withdrawPayment, type PlanState } from './actions'
+import { SubmitButton as PendingSubmit } from '@/components/ui/submit-button'
 
 const initial: PlanState = {}
 
@@ -130,9 +131,9 @@ export function WithdrawForm({ paymentId }: { paymentId: string }) {
   return (
     <form action={action} className="space-y-2">
       <input type="hidden" name="paymentId" value={paymentId} />
-      <Button type="submit" size="sm" variant="outline">
+      <PendingSubmit size="sm" variant="outline">
         {t('plan', 'withdraw')}
-      </Button>
+      </PendingSubmit>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

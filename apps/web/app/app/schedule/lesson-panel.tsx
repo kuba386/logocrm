@@ -23,6 +23,7 @@ import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
 import { lessonStatusLabel } from '@/lib/schedule'
 import type { TeacherOption } from './create-dialog'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const initial: ScheduleState = { message: '' }
 
@@ -196,9 +197,9 @@ export function LessonPanel({
                 </div>
                 <Result state={moveState} />
                 <div className="flex gap-2">
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm">
                     Перенести
-                  </Button>
+                  </SubmitButton>
                   <Button type="button" size="sm" variant="outline" onClick={() => setMode('view')}>
                     Назад
                   </Button>
@@ -230,9 +231,9 @@ export function LessonPanel({
                 </div>
                 <Result state={substituteState} />
                 <div className="flex gap-2">
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm">
                     Назначить
-                  </Button>
+                  </SubmitButton>
                   <Button type="button" size="sm" variant="outline" onClick={() => setMode('view')}>
                     Назад
                   </Button>
@@ -250,9 +251,9 @@ export function LessonPanel({
                   </div>
                   <Result state={cancelState} />
                   <div className="flex gap-2">
-                    <Button type="submit" size="sm" variant="destructive">
+                    <SubmitButton size="sm" variant="destructive">
                       Отменить занятие
-                    </Button>
+                    </SubmitButton>
                     <Button type="button" size="sm" variant="outline" onClick={() => setMode('view')}>
                       Назад
                     </Button>

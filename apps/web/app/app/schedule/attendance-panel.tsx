@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
 import { attendanceStatusClasses } from '@/lib/attendance'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const initial: ScheduleState = { message: '' }
 
@@ -149,9 +150,9 @@ export function AttendancePanel({ lessonId }: { lessonId: string }) {
           {data.participants.map((p) => (
             <input key={p.studentId} type="hidden" name="studentId" value={p.studentId} />
           ))}
-          <Button type="submit" size="sm" variant="outline">
+          <SubmitButton size="sm" variant="outline">
             Все пришли
-          </Button>
+          </SubmitButton>
         </form>
       ) : null}
       <FormNotice message={bulkState.notice} />
