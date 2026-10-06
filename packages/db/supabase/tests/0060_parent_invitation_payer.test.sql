@@ -147,13 +147,16 @@ insert into t_ins
 select throws_ok(
   $q$ update public.invitations set expires_at = now() + interval '30 days'
        where id = (select id from t_ins where name = 'p1') $q$,
-  '23514', null, 'Продлить ссылку родителя прямым PATCH expires_at (грант 0024) — 23514, срок держит CHECK, не if в функции');
+  '22023', 'Срок приглашения продлить нельзя — отправьте новое приглашение',
+  'Продлить ссылку родителя прямым PATCH expires_at (грант 0024) — отказ триггера 0095 (CHECK 0060 — второй слой)');
 select lives_ok(
   $q$ update public.invitations set expires_at = now()
        where id = (select id from t_ins where name = 'p1_again') $q$,
   '…а отменить (expires_at = now()) — можно');
-update public.invitations set expires_at = now() + interval '1 day'
- where id = (select id from t_ins where name = 'p1_again');
+-- 0095: отменённую ссылку не «включить» обратно — выдаём новую к тому же P1.
+insert into t_ins
+  select 'p1_again2', invitation_id, token, payer_id, payer_created
+    from public.create_invitation('parent', null, null, null, null, 'dddddddd-0000-0000-0000-000000000601');
 reset role;
 
 -- Администратор приглашает родителя так же, как владелец (симметрия).
@@ -227,7 +230,7 @@ select is(
 select public.tests_claims('99999999-9999-9999-9999-999999999999', null);
 set local role authenticated;
 select throws_ok(
-  $q$ select public.accept_invitation((select token from t_ins where name = 'p1_again')) $q$,
+  $q$ select public.accept_invitation((select token from t_ins where name = 'p1_again2')) $q$,
   '22023', 'Вы уже привязаны к другой карточке плательщика — привязку меняет администратор в «Сотрудниках»',
   'Ссылка к другой карточке для уже привязанного родителя — отказ, не молчаливый coalesce');
 reset role;
@@ -235,7 +238,7 @@ select is(
   (select payer_id from public.memberships where user_id = '99999999-9999-9999-9999-999999999999'),
   'dddddddd-0000-0000-0000-000000000604', '…привязка не изменилась');
 select is(
-  (select accepted_at from public.invitations where id = (select id from t_ins where name = 'p1_again')),
+  (select accepted_at from public.invitations where id = (select id from t_ins where name = 'p1_again2')),
   null::timestamptz, '…и приглашение не помечено принятым');
 
 
