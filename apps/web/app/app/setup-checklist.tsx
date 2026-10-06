@@ -20,7 +20,9 @@ import { hideSetupChecklist, showSetupChecklist } from './setup-actions'
  */
 export async function SetupChecklist({ centerId }: { centerId: string }) {
   const store = await cookies()
-  const hidden = Boolean(store.get(setupHiddenCookie(centerId)))
+  // По значению, а не по наличию: в перерисовке после «Показать» снятый
+  // cookie ещё виден — с пустым значением (e2e signup, #221).
+  const hidden = store.get(setupHiddenCookie(centerId))?.value === '1'
 
   const supabase = await createClient()
   const exists = { count: 'exact', head: true } as const
