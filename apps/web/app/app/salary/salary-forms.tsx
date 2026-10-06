@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 
 const initial: SalaryState = { message: '' }
 
@@ -41,26 +42,38 @@ export function AdjustmentForm({ teacherId, month }: { teacherId: string; month:
   )
 }
 
-export function ApproveForm({ teacherId, month, monthLabel }: { teacherId: string; month: string; monthLabel: string }) {
+/** Сводка для вопроса подтверждения: кто, за какой месяц, сколько. */
+type RunSummary = { teacherId: string; month: string; monthLabel: string; teacherName: string; totalLabel: string }
+
+export function ApproveForm({ teacherId, month, monthLabel, teacherName, totalLabel }: RunSummary) {
   const [state, formAction] = useActionState(approveSalary, initial)
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="teacherId" value={teacherId} />
       <input type="hidden" name="month" value={month} />
-      <SubmitButton>{t('salary', 'approve', { month: monthLabel })}</SubmitButton>
+      <ConfirmSubmit
+        label={t('salary', 'approve', { month: monthLabel })}
+        variant="default"
+        confirmVariant="default"
+        question={t('salary', 'approveConfirm', { name: teacherName, month: monthLabel, total: totalLabel })}
+      />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
   )
 }
 
-export function CancelRunForm({ teacherId, month }: { teacherId: string; month: string }) {
+export function CancelRunForm({ teacherId, month, monthLabel, teacherName, totalLabel }: RunSummary) {
   const [state, formAction] = useActionState(cancelSalaryRun, initial)
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="teacherId" value={teacherId} />
       <input type="hidden" name="month" value={month} />
-      <SubmitButton variant="destructive">{t('salary', 'cancelRun')}</SubmitButton>
+      <ConfirmSubmit
+        label={t('salary', 'cancelRun')}
+        variant="destructive"
+        question={t('salary', 'cancelRunConfirm', { name: teacherName, month: monthLabel, total: totalLabel })}
+      />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

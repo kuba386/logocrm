@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { FormError } from '@/components/ui/alert'
 import { roleLabel } from '@/lib/roles'
 import { dayInZone } from '@/lib/timezone'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 const initialState: StaffState = {}
 
@@ -46,9 +48,7 @@ function CancelButton({ invitationId }: { invitationId: string }) {
   return (
     <form action={formAction} className="inline">
       <input type="hidden" name="invitationId" value={invitationId} />
-      <Button type="submit" variant="ghost" size="sm">
-        Отменить
-      </Button>
+      <ConfirmSubmit variant="ghost" label="Отменить" question={t('staff', 'cancelInvitationConfirm')} />
       <FormError message={state.error} />
     </form>
   )

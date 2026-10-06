@@ -1,23 +1,14 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import { useFormStatus } from 'react-dom'
-import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { formatSom, platformPaymentAmountTiyin } from '@logocrm/core'
 import { t } from '@/lib/messages'
+import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { confirmPayment, rejectPayment, type AdminState } from './actions'
 
 const initial: AdminState = {}
 
-function SubmitButton({ children, variant }: { children: React.ReactNode; variant?: 'outline' }) {
-  const { pending } = useFormStatus()
-  return (
-    <Button type="submit" size="sm" variant={variant} disabled={pending}>
-      {children}
-    </Button>
-  )
-}
 
 const field = 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
 
@@ -94,7 +85,15 @@ export function ConfirmForm({
         <input type="checkbox" name="receiptReceived" defaultChecked className="h-4 w-4" />
         {t('admin', 'receiptReceived')}
       </label>
-      <SubmitButton>{t('admin', 'confirm')}</SubmitButton>
+      <ConfirmSubmit
+        variant="default"
+        confirmVariant="default"
+        label={t('admin', 'confirm')}
+        question={t('admin', 'confirmQuestion', {
+          plan: plans.find((p) => p.code === planCode)?.name ?? planCode,
+          months: Number.isNaN(months) ? '?' : months,
+        })}
+      />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
@@ -114,7 +113,7 @@ export function RejectForm({ paymentId }: { paymentId: string }) {
         placeholder={t('admin', 'reasonPlaceholder')}
         className={field}
       />
-      <SubmitButton variant="outline">{t('admin', 'reject')}</SubmitButton>
+      <ConfirmSubmit label={t('admin', 'reject')} question={t('admin', 'rejectQuestion')} />
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>

@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { archiveHomework, assignHomeworkStandalone, reviewHomework, type ClinicalState } from './clinical-actions'
+import { ConfirmAction } from '@/components/ui/confirm-submit'
+import { t } from '@/lib/messages'
 
 export type ExerciseOption = { id: string; title: string; sound: string | null }
 
@@ -86,15 +88,7 @@ function HomeworkCard({
               )
             ) : null}
             {homework.status !== 'reviewed' ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={pending}
-                onClick={() => run(() => archiveHomework(studentId, homework.id))}
-              >
-                Убрать
-              </Button>
+              <ConfirmAction label="Убрать" pending={pending} question={t('clinic', 'removeHomework')} onConfirm={() => run(() => archiveHomework(studentId, homework.id))} />
             ) : null}
           </div>
           {feedbackOpen ? (
