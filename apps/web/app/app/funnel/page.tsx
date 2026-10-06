@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/lib/messages'
 import { funnelStageLabel, FUNNEL_STAGE_CLASSES, type FunnelStage } from '@/lib/students'
+import { calendarDay } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 
 export const metadata = { title: 'Воронка — LogoCRM' }
@@ -114,7 +115,8 @@ export default async function FunnelPage({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span>
-          {t('funnel', 'period')}: {from} — {to}
+          {t('funnel', 'period')}: {calendarDay(from, { day: 'numeric', month: 'long', year: 'numeric' })} —{' '}
+          {calendarDay(to, { day: 'numeric', month: 'long', year: 'numeric' })}
         </span>
         <div className="flex gap-2">
           <Link href={`/app/funnel?from=${backFrom}&to=${backTo}`} className="hover:underline">

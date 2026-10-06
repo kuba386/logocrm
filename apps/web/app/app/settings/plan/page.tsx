@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { formatSom } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
+import { CopyButton } from '@/components/ui/copy-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { label, t } from '@/lib/messages'
@@ -202,7 +203,10 @@ export default async function PlanPage() {
                     <dt className="text-muted-foreground">{t('plan', 'openSource')}</dt>
                     <dd>{label('platformPaymentSource', openClaim.source)}</dd>
                     <dt className="text-muted-foreground">{t('plan', 'openNumber')}</dt>
-                    <dd className="font-mono text-xs">{openClaim.id}</dd>
+                    <dd className="flex flex-wrap items-center gap-2">
+                      <span className="break-all font-mono text-xs">{openClaim.id}</span>
+                      <CopyButton text={openClaim.id} />
+                    </dd>
                   </dl>
                   <p className="text-sm text-muted-foreground">{t('plan', 'openHint')}</p>
                   <WithdrawForm paymentId={openClaim.id} />

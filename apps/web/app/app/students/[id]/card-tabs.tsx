@@ -23,6 +23,15 @@ export type CardTab = {
 export function CardTabs({ tabs, initial }: { tabs: CardTab[]; initial: string }) {
   const [active, setActive] = useState(initial)
 
+  // Выбранная вкладка — в адресе (#goals): обновление страницы и ссылка,
+  // отправленная коллеге, открывают ту же вкладку. replaceState, а не push:
+  // «Назад» ведёт со страницы ученика, а не по вкладкам; hashchange при этом
+  // не срабатывает, прокрутки к разделу не будет.
+  function select(key: string) {
+    setActive(key)
+    window.history.replaceState(window.history.state, '', `#${key}`)
+  }
+
   useEffect(() => {
     function openFromHash() {
       const hash = decodeURIComponent(window.location.hash.slice(1))
@@ -44,7 +53,7 @@ export function CardTabs({ tabs, initial }: { tabs: CardTab[]; initial: string }
       <div
         role="tablist"
         aria-label="Разделы карточки"
-        onKeyDown={(e) => onTablistKeyDown(e, tabs.map((t) => t.key), active, setActive)}
+        onKeyDown={(e) => onTablistKeyDown(e, tabs.map((t) => t.key), active, select)}
         className="-mx-6 flex gap-1 overflow-x-auto border-b border-border bg-background/95 px-6 backdrop-blur sm:sticky sm:top-0 sm:z-10 sm:mx-0 sm:px-0"
       >
         {tabs.map((tab) => {
@@ -58,7 +67,7 @@ export function CardTabs({ tabs, initial }: { tabs: CardTab[]; initial: string }
               aria-selected={selected}
               aria-controls={`panel-${tab.key}`}
               tabIndex={selected ? 0 : -1}
-              onClick={() => setActive(tab.key)}
+              onClick={() => select(tab.key)}
               className={cn(
                 'min-h-11 shrink-0 whitespace-nowrap rounded-t-sm border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:min-h-0',
                 selected ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',

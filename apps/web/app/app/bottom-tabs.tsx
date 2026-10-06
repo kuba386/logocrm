@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LinkPending } from './link-pending'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ICONS } from './nav-icons'
@@ -32,8 +33,9 @@ export function BottomTabs({ links }: { links: { href: string; label: string }[]
             )}
           >
             {/* Активная вкладка — пилюлей за иконкой, а не только оттенком (UX3/UX37). */}
-            <span className={cn('flex h-7 w-12 items-center justify-center rounded-full', active && 'bg-secondary')}>
+            <span className={cn('relative flex h-7 w-12 items-center justify-center rounded-full', active && 'bg-secondary')}>
               {Icon ? <Icon className="size-5" aria-hidden="true" /> : null}
+              <LinkPending className="absolute right-1 top-0.5" />
             </span>
             <span className="max-w-full truncate">{link.label}</span>
           </Link>

@@ -59,7 +59,7 @@ export function VacationDialog({
         open={open}
         onClose={() => setOpen(false)}
         title={`Отпуск: ${teacherName}`}
-        description="Занятия за период будут отменены с причиной «vacation», включая те, где специалист стоит заменой."
+        description="Все занятия специалиста за период будут отменены как отпуск — и те, где он стоит заменой."
       >
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="teacherId" value={teacherId} />
