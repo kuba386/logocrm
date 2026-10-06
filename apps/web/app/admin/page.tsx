@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { label, t } from '@/lib/messages'
-import { formatInTimeZone, monthLabel } from '@/lib/timezone'
+import { DEFAULT_TIME_ZONE, formatInTimeZone, monthLabel } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { ConfirmForm, RejectForm } from './claim-forms'
 import { CreateCenterForm } from './create-center-form'
@@ -295,7 +295,7 @@ export default async function AdminPage() {
                 <TableBody>
                   {(confirmed ?? []).map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="whitespace-nowrap">{p.confirmed_at?.slice(0, 10) ?? '—'}</TableCell>
+                      <TableCell className="whitespace-nowrap">{p.confirmed_at ? formatInTimeZone(p.confirmed_at, DEFAULT_TIME_ZONE, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</TableCell>
                       <TableCell>
                         {label('plan_names', p.plan ?? '')} × {p.months ?? 0} {t('plan', 'monthsShort')}
                         {!p.receipt_received ? (

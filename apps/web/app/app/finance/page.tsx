@@ -16,6 +16,16 @@ import { loadErrorMessage } from '@/lib/errors'
 import { FormError } from '@/components/ui/alert'
 import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm } from './finance-forms'
 
+/** Списки ниже обрезаны до LIST_LIMIT строк. «Всего» — настоящее число из базы
+ *  (count: 'exact'), а если строк больше, чем показано, — так и пишем: иначе
+ *  в 201-й платёж месяца верилось бы как в «Всего: 200». */
+const LIST_LIMIT = 200
+
+function shownOfTotal(shown: number, total: number | null, which = 'последние') {
+  const all = total ?? shown
+  return all > shown ? `Всего: ${all}, показаны ${which} ${shown}` : `Всего: ${all}`
+}
+
 export const metadata = { title: 'Финансы — LogoCRM' }
 
 type Tab = 'payments' | 'expenses' | 'installments' | 'periods'
@@ -192,14 +202,14 @@ async function PaymentsTab({
   totals: { received: number; refunded: number; corrections: number; spent: number; total: number }
   bySource: { name: string; total: number }[]
 }) {
-  const [{ data: payments, error: paymentsError }, { data: payers }, { data: students }] = await Promise.all([
+  const [{ data: payments, error: paymentsError, count: paymentsCount }, { data: payers }, { data: students }] = await Promise.all([
     supabase
       .from('payments')
-      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment')
+      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment', { count: 'exact' })
       .gte('paid_at', fromIso)
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
-      .limit(200),
+      .limit(LIST_LIMIT),
     // Имена — из definer-источников без заметок (0031): таблицы students и
     // payers бухгалтеру закрыты, а экран один на все роли.
     supabase.rpc('payers_brief').order('full_name'),
@@ -251,7 +261,7 @@ async function PaymentsTab({
       <Card>
         <CardHeader>
           <CardTitle>{t('finance', 'tabPayments')}</CardTitle>
-          {paymentsError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
+          {paymentsError ? null : <CardDescription>{shownOfTotal(rows.length, paymentsCount)}</CardDescription>}
         </CardHeader>
         <CardContent>
           {paymentsError ? (
@@ -338,14 +348,14 @@ async function ExpensesTab({
   cashError: string | null
   spent: number
 }) {
-  const [{ data: expenses, error: expensesError }, { data: categories }] = await Promise.all([
+  const [{ data: expenses, error: expensesError, count: expensesCount }, { data: categories }] = await Promise.all([
     supabase
       .from('expenses')
-      .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment')
+      .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment', { count: 'exact' })
       .gte('paid_at', fromIso)
       .lt('paid_at', toIso)
       .order('paid_at', { ascending: false })
-      .limit(200),
+      .limit(LIST_LIMIT),
     supabase.from('expense_categories').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
   ])
   const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
@@ -363,7 +373,7 @@ async function ExpensesTab({
       <Card>
         <CardHeader>
           <CardTitle>{t('finance', 'tabExpenses')}</CardTitle>
-          {expensesError ? null : <CardDescription>Всего: {rows.length}</CardDescription>}
+          {expensesError ? null : <CardDescription>{shownOfTotal(rows.length, expensesCount)}</CardDescription>}
         </CardHeader>
         <CardContent>
           {expensesError ? (
@@ -414,13 +424,13 @@ async function InstallmentsTab({
   timeZone: string
   sources: { id: string; name: string }[]
 }) {
-  const { data: rows, error: installmentsError } = await supabase
+  const { data: rows, error: installmentsError, count: installmentsCount } = await supabase
     .from('installments_view')
-    .select('id, subscription_id, student_id, payer_id, seq, due_date, amount_tiyin, state, cancelled_at')
+    .select('id, subscription_id, student_id, payer_id, seq, due_date, amount_tiyin, state, cancelled_at', { count: 'exact' })
     .is('cancelled_at', null)
     .neq('state', 'paid')
     .order('due_date')
-    .limit(200)
+    .limit(LIST_LIMIT)
   const live = (rows ?? []).filter((r) => r.id && r.due_date && r.amount_tiyin != null)
   const studentIds = [...new Set(live.map((r) => r.student_id).filter((v): v is string => Boolean(v)))]
   const payerIds = [...new Set(live.map((r) => r.payer_id).filter((v): v is string => Boolean(v)))]
@@ -458,7 +468,7 @@ async function InstallmentsTab({
     <Card>
       <CardHeader>
         <CardTitle>{t('finance', 'tabInstallments')}</CardTitle>
-        {installmentsError ? null : <CardDescription>Всего: {live.length}</CardDescription>}
+        {installmentsError ? null : <CardDescription>{shownOfTotal(rows?.length ?? 0, installmentsCount, 'ближайшие')}</CardDescription>}
       </CardHeader>
       <CardContent>
         {installmentsError ? (

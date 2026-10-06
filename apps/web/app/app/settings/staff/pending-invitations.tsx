@@ -1,8 +1,9 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import { cancelInvitation, type StaffState } from './actions'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
+import { CopyButton } from '@/components/ui/copy-button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { FormError } from '@/components/ui/alert'
 import { roleLabel } from '@/lib/roles'
@@ -22,24 +23,6 @@ export type PendingInvitation = {
   email: string | null
   url: string
   expiresAt: string
-}
-
-function CopyButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={async () => {
-        await navigator.clipboard.writeText(url)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      }}
-    >
-      {copied ? 'Скопировано' : 'Скопировать ссылку'}
-    </Button>
-  )
 }
 
 function CancelButton({ invitationId }: { invitationId: string }) {
@@ -91,7 +74,7 @@ export function PendingInvitations({ invitations, timeZone }: { invitations: Pen
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <CopyButton url={invitation.url} />
+                <CopyButton text={invitation.url} label="Скопировать ссылку" />
                 <a
                   className={buttonVariants({ variant: 'outline', size: 'sm' })}
                   href={whatsappHref(invitation)}

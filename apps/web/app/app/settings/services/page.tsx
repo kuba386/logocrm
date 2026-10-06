@@ -30,7 +30,7 @@ export default async function ServicesPage() {
       <div>
         <h1 className="page-title">Услуги</h1>
         <p className="text-sm text-muted-foreground">
-          Длительность отсюда подставляется в расписание. Цена — в сомах, в базе хранится в тыйынах.
+          Длительность отсюда подставляется в расписание. Цена — в сомах.
         </p>
       </div>
 

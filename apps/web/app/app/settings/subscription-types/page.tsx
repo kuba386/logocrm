@@ -143,7 +143,7 @@ export default async function SubscriptionTypesPage() {
       <div>
         <h1 className="page-title">Типы абонементов</h1>
         <p className="text-sm text-muted-foreground">
-          Что администратор продаёт на карточке ученика. Цена — в сомах, в базе хранится в тыйынах.
+          Что администратор продаёт на карточке ученика. Цена — в сомах.
         </p>
       </div>
 

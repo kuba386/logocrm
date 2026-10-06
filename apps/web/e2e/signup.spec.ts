@@ -34,10 +34,15 @@ test('Регистрация центра: аккаунт → центр → ч�
   await expect(page.getByText('Готово 0 из 8')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Перейти →' })).toHaveCount(8)
 
-  // «Скрыть» — cookie на браузер и центр: после перезагрузки плашки нет.
+  // «Скрыть» — cookie на браузер и центр: после перезагрузки плашка свёрнута
+  // в строку с «Показать», а не пропала насовсем.
   await page.getByRole('button', { name: 'Скрыть' }).click()
   await expect(page.getByRole('heading', { name: 'Настройка центра' })).toHaveCount(0)
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Настройка центра' })).toHaveCount(0)
+  await expect(page.getByText('Настройка центра скрыта — готово 0 из 8')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Показать', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Настройка центра' })).toBeVisible()
 })

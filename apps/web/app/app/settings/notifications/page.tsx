@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { label, t } from '@/lib/messages'
 import { TemplateForm } from './template-form'
 
@@ -93,7 +93,6 @@ export default async function NotificationsSettingsPage() {
         <Card key={event.type}>
           <CardHeader>
             <CardTitle className="text-base">{label('eventType', event.type)}</CardTitle>
-            <CardDescription>{event.type}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 sm:grid-cols-2">
             {CHANNELS.map((channel) => {
