@@ -5,7 +5,9 @@ import {
   formatKgPhone,
   formatSom,
   parseDebtSummary,
+  pickSavedFilterParams,
   subscriptionOverdueAddressable,
+  toTiyin,
   whatsappNumber,
   pluralRu,
 } from '@logocrm/core'
@@ -15,6 +17,10 @@ import { debtProblems } from '@/lib/debts'
 import { centerTimeZone, dayInZone, isoDayInZone } from '@/lib/timezone'
 import { canPayments, isFinance } from '@/lib/roles'
 import { DebtActions } from './debt-dialogs'
+import { SavedFilters } from '../saved-filters/saved-filters'
+import { loadSavedFilters } from '../saved-filters/load'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -46,16 +52,21 @@ type Row = {
   zeroLeft: boolean
   lastLessonAt: string | null
   nextLessonAt: string | null
+  /** Ключ сортировки из SQL (0076): максимум двух корзин — с ним сравнивается порог «от суммы». */
+  sortTiyin: number
 }
 
 export default async function DebtsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; sort?: string }>
+  searchParams: Promise<{ filter?: string; sort?: string; min?: string }>
 }) {
   const params = await searchParams
   const filter: Filter = params.filter === 'debt' || params.filter === 'zero' ? params.filter : 'all'
   const sort: Sort = params.sort === 'name' ? 'name' : 'amount'
+  // Порог «от суммы» — целые сомы, проверка та же, что у сохранённого фильтра (0094).
+  const currentFilter = pickSavedFilterParams('debts', params)
+  const minSom = currentFilter.min ? Number(currentFilter.min) : null
 
   const supabase = await createClient()
 
@@ -135,10 +146,17 @@ export default async function DebtsPage({
     zeroLeft: r.zero_left,
     lastLessonAt: (r.last_lesson_at as string | null) ?? null,
     nextLessonAt: (r.next_lesson_at as string | null) ?? null,
+    sortTiyin: Number(r.sort_tiyin ?? 0),
   }))
 
   if (filter === 'debt') rows = rows.filter((r) => !r.zeroLeft)
   if (filter === 'zero') rows = rows.filter((r) => r.zeroLeft)
+  // Сравнение с суммой, которую уже посчитал SQL (sort_tiyin) — своей формулы долга нет.
+  // Строки отсортированы по ней по убыванию, так что срез max_rows подходящих не теряет.
+  if (minSom !== null) {
+    const minTiyin = toTiyin(minSom)
+    rows = rows.filter((r) => r.sortTiyin >= minTiyin)
+  }
 
   // «По сумме» — порядок из SQL (sort_tiyin desc, full_name, student_id): максимум двух
   // корзин, а не сумма — долг 500 сом не выше просрочки 50 000 (Database.md, «Два слова…»).
@@ -154,8 +172,15 @@ export default async function DebtsPage({
   // PostgREST режет ответ по max_rows: строк может быть больше, чем показано.
   const truncated = problematic.length >= 1000
 
-  const filterLink = (value: Filter) => `/app/debts?filter=${value}&sort=${sort}`
-  const sortLink = (value: Sort) => `/app/debts?filter=${filter}&sort=${value}`
+  const debtsHref = (next: { filter?: Filter; sort?: Sort; min?: string | null }) => {
+    const search = new URLSearchParams({ filter: next.filter ?? filter, sort: next.sort ?? sort })
+    const min = next.min === undefined ? currentFilter.min : next.min
+    if (min) search.set('min', min)
+    return `/app/debts?${search.toString()}`
+  }
+  const filterLink = (value: Filter) => debtsHref({ filter: value })
+  const sortLink = (value: Sort) => debtsHref({ sort: value })
+  const savedFilters = await loadSavedFilters(supabase, 'debts')
 
   return (
     <div className="space-y-6">
@@ -167,6 +192,11 @@ export default async function DebtsPage({
           {/* Отдельная сумма, не сложенная с долгом за занятия — разные деньги (docs/Database.md). */}
           {totalSubscriptionOverdue > 0 ? ` · просрочка по абонементам ${formatSom(totalSubscriptionOverdue)}` : ''}
         </p>
+        {minSom !== null ? (
+          <p className="text-sm text-muted-foreground">
+            Итоги в шапке — по всем должникам; в списке — только с долгом от {formatSom(toTiyin(minSom))}.
+          </p>
+        ) : null}
         {truncated ? (
           <p className="text-sm text-destructive">
             Показаны не все ученики — сервер отдаёт не больше 1000 строк; итоги в шапке считаются по всем.
@@ -201,6 +231,35 @@ export default async function DebtsPage({
           </Link>
         </div>
       </div>
+
+      {/* GET-форма: порог попадает в адрес, как остальные фильтры, и сохраняется в наборе. */}
+      <form action="/app/debts" className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="filter" value={filter} />
+        <input type="hidden" name="sort" value={sort} />
+        <div className="space-y-1">
+          <Label htmlFor="debts-min">Долг от, сом</Label>
+          <Input
+            id="debts-min"
+            name="min"
+            inputMode="numeric"
+            pattern="[1-9][0-9]{0,6}"
+            title="Целое число сомов, например 5000"
+            defaultValue={currentFilter.min ?? ''}
+            placeholder="Например, 5000"
+            className="w-40"
+          />
+        </div>
+        <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Показать
+        </button>
+        {minSom !== null ? (
+          <Link href={debtsHref({ min: null })} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            Без порога
+          </Link>
+        ) : null}
+      </form>
+
+      <SavedFilters page="debts" basePath="/app/debts" current={currentFilter} data={savedFilters} />
 
       {rows.length === 0 ? (
         <Card>

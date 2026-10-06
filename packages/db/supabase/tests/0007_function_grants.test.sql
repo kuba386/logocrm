@@ -140,7 +140,8 @@ from unnest(array[
   'public.digest_debt_text(uuid)',
   'public.export_center_predicate(text)',
   'public.exercise_is_specialist_only(text[])',
-  'public.center_payments_day(uuid,date)'
+  'public.center_payments_day(uuid,date)',
+  'public.saved_filter_params_ok(text,jsonb)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -426,7 +427,11 @@ select set_eq(
     ('accept_subscription_payment(uuid,integer,uuid,date,integer)'),
     ('write_off_subscription(uuid,integer,text)'),
     -- 0093: отмена ошибочного платежа владельцем.
-    ('void_payment(uuid,text)')
+    ('void_payment(uuid,text)'),
+    -- 0094: сохранённые фильтры; saved_filter_pages — предикат политики чтения.
+    ('save_filter(text,text,jsonb)'),
+    ('archive_saved_filter(uuid)'),
+    ('saved_filter_pages()')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

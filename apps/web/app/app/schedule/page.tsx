@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { pickSavedFilterParams } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
@@ -9,6 +10,8 @@ import { CreateLessonDialog } from './create-dialog'
 import { WeekGrid, type DayColumn } from './week-grid'
 import type { LessonView } from './lesson-panel'
 import { ScheduleFilters } from './filters'
+import { SavedFilters } from '../saved-filters/saved-filters'
+import { loadSavedFilters } from '../saved-filters/load'
 
 export const metadata = { title: 'Расписание — LogoCRM' }
 
@@ -140,6 +143,12 @@ export default async function SchedulePage({
   const teacherOptions = (teachers ?? []).map((t) => ({ id: t.id, fullName: t.full_name }))
 
   const todayIso = isoDayInZone(new Date(), timeZone)
+  // Фильтр живёт в адресе и переживает смену недели: раньше стрелки сбрасывали
+  // специалиста и кабинет. Неделя в сохранённый набор не входит (0094).
+  const currentFilter = pickSavedFilterParams('schedule', params)
+  const weekHref = (week: string) =>
+    `/app/schedule?${new URLSearchParams({ week, ...currentFilter }).toString()}`
+  const savedFilters = await loadSavedFilters(supabase, 'schedule')
   const weekLabel =
     formatInTimeZone(`${weekStart}T12:00:00Z`, timeZone, { day: 'numeric', month: 'short' }) +
     ' – ' +
@@ -175,12 +184,12 @@ export default async function SchedulePage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PeriodNav
           label={weekLabel}
-          prev={`/app/schedule?week=${addDays(weekStart, -7)}`}
-          next={`/app/schedule?week=${addDays(weekStart, 7)}`}
+          prev={weekHref(addDays(weekStart, -7))}
+          next={weekHref(addDays(weekStart, 7))}
           prevLabel="Предыдущая неделя"
           nextLabel="Следующая неделя"
           today={{
-            href: `/app/schedule?week=${todayIso}`,
+            href: weekHref(todayIso),
             label: 'Сегодня',
             current: todayIso >= weekStart && todayIso <= addDays(weekStart, 6),
           }}
@@ -195,6 +204,14 @@ export default async function SchedulePage({
           showTeacherFilter={canManage}
         />
       </div>
+
+      <SavedFilters
+        page="schedule"
+        basePath="/app/schedule"
+        current={currentFilter}
+        keep={params.week ? { week: weekStart } : {}}
+        data={savedFilters}
+      />
 
       <Card>
         <CardHeader className="pb-3">
