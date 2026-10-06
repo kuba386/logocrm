@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { timeInZone, dayInZone } from '@/lib/timezone'
+import { SubmitButton } from '@/components/ui/submit-button'
 
 const initial: ScheduleState = { message: '' }
 
@@ -118,9 +119,9 @@ export function VacationDialog({
           <FormNotice message={state.notice} />
 
           <div className="flex gap-2">
-            <Button type="submit" variant="destructive" size="sm" disabled={preview === null}>
+            <SubmitButton variant="destructive" size="sm" disabled={preview === null}>
               Оформить отпуск
-            </Button>
+            </SubmitButton>
             <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
               Отмена
             </Button>
