@@ -15,10 +15,14 @@ test.use({ storageState: { cookies: [], origins: [] } })
 test('Регистрация центра: аккаунт → центр → чеклист настройки', async ({ page }) => {
   const email = `signup-${Date.now()}@logocrm.kg`
 
-  await page.goto('/login')
+  // С лендинга «Попробовать бесплатно» ведёт на режим регистрации — свой
+  // заголовок и главная кнопка, а не вторая кнопка под «Войти».
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Попробовать бесплатно' }).first().click()
+  await expect(page.getByRole('heading', { name: 'Регистрация центра' })).toBeVisible()
   await page.locator('#email').fill(email)
   await page.locator('#password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Зарегистрироваться' }).click()
+  await page.getByRole('button', { name: 'Зарегистрировать центр' }).click()
 
   await expect(page).toHaveURL(/\/onboarding(\?|$)/, { timeout: 20_000 })
   await page.locator('#name').fill('Центр регистрации e2e')

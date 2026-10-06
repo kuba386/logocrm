@@ -28,7 +28,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
       <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>{t('booking', 'notFoundTitle')}</CardTitle>
+            <CardTitle as="h1">{t('booking', 'notFoundTitle')}</CardTitle>
             <CardDescription>{t('booking', 'notFoundDescription')}</CardDescription>
           </CardHeader>
         </Card>
@@ -45,7 +45,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>{info.center_name}</CardTitle>
+          <CardTitle as="h1">{info.center_name}</CardTitle>
           <CardDescription>{t('booking', 'pageDescription')}</CardDescription>
         </CardHeader>
         <CardContent>

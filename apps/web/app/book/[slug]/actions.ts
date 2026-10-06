@@ -9,6 +9,8 @@ import { zonedDateTimeToIso } from '@/lib/timezone'
 export type BookingState = {
   message?: string
   notice?: string
+  /** Что именно записали — для экрана «Заявка отправлена» (UX-аудит, пакет 6). */
+  summary?: { serviceId: string; teacherId: string; date: string; time: string; childName: string; parentPhone: string }
 }
 
 const submitSchema = z.object({
@@ -61,7 +63,10 @@ export async function submitBooking(_prev: BookingState, formData: FormData): Pr
     return { message: toAppError(error, t('booking', 'submitFailed')).message }
   }
 
-  return { notice: t('booking', 'submitSuccess') }
+  return {
+    notice: t('booking', 'submitSuccess'),
+    summary: { serviceId, teacherId, date, time, childName, parentPhone },
+  }
 }
 
 export async function getTeacherBusy(slug: string, teacherId: string, date: string) {

@@ -42,7 +42,7 @@ export default async function SelectCenterPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>Выберите центр</CardTitle>
+          <CardTitle as="h1">Выберите центр</CardTitle>
           <CardDescription>
             {centers.length > 1
               ? 'Вы состоите в нескольких центрах.'

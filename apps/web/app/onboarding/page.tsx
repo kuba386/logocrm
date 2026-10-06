@@ -5,7 +5,7 @@ import { OnboardingForm } from './onboarding-form'
 
 export const metadata = { title: 'Создание центра — LogoCRM' }
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ own?: string }> }) {
   const supabase = await createClient()
 
   const {
@@ -22,17 +22,22 @@ export default async function OnboardingPage() {
     redirect('/select-center')
   }
 
-  // Отключённого сотрудника не встречаем предложением завести свой центр.
-  const { data: revoked } = await supabase.rpc('was_access_revoked')
-  if (revoked) {
-    redirect('/access-revoked')
+  // Отключённого сотрудника не встречаем предложением завести свой центр —
+  // если только он сам не нажал «Открыть собственный центр» (?own=1): без этой
+  // оговорки ссылка со страницы /access-revoked вела обратно на неё же.
+  const { own } = await searchParams
+  if (own !== '1') {
+    const { data: revoked } = await supabase.rpc('was_access_revoked')
+    if (revoked) {
+      redirect('/access-revoked')
+    }
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Создайте свой центр</CardTitle>
+          <CardTitle as="h1">Создайте свой центр</CardTitle>
           <CardDescription>
             Первые 14 дней — бесплатный пробный период. Тариф можно сменить позже.
           </CardDescription>

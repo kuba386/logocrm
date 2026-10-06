@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
-import { timeInZone } from '@/lib/timezone'
+import { calendarDay, timeInZone } from '@/lib/timezone'
+import { formatKgPhone } from '@logocrm/core'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
 import { getTeacherBusy, submitBooking, type BookingState } from './actions'
 
@@ -68,7 +69,34 @@ export function BookingForm({
   const keep = useKeepValuesOnError(state, Boolean(state.message))
 
   if (state.notice) {
-    return <FormNotice message={state.notice} />
+    const summary = state.summary
+    const service = summary ? services.find((x) => x.id === summary.serviceId) : undefined
+    const teacher = summary ? teachers.find((x) => x.id === summary.teacherId) : undefined
+    return (
+      <div className="space-y-4">
+        <FormNotice message={state.notice} />
+        {summary ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md border border-border p-4 text-sm">
+            <dt className="text-muted-foreground">{t('booking', 'childNameLabel')}</dt>
+            <dd className="font-medium">{summary.childName}</dd>
+            <dt className="text-muted-foreground">{t('booking', 'serviceLabel')}</dt>
+            <dd className="font-medium">{service?.name ?? '—'}</dd>
+            <dt className="text-muted-foreground">{t('booking', 'teacherLabel')}</dt>
+            <dd className="font-medium">{teacher?.full_name ?? '—'}</dd>
+            <dt className="text-muted-foreground">{t('booking', 'whenLabel')}</dt>
+            <dd className="font-medium">
+              {calendarDay(summary.date, { day: 'numeric', month: 'long', weekday: 'long' })}, {summary.time}
+            </dd>
+          </dl>
+        ) : null}
+        {summary ? (
+          <p className="text-sm text-muted-foreground">{t('booking', 'willCall', { phone: formatKgPhone(summary.parentPhone) })}</p>
+        ) : null}
+        <Button type="button" variant="outline" className="w-full" onClick={() => window.location.reload()}>
+          {t('booking', 'bookAnother')}
+        </Button>
+      </div>
+    )
   }
 
   return (

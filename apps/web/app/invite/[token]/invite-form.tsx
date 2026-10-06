@@ -19,6 +19,7 @@ import { TurnstileField } from '@/components/turnstile-field'
 import { EmailCodeStep } from '@/components/email-code-step'
 import { signOut } from '@/app/login/actions'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { PasswordInput } from '@/components/ui/password-input'
 
 const initialState: InviteState = {}
 
@@ -119,10 +120,9 @@ export function InviteForm({ token }: { token: string }) {
 
       <div className="space-y-2">
         <Label htmlFor="password">Пароль</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete={isSignUp ? 'new-password' : 'current-password'}
           required
           minLength={6}
