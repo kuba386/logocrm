@@ -228,8 +228,11 @@ function InviteDialogBody({
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email (необязательно)</Label>
-        <Input id="email" name="email" type="email" />
+        <Label htmlFor="email">Email (для заметки)</Label>
+        <Input id="email" name="email" type="email" aria-describedby="email-hint" />
+        <p id="email-hint" className="text-xs text-muted-foreground">
+          Письмо на него не уходит — ссылку отправьте сами: копией или в WhatsApp.
+        </p>
       </div>
 
       <FormError message={state.error} />

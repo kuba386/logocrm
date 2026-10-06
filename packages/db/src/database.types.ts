@@ -1808,6 +1808,7 @@ export type Database = {
           created_by: string | null
           email: string | null
           expires_at: string
+          full_name: string | null
           id: string
           payer_id: string | null
           phone: string | null
@@ -1823,6 +1824,7 @@ export type Database = {
           created_by?: string | null
           email?: string | null
           expires_at?: string
+          full_name?: string | null
           id?: string
           payer_id?: string | null
           phone?: string | null
@@ -1838,6 +1840,7 @@ export type Database = {
           created_by?: string | null
           email?: string | null
           expires_at?: string
+          full_name?: string | null
           id?: string
           payer_id?: string | null
           phone?: string | null

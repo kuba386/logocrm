@@ -3,12 +3,18 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { roleLabel } from '@/lib/roles'
+import { cookies } from 'next/headers'
+import { FormError } from '@/components/ui/alert'
+import { INVITE_ERROR_COOKIE } from '@/lib/invite'
 import { AcceptSignedInForm, InviteForm } from './invite-form'
 
 export const metadata = { title: 'Приглашение — LogoCRM', robots: { index: false, follow: false } }
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  // Причина неудачного принятия из /auth/callback — httpOnly-кука, которую
+  // ставит только наш сервер (не параметр адреса); живёт 2 минуты.
+  const acceptError = (await cookies()).get(INVITE_ERROR_COOKIE)?.value
   const supabase = await createClient()
 
   // invitation_preview доступна анониму и отдаёт только название центра,
@@ -55,7 +61,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               : 'Создайте аккаунт или войдите — доступ откроется сразу после этого.'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <FormError message={acceptError} />
           {user ? <AcceptSignedInForm token={token} /> : <InviteForm token={token} />}
         </CardContent>
       </Card>

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { acceptInvitation } from '@/app/invite/[token]/actions'
-import { INVITE_COOKIE } from '@/lib/invite'
+import { INVITE_COOKIE, INVITE_ERROR_COOKIE } from '@/lib/invite'
 
 /**
  * Обмен кода из письма на сессию. Если пользователь пришёл по приглашению,
@@ -30,8 +30,21 @@ export async function GET(request: NextRequest) {
   if (inviteToken) {
     const accepted = await acceptInvitation(inviteToken)
     if (accepted.error) {
-      // Сессия уже есть — пусть человек попадёт внутрь, а не в тупик.
-      return NextResponse.redirect(`${origin}/select-center`)
+      // Сессия уже есть, но приглашение не принято — назад на страницу
+      // приглашения: она покажет «Принять» под этим аккаунтом, и причина
+      // отказа (истекла, уже использована, лимит) будет видна, а не молча
+      // потеряна на выборе центра (ревью 6.10.2026).
+      // Кука больше не нужна: токен — в адресе. Иначе в течение часа любой
+      // заход через callback (например, сброс пароля) снова пытался бы принять.
+      store.delete(INVITE_COOKIE)
+      store.set(INVITE_ERROR_COOKIE, accepted.error.slice(0, 300), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: origin.startsWith('https://'),
+        path: '/invite',
+        maxAge: 120,
+      })
+      return NextResponse.redirect(`${origin}/invite/${encodeURIComponent(inviteToken)}`)
     }
   }
 
