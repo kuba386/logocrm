@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PeriodNav } from '@/components/ui/period-nav'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { FormError } from '@/components/ui/alert'
+import { loadErrorMessage } from '@/lib/errors'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -34,13 +36,17 @@ export async function MonthSummary({
   const fromIso = startOfDayInZone(first, timeZone)
   const toIso = startOfDayInZone(next, timeZone)
 
-  const [{ data: cash }, { data: revenue }, { data: salary }, { data: expenses }, { data: categories }] = await Promise.all([
+  const results = await Promise.all([
     supabase.from('cash_by_source').select('received_tiyin, refunded_tiyin, corrections_tiyin, spent_tiyin, total_tiyin').eq('month', first),
     supabase.from('revenue_by_month').select('revenue_tiyin, visits').eq('month', first),
     supabase.rpc('salary_summary', { p_month: first }),
     supabase.from('expenses').select('category_id, amount_tiyin').gte('paid_at', fromIso).lt('paid_at', toIso),
     supabase.from('expense_categories').select('id, name'),
   ])
+  const [{ data: cash }, { data: revenue }, { data: salary }, { data: expenses }, { data: categories }] = results
+  // Любой отказ — плашка вместо плиток: «Касса 0 сом» при сбое читалась бы
+  // как настоящая цифра (UX-аудит 6.10.2026, пакет 4).
+  const loadError = results.find((r) => r.error)?.error ?? null
 
   const sum = <T,>(rows: T[] | null, pick: (r: T) => number | null) => (rows ?? []).reduce((acc, r) => acc + (pick(r) ?? 0), 0)
   const received = sum(cash, (r) => r.received_tiyin) + sum(cash, (r) => r.corrections_tiyin) + sum(cash, (r) => r.refunded_tiyin)
@@ -77,7 +83,8 @@ export async function MonthSummary({
         />
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3" data-testid="month-summary">
+        {loadError ? <FormError message={loadErrorMessage(loadError, t('reports', 'monthLoadFailed'))} /> : null}
+        <div hidden={Boolean(loadError)} className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3" data-testid="month-summary">
           <StatTile icon={ArrowDownToLine} tone="success" value={formatSom(received)} label={t('reports', 'monthReceived')} hint={t('reports', 'monthReceivedHint')} />
           <StatTile icon={ArrowUpFromLine} tone={spent > 0 ? 'warning' : 'neutral'} value={formatSom(spent)} label={t('reports', 'monthSpent')} />
           <StatTile icon={Banknote} tone="primary" value={formatSom(total)} label={t('reports', 'monthCash')} hint={t('reports', 'monthCashHint')} />
@@ -91,7 +98,7 @@ export async function MonthSummary({
           <StatTile icon={Users} tone="neutral" value={formatSom(salaryTotal)} label={t('reports', 'monthSalary')} hint={t('reports', 'monthSalaryHint')} />
         </div>
 
-        <div className="space-y-2">
+        <div hidden={Boolean(loadError)} className="space-y-2">
           <h3 className="text-sm font-medium">{t('reports', 'monthByCategory')}</h3>
           {categoryRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('reports', 'monthNoExpenses')}</p>

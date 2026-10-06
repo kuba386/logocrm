@@ -71,6 +71,8 @@ export async function getTeacherBusy(slug: string, teacherId: string, date: stri
     p_teacher_id: teacherId,
     p_date: date,
   })
-  if (error) return []
-  return data ?? []
+  // Отказ — не «всё свободно»: пустой список выглядел бы как свободный день,
+  // а отказ пришёл бы только после отправки заявки.
+  if (error) return { busy: [], failed: true }
+  return { busy: data ?? [], failed: false }
 }
