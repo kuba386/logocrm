@@ -272,7 +272,8 @@ select is(public.refund_calc((select subscription_id from t_sale2 limit 1)),
   'refund_calc (invoker) под registrar совпадает с subscription_summary (definer) — после 0028 оба число (Р6)');
 select lives_ok(
   $q$ select public.refund_subscription((select subscription_id from t_sale2 limit 1),
-        (select refund_tiyin from public.subscription_summary((select subscription_id from t_sale2 limit 1)))) $q$,
+        (select refund_tiyin from public.subscription_summary((select subscription_id from t_sale2 limit 1))),
+        (select payout_tiyin from public.subscription_summary((select subscription_id from t_sale2 limit 1)))) $q$,
   'refund_subscription с живой рассрочкой — registrar: триггерный installment_plans_cancel_live пропустил');
 
 reset role;
@@ -312,7 +313,7 @@ select throws_ok(
   $q$ select public.freeze_subscription((select id from t_ins where name = 'sub2'), '2027-01-01') $q$,
   '42501', null, 'freeze_subscription — finance нет');
 select throws_ok(
-  $q$ select public.refund_subscription((select id from t_ins where name = 'sub2'), 0) $q$,
+  $q$ select public.refund_subscription((select id from t_ins where name = 'sub2'), 0, 0) $q$,
   '42501', null, 'refund_subscription — finance не гасит абонемент (Р7)');
 select throws_ok(
   $q$ select public.transfer_remaining((select id from t_ins where name = 'sub2'), 'eeeeeeee-0000-0000-0000-000000000001') $q$,

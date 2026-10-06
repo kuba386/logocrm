@@ -603,9 +603,13 @@ select is(
 
 -- Возврат 1 500 сом: paid_tiyin → 0. Строки мёртвого плана B не должны
 -- стать overdue.
+-- 0090 Р6: строку возврата по абонементу пишет только refund_subscription —
+-- здесь нужна именно строка возврата на живом абонементе, флаг вручную.
+select set_config('logocrm.subscription_refund', '1', true);
 insert into t_ins (name, id)
 select 'p_refund', public.record_payment('dddddddd-0000-0000-0000-000000000001', -150000, 'refund',
   'eeeeeeee-0000-0000-0000-000000000001', '88880000-0000-0000-0000-000000000004', null, now(), 'возврат');
+select set_config('logocrm.subscription_refund', '', true);
 
 select is(
   (select count(*)::int from public.installments_view

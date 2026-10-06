@@ -296,12 +296,15 @@ select throws_ok(
 
 -- 18. Возврат больше оплаченного — paid_tiyin не уходит в минус --------------------
 
+-- 0090 Р6: без флага гейт отдал бы 42501 раньше CHECK — проверяем именно CHECK.
+select set_config('logocrm.subscription_refund', '1', true);
 select throws_ok(
   $q$ select public.record_payment('bbbbbbbb-0000-0000-0000-000000000001', -900000, 'refund',
                                    'eeeeeeee-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001') $q$,
   '23514', null,
   'Возврат больше оплаченного — CHECK subscriptions_paid_not_negative'
 );
+select set_config('logocrm.subscription_refund', '', true);
 
 
 -- 19-21. Замок месяца: payments и attendance, старая и новая дата -----------------
