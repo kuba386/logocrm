@@ -1767,3 +1767,26 @@ error)` берёт ставку из `ai_model_rates()` (VALUES, тыйыны з
 `assistant_quota()` — `used/limit/intents` всем сотрудникам, имя тарифа —
 только owner/admin (как `center_limits`, куда добавлен
 `usage.ai_questions_month`).
+
+## Сохранённые фильтры (0094)
+
+`saved_filters` — личные наборы фильтров сотрудника для `/app/schedule` и
+`/app/debts`. Строка принадлежит паре `(user_id, center_id)`: видит её только
+автор, только в том центре, где сохранил, и только для страниц своей роли —
+`saved_filter_pages()` (расписание — owner/admin/registrar/teacher, долги —
+`can_payments()`). Отозванный участник со старым claim `center_id` и человек,
+понижённый до parent, свои прежние наборы не видят: роль проверяет политика,
+а не одно `current_center()`.
+
+- **Значения держит CHECK**, не функция: `saved_filter_params_ok(page, params)`
+  — ключи по странице, uuid по регулярке, перечни, `min` — целые сомы
+  1…9 999 999. Зеркало — `packages/core/src/saved-filters.ts`, общий набор
+  случаев в Vitest и pgTAP. Неделя расписания не хранится.
+- **Запись только через RPC**: `save_filter(page, name, params)` (повтор имени
+  без учёта регистра перезаписывает набор; новых — не больше 20 на страницу)
+  и `archive_saved_filter(id)` (чужой, архивный, несуществующий — один и тот же
+  42704). У `authenticated` только SELECT, у `service_role` ничего. Обе RPC
+  берут один advisory-lock на (центр, пользователь, страница).
+- **Без аудита и вне экспорта центра**: имя набора — свободный текст
+  сотрудника, owner/admin его видеть незачем (как `bot_pending_actions`).
+- Под readonly-guard: в просроченном центре сохранение и удаление — PT402.

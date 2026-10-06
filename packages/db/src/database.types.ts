@@ -3544,6 +3544,53 @@ export type Database = {
           },
         ]
       }
+      saved_filters: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          name: string
+          page: string
+          params: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name: string
+          page: string
+          params?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          page?: string
+          params?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_filters_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           center_id: string
@@ -4927,6 +4974,7 @@ export type Database = {
         Args: { p_id: string }
         Returns: boolean
       }
+      archive_saved_filter: { Args: { p_id: string }; Returns: undefined }
       archive_student: { Args: { p_id: string }; Returns: undefined }
       archive_subscription_type: { Args: { p_id: string }; Returns: undefined }
       archive_syllable_assessment: { Args: { p_id: string }; Returns: boolean }
@@ -6100,6 +6148,15 @@ export type Database = {
           p_title: string
         }
         Returns: string
+      }
+      save_filter: {
+        Args: { p_name: string; p_page: string; p_params: Json }
+        Returns: string
+      }
+      saved_filter_pages: { Args: never; Returns: string[] }
+      saved_filter_params_ok: {
+        Args: { p_page: string; p_params: Json }
+        Returns: boolean
       }
       seed_attendance_statuses: {
         Args: { p_center_id: string }
