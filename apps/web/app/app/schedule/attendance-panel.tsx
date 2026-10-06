@@ -37,7 +37,7 @@ function StatusButton({ statusCode, color, active, name }: { statusCode: string;
       className={cn(
         // На телефоне отмечают прямо на занятии — 44px, как у остальных кнопок (UX66);
         // выбранный статус — не только цветом, но и галочкой (UX37).
-        'inline-flex min-h-11 items-center gap-1 rounded-md border px-3 text-sm font-medium transition-colors disabled:cursor-wait sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-xs',
+        'inline-flex min-h-11 items-center gap-1 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-wait sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-xs',
         statusClass(color, active),
         isThisPending && 'opacity-60',
       )}

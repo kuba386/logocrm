@@ -200,13 +200,13 @@ export function LibraryTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
-        <Input
+        <Input aria-label="Поиск"
           placeholder="Поиск по названию, тегам, инструкции"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-xs"
         />
-        <Select value={area} onChange={(event) => setArea(event.target.value)} className="max-w-[190px]">
+        <Select aria-label="Фильтр: область" value={area} onChange={(event) => setArea(event.target.value)} className="max-w-[190px]">
           <option value="">Все области</option>
           {areas.map((value) => (
             <option key={value} value={value}>
@@ -214,7 +214,7 @@ export function LibraryTable({
             </option>
           ))}
         </Select>
-        <Select value={sound} onChange={(event) => setSound(event.target.value)} className="max-w-[140px]">
+        <Select aria-label="Фильтр: звук" value={sound} onChange={(event) => setSound(event.target.value)} className="max-w-[140px]">
           <option value="">Все звуки</option>
           {sounds.map((value) => (
             <option key={value} value={value}>
@@ -222,7 +222,7 @@ export function LibraryTable({
             </option>
           ))}
         </Select>
-        <Select value={stageCode} onChange={(event) => setStageCode(event.target.value)} className="max-w-[190px]">
+        <Select aria-label="Фильтр: этап" value={stageCode} onChange={(event) => setStageCode(event.target.value)} className="max-w-[190px]">
           <option value="">Все этапы</option>
           {stages.map((stage) => (
             <option key={stage.code} value={stage.code}>

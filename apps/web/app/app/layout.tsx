@@ -171,6 +171,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
+      {/* Первый элемент страницы: с клавиатуры не проходить поиск и до 17
+          пунктов меню перед каждым экраном (UX-аудит, пакет 7, UX45). */}
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-4 print:hidden"
+      >
+        Перейти к содержимому
+      </a>
       {/* Десктоп: постоянный сайдбар, sidebar-width из DESIGN.md (240px = w-60). */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-card sm:flex print:hidden">
         <div className="border-b border-border p-4">{centerHeader}</div>
@@ -196,7 +204,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <PlanBanner limits={limits} />
         </div>
 
-        <main className={cn('container flex-1 py-6 sm:py-8 print:max-w-none print:p-0', bottomTabs ? 'pb-20 sm:pb-8' : '')}>
+        <main
+          id="main"
+          tabIndex={-1}
+          className={cn('container flex-1 py-6 outline-none sm:py-8 print:max-w-none print:p-0', bottomTabs ? 'pb-20 sm:pb-8' : '')}
+        >
           {children}
         </main>
 

@@ -73,13 +73,13 @@ export function StudentsTable({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
-        <Input
+        <Input aria-label="Поиск"
           placeholder={canSeeContacts ? 'Поиск по ФИО или телефону' : 'Поиск по ФИО'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-xs"
         />
-        <Select value={status} onChange={(event) => setStatus(event.target.value)} className="max-w-[190px]">
+        <Select aria-label="Фильтр: статус" value={status} onChange={(event) => setStatus(event.target.value)} className="max-w-[190px]">
           <option value="">Все статусы</option>
           <option value="active">Занимается</option>
           <option value="paused">Пауза</option>
@@ -87,6 +87,7 @@ export function StudentsTable({
         </Select>
         {teachers.length > 0 ? (
           <Select
+            aria-label="Фильтр: специалист"
             value={teacherId}
             onChange={(event) => setTeacherId(event.target.value)}
             className="max-w-[220px]"
@@ -101,6 +102,7 @@ export function StudentsTable({
         ) : null}
         {conclusionOptions.length > 0 ? (
           <Select
+            aria-label="Фильтр: заключение"
             value={conclusion}
             onChange={(event) => setConclusion(event.target.value)}
             className="max-w-[260px]"

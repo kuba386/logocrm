@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -21,15 +21,43 @@ export function MobileNav({
 }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const wasOpen = useRef(false)
 
   useEffect(() => {
     setOpen(false)
   }, [pathname])
 
+  // Фокус: при открытии — в меню, Tab не уходит под затемнение, при закрытии —
+  // обратно на «Открыть меню». Раньше фокус оставался на кнопке под
+  // затемнением, и с клавиатуры или VoiceOver меню было не пройти (UX41/UX100).
+  useEffect(() => {
+    if (open) {
+      closeRef.current?.focus()
+    } else if (wasOpen.current) {
+      triggerRef.current?.focus()
+    }
+    wasOpen.current = open
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea')]
+      if (focusable.length === 0) return
+      const first = focusable[0]!
+      const last = focusable[focusable.length - 1]!
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -43,6 +71,7 @@ export function MobileNav({
   return (
     <>
       <Button
+        ref={triggerRef}
         type="button"
         variant="ghost"
         size="sm"
@@ -51,7 +80,7 @@ export function MobileNav({
         aria-label="Открыть меню"
         onClick={() => setOpen(true)}
       >
-        <Menu className="size-5" />
+        <Menu className="size-5" aria-hidden="true" />
       </Button>
 
       {open ? (
@@ -59,13 +88,18 @@ export function MobileNav({
           <button
             type="button"
             aria-label="Закрыть меню"
+            tabIndex={-1}
             className="absolute inset-0 bg-foreground/30"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-[85%] max-w-xs flex-col bg-card shadow-xl animate-in slide-in-from-left duration-200">
+          <div
+            ref={panelRef}
+            className="absolute inset-y-0 left-0 flex w-[85%] max-w-xs flex-col bg-card shadow-xl animate-in slide-in-from-left duration-200 motion-reduce:animate-none"
+          >
             <div className="flex items-start justify-between gap-2 border-b border-border p-4">
               {header}
               <Button
+                ref={closeRef}
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -73,7 +107,7 @@ export function MobileNav({
                 aria-label="Закрыть меню"
                 onClick={() => setOpen(false)}
               >
-                <X className="size-5" />
+                <X className="size-5" aria-hidden="true" />
               </Button>
             </div>
             <nav aria-label="Разделы" className="flex-1 overflow-y-auto px-3 pb-3">

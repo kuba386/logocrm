@@ -24,7 +24,8 @@
     --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 100%;
     --border: 211 35% 85%;
-    --input: 211 35% 80%;
+    /* Рамка полей ≥3:1 к фону и карточке (WCAG 1.4.11); было 1.5:1 — поле сливалось с фоном. */
+    --input: 211 25% 56%;
     --ring: 173 77% 26%;
     --radius: 0.5rem;
 
@@ -35,7 +36,8 @@
     --status-warning-bg: 48 96% 89%;
     --status-danger: 0 74% 42%;
     --status-danger-bg: 0 93% 94%;
-    --status-neutral: 215 16% 47%;
+    /* 5.2:1 на своём фоне (было 4.3 — ниже нормы для 12px текста бейджа). */
+    --status-neutral: 215 16% 42%;
     --status-neutral-bg: 210 40% 96%;
     /* «Болел» (sky) не пришёл ни в одном макете Stitch — временная заглушка
        (обычный доступный синий), чтобы статус-кнопка не осталась без цвета.
@@ -82,6 +84,27 @@
 
   body {
     @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  /* Липкая шапка (≈108px) и нижние вкладки (56px) на телефоне: без отступа
+     прокрутки фокус по Tab уходил под них (UX100). */
+  @media (max-width: 639px) {
+    html {
+      scroll-padding-top: 7rem;
+      scroll-padding-bottom: 4.5rem;
+    }
+  }
+
+  /* «Уменьшить движение» в системе — без анимаций (UX9/UX99). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
