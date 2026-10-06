@@ -1,150 +1,109 @@
 -- =============================================================================
--- 0095_invite_limits.sql — приглашение специалиста: лимит, повтор, чужая карточка
+-- 0095_invite_limits.sql — приглашение специалиста: карточка при принятии
 --
 -- Ревью процесса приглашения 6.10.2026 (решение владельца — исправлять). На
--- prod центр Studio упёрся в лимит 5 специалистов: 2 работают, 3 места заняли
--- пустые карточки истёкших и отменённых ссылок — create_invitation создаёт
--- карточку сразу при выдаче ссылки.
+-- prod центр Studio упёрся в лимит 5 специалистов при двух работающих: места
+-- заняли пустые карточки истёкших и отменённых ссылок — create_invitation
+-- (0060) создавал карточку сразу при выдаче ссылки. Первая редакция (считать
+-- место только по is_active) отвергнута ревью: is_active открыт на запись
+-- (0017), выключенная карточка остаётся рабочей — лимит обходился.
 --
 -- Решения:
---   Р1. Место в тарифе занимает только действующая карточка (is_active, не в
---       архиве). Пустая карточка непринятого приглашения (is_active = false)
---       не считается. Триггер лимита срабатывает при входе карточки в
---       «действующие»: insert действующей, включение is_active, восстановление
---       из архива — в том числе при принятии приглашения.
---   Р2. create_invitation для специалиста заранее проверяет «работают + ждут
---       приглашения + этот» ≤ лимит под тем же advisory lock, что и триггер:
---       живое неиспользованное приглашение бронирует место, истёкшее и
---       отменённое — нет. Повторная ссылка на уже действующую карточку места
---       не требует.
---   Р3. Ссылку можно выпустить только на свободную карточку (profile_id is
---       null) — фильтр был только в интерфейсе.
---   Р4. Повторное приглашение уже работающего специалиста: принимается его
---       собственная карточка (membership.teacher_id), а не новая —
---       раньше update новой карточки ронял принятие на teachers_profile_uniq
---       сырой ошибкой. Карточку, привязанную к другому сотруднику, принять
---       нельзя — понятный отказ.
---   Р5. center_limits: usage.teachers и галочка онбординга «специалист» —
---       по действующим карточкам, как лимит.
+--   Р1. Карточку специалиста создаёт accept_invitation, а не create_invitation:
+--       ФИО ждёт в invitations.full_name. Пустых карточек больше не бывает,
+--       лимит считается как раньше — все живые карточки (0049), без лазеек.
+--       Отказ лимита при принятии — текст для приглашённого, а не «освободите
+--       место в архиве».
+--   Р2. Живое приглашение без карточки бронирует место: «карточки + живые
+--       приглашения без карточки» ≤ лимит, под тем же advisory lock. Проверка
+--       после insert приглашения — при просрочке первым отвечает режим «только
+--       чтение» (0050 Р8). Срок приглашения нельзя продлить (только сократить —
+--       отмена): иначе бронь обходилась бы PATCH-ем expires_at.
+--   Р3. Ссылку на существующую карточку можно выпустить, только если карточка
+--       свободна и на неё нет другой живой ссылки.
+--   Р4. Принятие: прежняя карточка участника (повторное приглашение
+--       работающего больше не падает на teachers_profile_uniq), иначе карточка
+--       приглашения под for update — архивная или чужая отказывает, иначе
+--       новая. Одна карточка — одно членство: частичный unique на
+--       memberships (center_id, teacher_id).
+--   Р5. Пустые карточки прошлых ссылок (не привязаны, выключены, без занятий,
+--       членств и живых приглашений) уходят в архив — prod 6.10.2026: 1.
 -- =============================================================================
 
 
--- 1. Лимит специалистов — по действующим карточкам (Р1) -------------------------------------------
+-- 1. ФИО в приглашении (Р1) -----------------------------------------------------------------------
 
-create or replace function public.teachers_check_limit()
+alter table public.invitations
+  add column if not exists full_name text check (full_name is null or length(btrim(full_name)) between 1 and 200);
+comment on column public.invitations.full_name is
+  'ФИО специалиста для новой карточки (0095 Р1): карточку создаёт accept_invitation. null — карточка уже есть (teacher_id) или роль не специалист.';
+
+
+-- 2. Срок приглашения только сокращается (Р2) -----------------------------------------------------
+
+create or replace function public.invitations_expires_only_shorten()
   returns trigger
   language plpgsql
   security definer
   set search_path = ''
 as $$
-declare
-  v_count integer;
 begin
-  -- Только вход в «действующие»: живая и is_active. Выход и правки внутри
-  -- «действующих» места не меняют.
-  if new.deleted_at is not null or not new.is_active then
-    return null;
+  if new.expires_at > old.expires_at then
+    raise exception 'Срок приглашения продлить нельзя — отправьте новое приглашение' using errcode = '22023';
   end if;
-  if tg_op = 'UPDATE' and old.deleted_at is null and old.is_active then
-    return null;
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended('center_limit:' || new.center_id::text, 0));
-
-  select count(*)::integer into v_count
-    from public.teachers t
-   where t.center_id = new.center_id and t.deleted_at is null and t.is_active;
-
-  perform public.assert_center_limit(new.center_id, 'teachers', v_count, 'специалистов');
-  return null;
+  return new;
 end;
 $$;
-comment on function public.teachers_check_limit() is
-  'Лимит специалистов тарифа (0049; 0095 — только действующие карточки): AFTER insert/update deleted_at, is_active, при входе карточки в действующие.';
-revoke all on function public.teachers_check_limit() from public, anon, authenticated, service_role;
+revoke all on function public.invitations_expires_only_shorten() from public, anon, authenticated, service_role;
 
-drop trigger if exists teachers_check_limit on public.teachers;
-create trigger teachers_check_limit
-  after insert or update of deleted_at, is_active on public.teachers
-  for each row execute function public.teachers_check_limit();
+drop trigger if exists invitations_expires_only_shorten on public.invitations;
+create trigger invitations_expires_only_shorten
+  before update of expires_at on public.invitations
+  for each row execute function public.invitations_expires_only_shorten();
 
 
--- 2. Сводка тарифа (Р5) — тело 0064, счётчик специалистов по действующим ----------------------
+-- 3. Одна карточка — одно членство (Р4) -----------------------------------------------------------
 
-create or replace function public.center_limits()
-  returns jsonb
-  language plpgsql
-  stable
-  security definer
-  set search_path = ''
-as $$
-declare
-  v_center uuid := public.current_center();
-  v_role   text := coalesce(public.my_role(), '');
-  v_c      public.centers;
-  v_p      public.plans;
-  v_tz     text;
-  v_today  date;
-  v_until  timestamptz;
-begin
-  if auth.uid() is null or v_center is null then
-    raise exception 'Требуется авторизация' using errcode = '42501';
-  end if;
-  if v_role = 'parent' or v_role = '' then
-    raise exception 'Недостаточно прав' using errcode = '42501';
-  end if;
-
-  select * into v_c from public.centers where id = v_center;
-  select * into v_p from public.plans where code = v_c.plan;
-  if v_p.code is null then
-    raise exception 'У центра не задан тариф — обратитесь к администратору платформы' using errcode = '23514';
-  end if;
-
-  v_tz    := public.center_timezone(v_center);
-  v_today := (now() at time zone v_tz)::date;
-  v_until := case when v_c.plan = 'trial' then v_c.trial_ends_at else v_c.subscription_until end;
-
-  return jsonb_build_object(
-    'plan',        v_p.code,
-    'plan_name',   v_p.name,
-    'price_tiyin', v_p.price_tiyin,
-    'is_trial',    v_c.plan = 'trial',
-    'until',       v_until,
-    'days_left',   case when v_until is null then null
-                        else ((v_until at time zone v_tz)::date - v_today) end,
-    'writable',    public.center_writable(v_center),
-    'state',       public.center_write_state(v_center),
-    'limits',      v_p.limits,
-    'usage', jsonb_build_object(
-      -- 0095: место занимают только действующие карточки — пустая карточка
-      -- непринятого приглашения не считается.
-      'teachers', (select count(*) from public.teachers t where t.center_id = v_center and t.deleted_at is null and t.is_active),
-      'students', (select count(*) from public.students s where s.center_id = v_center and s.deleted_at is null and s.status <> 'archived'),
-      -- 0053 Р5: тот же счётчик, что у гейта; резерв работ в полёте не показывается.
-      'ai_notes_month', public.center_ai_notes_used(v_center),
-      -- 0064: тот же счётчик, что у гейта ассистента; резерв не показывается.
-      'ai_questions_month', public.center_ai_questions_used(v_center)
-    ),
-    'onboarding', jsonb_build_object(
-      'teacher',    exists (select 1 from public.teachers t where t.center_id = v_center and t.deleted_at is null and t.is_active),
-      'service',    exists (select 1 from public.services s where s.center_id = v_center and s.deleted_at is null),
-      'student',    exists (select 1 from public.students s where s.center_id = v_center and s.deleted_at is null),
-      'lesson',     exists (select 1 from public.lessons l where l.center_id = v_center and l.deleted_at is null),
-      'attendance', exists (select 1 from public.attendance a where a.center_id = v_center)
-    )
-  );
-end;
-$$;
+create unique index if not exists memberships_center_teacher_key
+  on public.memberships (center_id, teacher_id) where teacher_id is not null;
 
 
-comment on function public.center_limits() is
-  'Тариф, лимиты, использование, дни до конца, writable/state (ok/expired/deleted/missing, 0056 Р7) в поясе центра, галочки онбординга — одним запросом для экрана тарифа и баннера (0049 Р9, 0050 Р11, 0053 Р5, 0064 — ai_questions_month, 0095 — специалисты по действующим карточкам). Родителю недоступно.';
+-- 4. Пустые карточки прошлых ссылок — в архив (Р5) ------------------------------------------------
 
-revoke execute on function public.center_limits() from public, anon, service_role;
-grant  execute on function public.center_limits() to authenticated;
+update public.teachers t
+   set deleted_at = now()
+ where t.deleted_at is null and t.profile_id is null and not t.is_active
+   and not exists (select 1 from public.lessons l where l.teacher_id = t.id or l.substitute_teacher_id = t.id)
+   and not exists (select 1 from public.memberships m where m.teacher_id = t.id)
+   and not exists (select 1 from public.invitations i where i.teacher_id = t.id and i.accepted_at is null and i.expires_at > now());
 
 
--- 3. create_invitation — тело 0060 плюс Р2, Р3 ----------------------------------------------------
+-- 5. Список ожидающих: ФИО из приглашения, если карточки ещё нет ----------------------------------
+
+create or replace view public.pending_invitations_view
+  with (security_invoker = true)
+as
+select
+  i.id,
+  i.center_id,
+  i.role,
+  i.teacher_id,
+  coalesce(t.full_name, i.full_name) as full_name,
+  i.phone,
+  i.email,
+  i.token,
+  i.expires_at,
+  i.created_at,
+  i.payer_id,
+  p.full_name as payer_name
+from public.invitations i
+left join public.teachers t on t.id = i.teacher_id
+left join public.payers   p on p.id = i.payer_id and p.deleted_at is null
+where i.accepted_at is null
+  and i.expires_at > now();
+
+
+-- 6. create_invitation — тело 0060 плюс Р1–Р3 -----------------------------------------------------
 
 create or replace function public.create_invitation(
   p_role       text,
@@ -191,38 +150,12 @@ begin
   end if;
 
   if p_role = 'teacher' then
-    -- 0095 Р2: место в тарифе бронирует и живое неиспользованное приглашение —
-    -- иначе пять ссылок при лимите 5 выданы, а принять смогут не все.
-    perform pg_advisory_xact_lock(hashtextextended('center_limit:' || v_center::text, 0));
-    v_limit := public.plan_limit(v_center, 'teachers');
-    if v_limit >= 0 and not exists (
-      select 1 from public.teachers t
-       where t.id = v_teacher and t.center_id = v_center and t.is_active and t.deleted_at is null
-    ) then
-      select count(*)::integer into v_used
-        from public.teachers t
-       where t.center_id = v_center and t.deleted_at is null and t.is_active;
-      select count(*)::integer into v_pending
-        from public.invitations i
-        left join public.teachers t on t.id = i.teacher_id
-       where i.center_id = v_center and i.role = 'teacher'
-         and i.accepted_at is null and i.expires_at > now()
-         and coalesce(t.is_active, false) = false;
-      if v_used + v_pending + 1 > v_limit then
-        raise exception 'Лимит тарифа % — специалистов: % (работают %, ждут приглашения %). Отмените лишнее приглашение или смените тариф в настройках центра',
-          public.center_plan_name(v_center), v_limit, v_used, v_pending
-          using errcode = '23514';
-      end if;
-    end if;
-
     if v_teacher is null then
+      -- 0095 Р1: карточку создаёт принятие, а не выдача ссылки — ФИО ждёт в
+      -- приглашении.
       if coalesce(trim(p_full_name), '') = '' then
         raise exception 'Укажите ФИО специалиста' using errcode = '22004';
       end if;
-
-      insert into public.teachers (center_id, full_name, phone, is_active)
-      values (v_center, trim(p_full_name), p_phone, false)
-      returning id into v_teacher;
     else
       if not exists (
         select 1 from public.teachers t
@@ -233,6 +166,10 @@ begin
       -- 0095 Р3: фильтр «свободных» был только в интерфейсе.
       if exists (select 1 from public.teachers t where t.id = v_teacher and t.profile_id is not null) then
         raise exception 'Эта карточка уже привязана к сотруднику — выберите свободную или создайте новую' using errcode = '22023';
+      end if;
+      if exists (select 1 from public.invitations i
+                  where i.teacher_id = v_teacher and i.accepted_at is null and i.expires_at > now()) then
+        raise exception 'На эту карточку уже есть действующее приглашение — отправьте его или отмените' using errcode = '22023';
       end if;
     end if;
   elsif p_role = 'parent' then
@@ -289,9 +226,32 @@ begin
     v_teacher := null;
   end if;
 
-  insert into public.invitations (center_id, role, teacher_id, payer_id, phone, email, expires_at)
-  values (v_center, p_role, v_teacher, v_payer, v_phone, p_email, v_expires)
+  insert into public.invitations (center_id, role, teacher_id, payer_id, phone, email, expires_at, full_name)
+  values (v_center, p_role, v_teacher, v_payer, v_phone, p_email, v_expires,
+          case when p_role = 'teacher' and v_teacher is null then trim(p_full_name) end)
   returning id, invitations.token into v_id, v_token;
+
+  -- 0095 Р2: живое приглашение без карточки бронирует место. Проверка ПОСЛЕ
+  -- insert: режим «только чтение» (0050, guard на invitations) отвечает
+  -- первым (0050 Р8). Тот же advisory lock, что у триггера лимита.
+  if p_role = 'teacher' and v_teacher is null then
+    perform pg_advisory_xact_lock(hashtextextended('center_limit:' || v_center::text, 0));
+    v_limit := public.plan_limit(v_center, 'teachers');
+    if v_limit >= 0 then
+      select count(*)::integer into v_used
+        from public.teachers t
+       where t.center_id = v_center and t.deleted_at is null;
+      select count(*)::integer into v_pending
+        from public.invitations i
+       where i.center_id = v_center and i.role = 'teacher' and i.teacher_id is null
+         and i.accepted_at is null and i.expires_at > now();
+      if v_used + v_pending > v_limit then
+        raise exception 'Лимит тарифа % — специалистов: % (карточек %, ждут приглашения %). Отмените лишнее приглашение или смените тариф в настройках центра',
+          public.center_plan_name(v_center), v_limit, v_used, v_pending - 1
+          using errcode = '23514';
+      end if;
+    end if;
+  end if;
 
   perform public.emit_event(
     'invitation.created',
@@ -305,13 +265,13 @@ end;
 $$;
 
 comment on function public.create_invitation(text, text, text, text, uuid, uuid) is
-  'Приглашение по ссылке (0060; 0095 — лимит специалистов с учётом живых приглашений, только свободная карточка). Родитель — к живой или новой карточке плательщика, ссылка 3 дня. owner/admin.';
+  'Приглашение по ссылке (0060; 0095 — карточку специалиста создаёт принятие, живое приглашение бронирует место, ссылка только на свободную карточку). Родитель — к живой или новой карточке плательщика, 3 дня. owner/admin.';
 
 revoke execute on function public.create_invitation(text, text, text, text, uuid, uuid) from public, anon;
 grant  execute on function public.create_invitation(text, text, text, text, uuid, uuid) to authenticated;
 
 
--- 4. accept_invitation — тело 0060 плюс Р4 --------------------------------------------------------
+-- 7. accept_invitation — тело 0060 плюс Р1, Р4 ----------------------------------------------------
 
 create or replace function public.accept_invitation(p_token text)
   returns uuid
@@ -324,6 +284,7 @@ declare
   v_inv      public.invitations;
   v_existing public.memberships;
   v_teacher  uuid;
+  v_card     public.teachers;
 begin
   if v_uid is null then
     raise exception 'Требуется авторизация' using errcode = '42501';
@@ -372,30 +333,46 @@ begin
       using errcode = '22023';
   end if;
 
-  if found then
+  -- 0095 Р4: карточка специалиста — прежняя карточка участника, карточка
+  -- приглашения или новая. v_existing пуст (все поля null), если участника нет.
+  if v_inv.role = 'teacher' then
+    v_teacher := coalesce(v_existing.teacher_id, v_inv.teacher_id);
+    if v_teacher is not null then
+      select * into v_card from public.teachers t
+       where t.id = v_teacher and t.center_id = v_inv.center_id
+         for update;
+      if v_card.id is null or v_card.deleted_at is not null then
+        raise exception 'Карточка специалиста в архиве — попросите администратора прислать новую ссылку' using errcode = '22023';
+      end if;
+      if v_card.profile_id is not null and v_card.profile_id <> v_uid then
+        raise exception 'Карточка специалиста уже привязана к другому сотруднику — попросите администратора прислать новую ссылку'
+          using errcode = '22023';
+      end if;
+      update public.teachers
+         set profile_id = v_uid, is_active = true
+       where id = v_teacher;
+    else
+      -- Р1: новая карточка здесь; лимит проверяет триггер teachers_check_limit (0049).
+      begin
+        insert into public.teachers (center_id, full_name, phone, profile_id, is_active)
+        values (v_inv.center_id, coalesce(nullif(v_inv.full_name, ''), 'Специалист'), v_inv.phone, v_uid, true)
+        returning id into v_teacher;
+      exception
+        when check_violation then
+          raise exception 'В центре закончились места специалистов по тарифу — попросите администратора освободить место или сменить тариф'
+            using errcode = '23514';
+      end;
+    end if;
+  end if;
+
+  if v_existing.user_id is not null then
     update public.memberships
-       set teacher_id = coalesce(teacher_id, v_inv.teacher_id),
+       set teacher_id = coalesce(teacher_id, v_teacher),
            payer_id   = coalesce(payer_id, v_inv.payer_id)
      where user_id = v_uid and center_id = v_inv.center_id;
   else
     insert into public.memberships (user_id, center_id, role, teacher_id, payer_id)
-    values (v_uid, v_inv.center_id, v_inv.role, v_inv.teacher_id, v_inv.payer_id);
-  end if;
-
-  -- 0095 Р4: участник уже привязан к своей карточке — привязываем ЕЁ, а не
-  -- новую карточку приглашения (иначе teachers_profile_uniq ронял принятие
-  -- сырой ошибкой). Новая карточка остаётся пустой и места не занимает.
-  -- v_existing пуст (все поля null), если участника не было: select into без строки.
-  v_teacher := coalesce(v_existing.teacher_id, v_inv.teacher_id);
-  if v_teacher is not null then
-    if exists (select 1 from public.teachers t
-                where t.id = v_teacher and t.profile_id is not null and t.profile_id <> v_uid) then
-      raise exception 'Карточка специалиста уже привязана к другому сотруднику — попросите администратора прислать новую ссылку'
-        using errcode = '22023';
-    end if;
-    update public.teachers
-       set profile_id = v_uid, is_active = true
-     where id = v_teacher and center_id = v_inv.center_id;
+    values (v_uid, v_inv.center_id, v_inv.role, v_teacher, v_inv.payer_id);
   end if;
 
   update public.invitations
