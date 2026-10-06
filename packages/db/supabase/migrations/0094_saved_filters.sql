@@ -136,14 +136,16 @@ revoke all on table public.saved_filters from public, anon, authenticated, servi
 grant select on table public.saved_filters to authenticated;
 
 -- (select …) — initplan: функции вычисляются раз на запрос, а не на строку
--- (советник auth_rls_initplan, прецедент 0024).
+-- (советник auth_rls_initplan, прецедент 0024). Страница — через <@, а не
+-- = any ((select …)): такую запись Postgres разбирает как ANY (подзапрос) и
+-- сравнивает text с text[].
 create policy saved_filters_select_own on public.saved_filters
   for select to authenticated
   using (
     user_id = (select auth.uid())
     and center_id = (select public.current_center())
     and deleted_at is null
-    and page = any ((select public.saved_filter_pages()))
+    and array[page] <@ (select public.saved_filter_pages())
   );
 
 -- Р7: под guard — забор 0050 (каждая таблица либо под guard, либо в исключениях).
