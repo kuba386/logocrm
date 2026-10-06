@@ -60,6 +60,8 @@ export type InstallmentRow = {
 export type SubscriptionView = {
   id: string
   typeName: string
+  /** Плательщик абонемента — перенос остатка только его детям (0091). */
+  payerId?: string | null
   priceTiyin: number
   startsAt: string
   endsAt: string | null
@@ -101,7 +103,7 @@ export type BalanceView = {
   overdrawnTiyin: number
 }
 
-export type SiblingOption = { id: string; fullName: string }
+export type SiblingOption = { id: string; fullName: string; payerId?: string | null }
 
 export type AttendanceHistoryRow = {
   id: string
@@ -687,6 +689,9 @@ function TransferForm({
         </Select>
       </div>
       <SubmitButton variant="outline">Перенести</SubmitButton>
+      <p className="w-full text-xs text-muted-foreground">
+        Внесённые сверх отработанного деньги перейдут вместе с занятиями (только детям того же плательщика).
+      </p>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
     </form>
@@ -902,7 +907,11 @@ function SubscriptionCard({
             />
           )}
           {subscription.lessonsLeft != null && subscription.lessonsLeft > 0 ? (
-            <TransferForm studentId={studentId} subscriptionId={subscription.id} siblings={siblings} />
+            <TransferForm
+              studentId={studentId}
+              subscriptionId={subscription.id}
+              siblings={siblings.filter((sibling) => sibling.payerId === subscription.payerId)}
+            />
           ) : null}
         </div>
       ) : null}

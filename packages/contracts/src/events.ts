@@ -249,6 +249,9 @@ export const subscriptionTransferredSchema = z.object({
     from_subscription_id: z.string().uuid(),
     to_subscription_id: z.string().uuid(),
     lessons: z.number().int().positive(),
+    // Сколько внесённых денег перешло вместе с занятиями (0091). Optional:
+    // события до 0091 поля не несут.
+    amount_tiyin: z.number().int().nonnegative().optional(),
   }),
 })
 export type SubscriptionTransferred = z.infer<typeof subscriptionTransferredSchema>

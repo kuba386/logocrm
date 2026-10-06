@@ -186,14 +186,13 @@ export default async function StudentPage({
       { data: subsRows },
       { data: typeRows },
       { data: balanceRow },
-      { data: siblingRows },
       { data: attendanceRows },
       { data: center },
       { data: sourceRows },
     ] = await Promise.all([
         supabase
           .from('subscriptions')
-          .select('id, type_id, price_tiyin, starts_at, ends_at')
+          .select('id, type_id, price_tiyin, starts_at, ends_at, payer_id')
           .eq('student_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
@@ -209,9 +208,6 @@ export default async function StudentPage({
           .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin')
           .eq('student_id', id)
           .maybeSingle(),
-        payerId
-          ? supabase.from('students').select('id, full_name').eq('payer_id', payerId).neq('id', id).is('deleted_at', null)
-          : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
         supabase
           .from('attendance')
           .select('id, lesson_id, status_id, comment')
@@ -229,6 +225,19 @@ export default async function StudentPage({
           .is('deleted_at', null)
           .order('sort'),
       ])
+
+    // Кому можно перенести остаток: дети ПЛАТЕЛЬЩИКА АБОНЕМЕНТА (так проверяет
+    // transfer_remaining, 0091), не только текущего плательщика ученика —
+    // после смены плательщика они расходятся.
+    const siblingPayerIds = [...new Set([payerId, ...(subsRows ?? []).map((row) => row.payer_id)].filter((v): v is string => Boolean(v)))]
+    const { data: siblingRows } = siblingPayerIds.length
+      ? await supabase
+          .from('students')
+          .select('id, full_name, payer_id')
+          .in('payer_id', siblingPayerIds)
+          .neq('id', id)
+          .is('deleted_at', null)
+      : { data: [] as { id: string; full_name: string; payer_id: string | null }[] }
 
     const typeNameById = new Map((typeRows ?? []).map((t) => [t.id, t.name]))
     const subscriptionIds = (subsRows ?? []).map((row) => row.id)
@@ -280,6 +289,7 @@ export default async function StudentPage({
       return {
         id: row.id,
         typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
+        payerId: row.payer_id,
         priceTiyin: row.price_tiyin,
         startsAt: row.starts_at,
         endsAt: row.ends_at,
@@ -353,7 +363,7 @@ export default async function StudentPage({
           lessonsCount: t.lessons_count,
           periodDays: t.period_days,
         })),
-      siblings: (siblingRows ?? []).map((s) => ({ id: s.id, fullName: s.full_name })),
+      siblings: (siblingRows ?? []).map((s) => ({ id: s.id, fullName: s.full_name, payerId: s.payer_id })),
       sources: (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name })),
       today: isoDayInZone(new Date(), centerTimeZone(center?.settings)),
       timeZone: centerTimeZone(center?.settings),
