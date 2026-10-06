@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { archiveGoal, createGoal, setGoalStatus, type ClinicalState } from './clinical-actions'
 import { ConfirmAction } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 export type GoalStageOption = { id: string; title: string }
 
@@ -149,6 +150,7 @@ export function GoalsPanel({
 }) {
   const [formOpen, setFormOpen] = useState(false)
   const [state, action] = useActionState(createGoal, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
 
   const active = goals.filter((g) => g.status !== 'achieved')
   const achieved = goals.filter((g) => g.status === 'achieved')
@@ -178,7 +180,7 @@ export function GoalsPanel({
 
       {canWrite ? (
         formOpen ? (
-          <form action={action} className="space-y-3 border-t border-border pt-4">
+          <form action={action} className="space-y-3 border-t border-border pt-4" {...keep}>
             <input type="hidden" name="studentId" value={studentId} />
             <div className="space-y-1">
               <Label htmlFor="goalTitle">Формулировка</Label>

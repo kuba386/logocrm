@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError } from '@/components/ui/alert'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initialState: OnboardingState = {}
 
@@ -21,9 +22,10 @@ function SubmitButton() {
 
 export function OnboardingForm() {
   const [state, formAction] = useActionState(createCenter, initialState)
+  const keep = useKeepValuesOnError(state, Boolean(state.error))
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4" {...keep}>
       <div className="space-y-2">
         <Label htmlFor="name">Название центра</Label>
         <Input id="name" name="name" placeholder="Логопед Плюс" required minLength={2} />

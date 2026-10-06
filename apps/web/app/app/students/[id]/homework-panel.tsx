@@ -11,6 +11,7 @@ import { FormError, FormNotice } from '@/components/ui/alert'
 import { archiveHomework, assignHomeworkStandalone, reviewHomework, type ClinicalState } from './clinical-actions'
 import { ConfirmAction } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 export type ExerciseOption = { id: string; title: string; sound: string | null }
 
@@ -135,6 +136,7 @@ export function HomeworkPanel({
 }) {
   const [formOpen, setFormOpen] = useState(false)
   const [state, action] = useActionState(assignHomeworkStandalone, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
   const [selected, setSelected] = useState<string[]>([])
   const [query, setQuery] = useState('')
 
@@ -162,7 +164,7 @@ export function HomeworkPanel({
 
       {canWrite ? (
         formOpen ? (
-          <form action={action} className="space-y-3 border-t border-border pt-4">
+          <form action={action} className="space-y-3 border-t border-border pt-4" {...keep}>
             <input type="hidden" name="studentId" value={studentId} />
             {selected.map((id) => (
               <input key={id} type="hidden" name="exerciseIds" value={id} />

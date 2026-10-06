@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { label, t } from '@/lib/messages'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initial: FinanceState = { message: '' }
 
@@ -45,8 +46,9 @@ export function PaymentForm({
   today: string
 }) {
   const [state, formAction] = useActionState(recordPayment, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
   return (
-    <form action={formAction} className="space-y-3 rounded-md border border-border p-3">
+    <form action={formAction} className="space-y-3 rounded-md border border-border p-3" {...keep}>
       <div>
         <p className="font-medium">{t('finance', 'newPayment')}</p>
         <p className="text-sm text-muted-foreground">{t('finance', 'newPaymentHint')}</p>
@@ -125,8 +127,9 @@ export function ExpenseForm({
   today: string
 }) {
   const [state, formAction] = useActionState(recordExpense, initial)
+  const keep = useKeepValuesOnError(state, Boolean(state.message))
   return (
-    <form action={formAction} className="space-y-3 rounded-md border border-border p-3">
+    <form action={formAction} className="space-y-3 rounded-md border border-border p-3" {...keep}>
       <p className="font-medium">{t('finance', 'newExpense')}</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1">

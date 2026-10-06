@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useMemo, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { resendCode, sendMagicLink, sendPasswordReset, signIn, signUp, verifyCode, type AuthState } from './actions'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { TurnstileField } from '@/components/turnstile-field'
 import { EmailCodeStep } from '@/components/email-code-step'
+import { useKeepValuesOnError } from '@/lib/use-keep-values'
 
 const initialState: AuthState = {}
 
@@ -27,6 +28,11 @@ export function LoginForm({ next }: { next: string }) {
   const [signUpState, signUpAction] = useActionState(signUp, initialState)
   const [magicState, magicAction] = useActionState(sendMagicLink, initialState)
   const [resetState, resetAction] = useActionState(sendPasswordReset, initialState)
+  // Неверный пароль или капча не стирают email (пароль — стирается, так и надо).
+  const passwordStates = useMemo(() => [passwordState, signUpState], [passwordState, signUpState])
+  const keepPassword = useKeepValuesOnError(passwordStates, Boolean(passwordState.error ?? signUpState.error))
+  const keepMagic = useKeepValuesOnError(magicState, Boolean(magicState.error))
+  const keepReset = useKeepValuesOnError(resetState, Boolean(resetState.error))
   const [codeStep, setCodeStep] = useState<{ email: string; purpose: 'signup' | 'magic' } | null>(null)
 
   // Письмо ушло (регистрация без сессии или вход по почте) — переходим на ввод кода.
@@ -53,7 +59,7 @@ export function LoginForm({ next }: { next: string }) {
 
   if (mode === 'reset') {
     return (
-      <form action={resetAction} className="space-y-4">
+      <form action={resetAction} className="space-y-4" {...keepReset}>
         <p className="text-sm text-muted-foreground">
           Пришлём письмо со ссылкой — по ней вы зададите новый пароль.
         </p>
@@ -78,7 +84,7 @@ export function LoginForm({ next }: { next: string }) {
 
   if (mode === 'magic') {
     return (
-      <form action={magicAction} className="space-y-4">
+      <form action={magicAction} className="space-y-4" {...keepMagic}>
         <div className="space-y-2">
           <Label htmlFor="magic-email">Email</Label>
           <Input id="magic-email" name="email" type="email" autoComplete="email" required />
@@ -100,7 +106,7 @@ export function LoginForm({ next }: { next: string }) {
   }
 
   return (
-    <form action={passwordAction} className="space-y-4">
+    <form action={passwordAction} className="space-y-4" {...keepPassword}>
       <input type="hidden" name="next" value={next} />
 
       <div className="space-y-2">
