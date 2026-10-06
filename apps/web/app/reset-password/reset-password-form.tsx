@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FormError } from '@/components/ui/alert'
+import { PasswordInput } from '@/components/ui/password-input'
 
 const initialState: AuthState = {}
 
@@ -26,11 +27,11 @@ export function ResetPasswordForm() {
     <form action={action} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="password">Новый пароль</Label>
-        <Input id="password" name="password" type="password" autoComplete="new-password" minLength={6} required />
+        <PasswordInput id="password" name="password" autoComplete="new-password" minLength={6} required />
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm">Повторите пароль</Label>
-        <Input id="confirm" name="confirm" type="password" autoComplete="new-password" minLength={6} required />
+        <PasswordInput id="confirm" name="confirm" autoComplete="new-password" minLength={6} required />
       </div>
       <FormError message={state.error} />
       <SubmitButton />

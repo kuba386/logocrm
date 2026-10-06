@@ -19,11 +19,16 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 )
 CardHeader.displayName = 'CardHeader'
 
-const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
-    <h2 ref={ref} className={cn('text-xl font-semibold tracking-tight', className)} {...props} />
-  ),
-)
+/**
+ * as="h1" — на одиночных страницах (вход, приглашение, запись), где карточка
+ * и есть страница: иначе на них не было ни одного заголовка первого уровня.
+ */
+const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement> & { as?: 'h1' | 'h2' | 'h3' }
+>(({ className, as: Tag = 'h2', ...props }, ref) => (
+  <Tag ref={ref} className={cn('text-xl font-semibold tracking-tight', className)} {...props} />
+))
 CardTitle.displayName = 'CardTitle'
 
 const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
