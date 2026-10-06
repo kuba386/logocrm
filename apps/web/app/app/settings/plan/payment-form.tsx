@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { FormError, FormNotice } from '@/components/ui/alert'
-import { formatSom, platformPaymentAmountTiyin, prepayDiscountPercent } from '@logocrm/core'
+import { formatSom, planSwitchDays, platformPaymentAmountTiyin, prepayDiscountPercent } from '@logocrm/core'
 import { label, t } from '@/lib/messages'
 import { submitPayment, withdrawPayment, type PlanState } from './actions'
 import { SubmitButton as PendingSubmit } from '@/components/ui/submit-button'
@@ -30,9 +30,20 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
 export function PaymentForm({
   plans,
   currentPlan,
+  current,
 }: {
-  plans: { code: string; name: string; priceTiyin: number }[]
+  /** teachers/students — лимиты тарифа, -1 — без ограничения. */
+  plans: { code: string; name: string; priceTiyin: number; teachers: number; students: number }[]
   currentPlan: string
+  /** Текущий тариф центра: остаток дней и наполнение — из center_limits. */
+  current: {
+    name: string
+    priceTiyin: number
+    isTrial: boolean
+    daysLeft: number | null
+    teachers: number
+    students: number
+  }
 }) {
   const [state, action] = useActionState(submitPayment, initial)
   const defaultPlan = plans.some((p) => p.code === currentPlan) ? currentPlan : (plans[0]?.code ?? '')
@@ -43,6 +54,17 @@ export function PaymentForm({
   const discount = validMonths ? prepayDiscountPercent(months) : 0
   const amount = validMonths ? platformPaymentAmountTiyin(price, months) : 0
   const saving = validMonths ? price * months - amount : 0
+  const target = plans.find((p) => p.code === planCode)
+  // Подсказка зеркалом plan_switch_days (0096); срок считает база при подтверждении.
+  const switching = !current.isTrial && planCode !== currentPlan && (current.daysLeft ?? 0) > 0
+  // 0096 Р2: цена месяца нового тарифа — сумма этой оплаты / месяцы (со скидкой).
+  const newMonth = validMonths ? Math.trunc(amount / months) : price
+  const switchDays = switching ? planSwitchDays(current.daysLeft ?? 0, current.priceTiyin, newMonth) : 0
+  // Потолок 24 мес. (Р3) — примерно, в днях; точный срок считает база.
+  const capped = switching && validMonths && switchDays + months * 30.4 > 730
+  const shorter = switching && validMonths && switchDays + months * 30 < (current.daysLeft ?? 0)
+  const overTeachers = target && target.teachers >= 0 && current.teachers > target.teachers
+  const overStudents = target && target.students >= 0 && current.students > target.students
 
   return (
     <form action={action} className="space-y-3">
@@ -116,6 +138,32 @@ export function PaymentForm({
         </p>
       ) : null}
       <p className="text-xs text-muted-foreground">{t('plan', 'amountHint')}</p>
+      {switching && target ? (
+        <div className="space-y-1 text-sm">
+          <p>
+            Оставшиеся на сегодня {current.daysLeft} дн. тарифа {current.name} пересчитаются по уплаченной цене примерно в{' '}
+            {switchDays} дн. тарифа {target.name}. Новый срок — эти дни + {validMonths ? months : '…'} мес. с момента
+            подтверждения; дни пересчитаем по остатку на тот день.
+          </p>
+          {shorter ? (
+            <p className="text-amber-700 dark:text-amber-300">Срок станет короче нынешнего: дорогой тариф тратит оплаченное быстрее.</p>
+          ) : null}
+          {capped ? (
+            <p className="text-amber-700 dark:text-amber-300">
+              Срок не может быть больше 24 месяцев — остаток сверх этого платформа вернёт деньгами.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {overTeachers || overStudents ? (
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          В тарифе {target?.name} меньше места:
+          {overTeachers ? ` специалистов ${current.teachers}, а в тарифе ${target?.teachers}` : ''}
+          {overTeachers && overStudents ? ';' : ''}
+          {overStudents ? ` учеников ${current.students}, а в тарифе ${target?.students}` : ''}. Работающие останутся, но
+          добавить новых нельзя, пока не освободите место в архиве.
+        </p>
+      ) : null}
 
       <SubmitButton>{t('plan', 'submit')}</SubmitButton>
 

@@ -5843,6 +5843,14 @@ export type Database = {
         Args: { p_center_id: string; p_key: string }
         Returns: number
       }
+      plan_switch_days: {
+        Args: {
+          p_new_price: number
+          p_old_price: number
+          p_remaining_days: number
+        }
+        Returns: number
+      }
       platform_centers: {
         Args: never
         Returns: {
@@ -5892,11 +5900,47 @@ export type Database = {
         Args: { p_months: number; p_price_tiyin: number }
         Returns: number
       }
+      platform_payment_preview: {
+        Args: {
+          p_amount_tiyin?: number
+          p_months?: number
+          p_payment_id: string
+          p_plan?: string
+        }
+        Returns: {
+          converted_days: number
+          current_plan: string
+          current_until: string
+          excess_days: number
+          excess_tiyin: number
+          new_until: string
+          remaining_days: number
+          switching: boolean
+        }[]
+      }
       platform_prepay_discount_pct: {
         Args: { p_months: number }
         Returns: number
       }
       platform_summary: { Args: never; Returns: Json }
+      platform_switch_calc: {
+        Args: {
+          p_amount_tiyin: number
+          p_center_id: string
+          p_months: number
+          p_plan: string
+        }
+        Returns: {
+          converted_days: number
+          excess_days: number
+          excess_tiyin: number
+          new_month_tiyin: number
+          new_until: string
+          old_month_tiyin: number
+          remaining_days: number
+          switching: boolean
+        }[]
+      }
       preview_message: {
         Args: { p_text: string; p_vars?: Json }
         Returns: string

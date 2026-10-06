@@ -177,6 +177,7 @@ export default async function AdminPage() {
                     claimedPlan={row.claimed_plan}
                     claimedMonths={row.claimed_months}
                     claimedAmountSom={toSom(row.claimed_amount_tiyin)}
+                    timeZone={row.center_timezone}
                   />
                   <RejectForm paymentId={row.payment_id} />
                 </div>

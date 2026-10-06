@@ -213,8 +213,36 @@ export default async function PlanPage() {
                 </div>
               ) : (
                 <PaymentForm
-                  plans={paidPlans.map((p) => ({ code: p.code, name: p.name, priceTiyin: p.priceTiyin }))}
+                  plans={paidPlans.map((p) => ({
+                    code: p.code,
+                    name: p.name,
+                    priceTiyin: p.priceTiyin,
+                    teachers: p.teachers,
+                    students: p.students,
+                  }))}
                   currentPlan={limits.plan}
+                  current={{
+                    name: limits.planName,
+                    // 0096 Р2: цена месяца — из последней подтверждённой оплаты этого
+                    // тарифа (сумма / месяцы, целочисленно, как в SQL), иначе прайс.
+                    // Средняя по оплатам этого тарифа подряд (после последней
+                    // оплаты другого) — зеркало platform_switch_calc.
+                    priceTiyin: (() => {
+                      const confirmed = (payments ?? []).filter((p) => p.confirmed_at)
+                      const run: typeof confirmed = []
+                      for (const p of confirmed) {
+                        if (p.plan !== limits.plan) break
+                        if ((p.months ?? 0) > 0 && p.amount_tiyin != null) run.push(p)
+                      }
+                      const months = run.reduce((s, p) => s + (p.months ?? 0), 0)
+                      const amount = run.reduce((s, p) => s + (p.amount_tiyin ?? 0), 0)
+                      return months > 0 ? Math.trunc(amount / months) : limits.priceTiyin
+                    })(),
+                    isTrial: limits.isTrial,
+                    daysLeft: limits.daysLeft,
+                    teachers: limits.usage.teachers,
+                    students: limits.usage.students,
+                  }}
                 />
               )}
             </CardContent>

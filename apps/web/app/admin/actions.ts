@@ -75,3 +75,53 @@ export async function rejectPayment(_prev: AdminState, formData: FormData): Prom
   revalidatePath('/admin')
   return { notice: t('admin', 'rejected') }
 }
+
+export type ConfirmPreview = {
+  currentPlan: string | null
+  currentUntil: string | null
+  switching: boolean
+  remainingDays: number | null
+  convertedDays: number | null
+  newUntil: string | null
+  excessDays: number
+  excessTiyin: number
+}
+
+/**
+ * Что сделает подтверждение с ЭТИМИ тарифом, месяцами и суммой (0096 Р6):
+ * platform_payment_preview — тот же расчёт, что extend_subscription.
+ * Исправить подтверждение нечем (ADR-011), поэтому форма показывает итог
+ * для значений формы, а не только для заявленных.
+ */
+export async function previewConfirm(
+  paymentId: string,
+  plan: string,
+  months: number,
+  amountSom: number,
+): Promise<{ preview?: ConfirmPreview; message?: string }> {
+  if (!paymentId || !plan || !Number.isInteger(months) || months < 1 || months > 24 || !(amountSom > 0)) {
+    return { message: 'Проверьте тариф, месяцы и сумму' }
+  }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('platform_payment_preview', {
+    p_payment_id: paymentId,
+    p_plan: plan,
+    p_months: months,
+    p_amount_tiyin: Math.round(amountSom * 100),
+  })
+  if (error) return { message: toAppError(error, 'Не удалось посчитать срок').message }
+  const p = data?.[0]
+  if (!p) return { message: 'Не удалось посчитать срок' }
+  return {
+    preview: {
+      currentPlan: p.current_plan,
+      currentUntil: p.current_until,
+      switching: p.switching,
+      remainingDays: p.remaining_days,
+      convertedDays: p.converted_days,
+      newUntil: p.new_until,
+      excessDays: p.excess_days ?? 0,
+      excessTiyin: p.excess_tiyin ?? 0,
+    },
+  }
+}
