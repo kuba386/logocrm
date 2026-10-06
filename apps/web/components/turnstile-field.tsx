@@ -54,6 +54,9 @@ export function TurnstileField() {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
   const box = useRef<HTMLDivElement>(null)
   const [token, setToken] = useState('')
+  // Проверка не загрузилась (блокировщик рекламы, сеть) — говорим сразу, а не
+  // после отправки невнятным отказом сервера (UX-аудит, правило UX33).
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     const container = box.current
@@ -77,12 +80,20 @@ export function TurnstileField() {
         widgetId = window.turnstile.render(container, {
           sitekey: siteKey,
           language: 'ru',
-          callback: setToken,
+          callback: (value: string) => {
+            setFailed(false)
+            setToken(value)
+          },
           'expired-callback': () => setToken(''),
-          'error-callback': () => setToken(''),
+          'error-callback': () => {
+            setToken('')
+            setFailed(true)
+          },
         })
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
 
     form?.addEventListener('submit', onSubmit)
     return () => {
@@ -96,8 +107,14 @@ export function TurnstileField() {
 
   return (
     <>
-      <div ref={box} />
+      {/* min-h — место под виджет заранее: без него он сдвигал кнопку при загрузке. */}
+      <div ref={box} className="min-h-[65px]" />
       <input type="hidden" name="captcha_token" value={token} />
+      {failed ? (
+        <p role="alert" className="text-sm text-destructive">
+          Не загрузилась проверка «я не робот». Обновите страницу; если не помогло — отключите блокировщик рекламы для этого сайта.
+        </p>
+      ) : null}
     </>
   )
 }
