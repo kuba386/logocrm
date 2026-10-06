@@ -1,9 +1,11 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { useFormStatus } from 'react-dom'
 import { formatSom, installmentDueDates, refundPayout, splitInstallments } from '@logocrm/core'
 import {
+  coverLessonDebt,
   freezeSubscription,
   refundSubscription,
   sellSubscriptionPaid,
@@ -71,6 +73,8 @@ export type SubscriptionView = {
   paymentState: string
   /** Живой план рассрочки (installments_view), пустой массив — рассрочки нет. */
   installments: InstallmentRow[]
+  /** Предпросмотр покрытия долга этим абонементом (0088) — только если есть что покрыть. */
+  cover?: { canCover: number; amountTiyin: number; remainingTiyin: number; creditAfterTiyin: number } | null
 }
 
 export type SourceOption = { id: string; name: string }
@@ -520,6 +524,70 @@ function TransferForm({
   )
 }
 
+/**
+ * «Покрыть неоплаченные занятия (N)» (0088): занятия списываются с этого
+ * абонемента, долг снимается. Два шага — кнопка и подтверждение с суммой:
+ * действие тратит занятия абонемента. Отказ (23514 «долг изменился») —
+ * перечитать страницу, чтобы предпросмотр и expected стали свежими.
+ */
+function CoverDebtForm({
+  studentId,
+  subscriptionId,
+  cover,
+}: {
+  studentId: string
+  subscriptionId: string
+  cover: NonNullable<SubscriptionView['cover']>
+}) {
+  const router = useRouter()
+  const [confirming, setConfirming] = useState(false)
+  const [state, action, pending] = useActionState(coverLessonDebt, initial)
+
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => action(formData))
+  }
+
+  if (!confirming) {
+    return (
+      <div className="space-y-1">
+        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
+          Покрыть неоплаченные занятия ({cover.canCover})
+        </Button>
+        <FormNotice message={state.notice} />
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/50 p-3 text-sm">
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="subscriptionId" value={subscriptionId} />
+      <input type="hidden" name="count" value={cover.canCover} />
+      <input type="hidden" name="expectedRemainingTiyin" value={cover.remainingTiyin} />
+      <p>
+        Списать с абонемента {cover.canCover} {cover.canCover === 1 ? 'занятие' : 'занятия'} в счёт долга на{' '}
+        {formatSom(cover.amountTiyin)}. Долг сейчас — {formatSom(cover.remainingTiyin)}.
+        {cover.creditAfterTiyin > 0 ? ` После покрытия ${formatSom(cover.creditAfterTiyin)} уже внесённых денег станут авансом.` : ''}
+      </p>
+      <FormError message={state.message} />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? 'Секунду…' : 'Покрыть'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+          Отмена
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 function SubscriptionCard({
   studentId,
   subscription,
@@ -579,6 +647,10 @@ function SubscriptionCard({
             </li>
           ))}
         </ol>
+      ) : null}
+
+      {canManage && subscription.cover && subscription.cover.canCover > 0 ? (
+        <CoverDebtForm studentId={studentId} subscriptionId={subscription.id} cover={subscription.cover} />
       ) : null}
 
       {/* freezeFrom, не state === 'frozen': subscription_summary отдаёт

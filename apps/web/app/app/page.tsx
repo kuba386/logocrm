@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { centerTimeZone } from '@/lib/timezone'
+import { canPayments } from '@/lib/roles'
 import { AdminDashboard } from './dashboard-admin'
 import { TeacherDashboard } from './dashboard-teacher'
 import { ParentDashboard } from './dashboard-parent'
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
         timeZone={timeZone}
         finance={role !== 'registrar'}
         showLessons={role !== 'finance'}
-        canOpenDebts={role === 'owner' || role === 'admin'}
+        canOpenDebts={canPayments(role)}
         setupCenterId={(role === 'owner' || role === 'admin') && centerId ? centerId : null}
       />
     )
