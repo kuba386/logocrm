@@ -3974,6 +3974,60 @@ export type Database = {
           },
         ]
       }
+      subscription_shortfall_writeoffs: {
+        Row: {
+          amount_tiyin: number
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          reason: string
+          student_id: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          reason: string
+          student_id: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          reason?: string
+          student_id?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_shortfall_writeoffs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_shortfall_writeoffs_subscription_fk"
+            columns: ["subscription_id", "student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "student_id", "center_id"]
+          },
+        ]
+      }
       subscription_types: {
         Row: {
           center_id: string
@@ -4055,6 +4109,8 @@ export type Database = {
           payer_id: string
           price_tiyin: number
           sale_key: string | null
+          settled_worked_tiyin: number | null
+          shortfall_written_off_tiyin: number
           starts_at: string
           status: string
           student_id: string
@@ -4078,6 +4134,8 @@ export type Database = {
           payer_id: string
           price_tiyin: number
           sale_key?: string | null
+          settled_worked_tiyin?: number | null
+          shortfall_written_off_tiyin?: number
           starts_at: string
           status?: string
           student_id: string
@@ -4101,6 +4159,8 @@ export type Database = {
           payer_id?: string
           price_tiyin?: number
           sale_key?: string | null
+          settled_worked_tiyin?: number | null
+          shortfall_written_off_tiyin?: number
           starts_at?: string
           status?: string
           student_id?: string
@@ -6312,6 +6372,7 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: boolean
       }
+      subscription_worked_unchecked: { Args: { p_id: string }; Returns: number }
       substitute_teacher: {
         Args: { p_lesson_id: string; p_new_teacher_id: string }
         Returns: undefined
