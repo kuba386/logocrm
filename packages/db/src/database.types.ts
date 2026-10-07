@@ -476,6 +476,24 @@ export type Database = {
           },
         ]
       }
+      bot_accounts: {
+        Row: {
+          created_at: string
+          tg_name: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          tg_name?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          tg_name?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       bot_pending_actions: {
         Row: {
           center_id: string
@@ -2826,6 +2844,73 @@ export type Database = {
             columns: ["subject_id", "center_id"]
             isOneToOne: false
             referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      payer_telegram_invites: {
+        Row: {
+          center_id: string
+          code_hash: string
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          payer_id: string
+          revoked_at: string | null
+          used_at: string | null
+          used_by: string | null
+          used_chat_id: number | null
+          used_tg_name: string | null
+        }
+        Insert: {
+          center_id: string
+          code_hash: string
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          payer_id: string
+          revoked_at?: string | null
+          used_at?: string | null
+          used_by?: string | null
+          used_chat_id?: number | null
+          used_tg_name?: string | null
+        }
+        Update: {
+          center_id?: string
+          code_hash?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          payer_id?: string
+          revoked_at?: string | null
+          used_at?: string | null
+          used_by?: string | null
+          used_chat_id?: number | null
+          used_tg_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payer_telegram_invites_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payer_telegram_invites_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "payer_telegram_invites_payer_fk"
+            columns: ["payer_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payers_with_stats"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -5246,6 +5331,7 @@ export type Database = {
           title: string
         }[]
       }
+      bot_unlink_telegram: { Args: { p_chat_id: number }; Returns: Json }
       bot_voice_pending: {
         Args: { p_lesson_id: string; p_student_id: string }
         Returns: boolean
@@ -5395,6 +5481,7 @@ export type Database = {
           remaining_tiyin: number
         }[]
       }
+      create_bot_parent_user: { Args: { p_full_name: string }; Returns: string }
       create_center: {
         Args: { p_city?: string; p_name: string }
         Returns: string
@@ -5477,6 +5564,13 @@ export type Database = {
           starts_at: string
         }[]
       }
+      create_payer_telegram_link: {
+        Args: { p_payer_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
       create_student_with_payer: {
         Args: {
           p_birth_date?: string
@@ -5494,13 +5588,6 @@ export type Database = {
         Returns: {
           payer_id: string
           student_id: string
-        }[]
-      }
-      create_payer_telegram_link: {
-        Args: { p_payer_id: string }
-        Returns: {
-          code: string
-          expires_at: string
         }[]
       }
       create_telegram_link_code: { Args: never; Returns: string }
@@ -5810,6 +5897,10 @@ export type Database = {
       link_parent_payer: {
         Args: { p_payer_id?: string; p_user_id: string }
         Returns: undefined
+      }
+      link_payer_telegram: {
+        Args: { p_chat_id: number; p_code: string; p_tg_name?: string }
+        Returns: Json
       }
       link_telegram: {
         Args: { p_chat_id: number; p_code: string }
