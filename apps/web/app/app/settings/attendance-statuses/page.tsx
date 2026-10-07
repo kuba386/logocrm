@@ -38,7 +38,7 @@ const FLAGS: { name: string; key: keyof StatusRow; label: string; hint: string }
   { name: 'deductsLesson', key: 'deducts_lesson', label: 'Списывает занятие', hint: 'с абонемента уходит одно занятие' },
   { name: 'paysTeacher', key: 'pays_teacher', label: 'Оплачивается специалисту', hint: 'понадобится расчёту зарплат' },
   { name: 'countsAbsence', key: 'counts_absence', label: 'Считается пропуском', hint: 'два подряд — родителю уходит сообщение' },
-  { name: 'notifyParent', key: 'notify_parent', label: 'Уведомлять родителя', hint: 'сразу после отметки' },
+  { name: 'notifyParent', key: 'notify_parent', label: 'Уведомлять родителя', hint: 'сообщение после отметки — текст в «Уведомлениях»' },
 ]
 
 function StatusFields({ status, idSuffix }: { status?: StatusRow; idSuffix: string }) {

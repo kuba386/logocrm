@@ -641,6 +641,32 @@ export type Database = {
         }
         Relationships: []
       }
+      debt_reminder_runs: {
+        Row: {
+          center_id: string
+          sent_at: string
+          week_start: string
+        }
+        Insert: {
+          center_id: string
+          sent_at?: string
+          week_start: string
+        }
+        Update: {
+          center_id?: string
+          sent_at?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debt_reminder_runs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       diagnostic_clinical_forms: {
         Row: {
           center_id: string
@@ -2273,16 +2299,19 @@ export type Database = {
           center_id: string
           lesson_id: string
           sent_at: string
+          starts_at: string
         }
         Insert: {
           center_id: string
           lesson_id: string
           sent_at?: string
+          starts_at: string
         }
         Update: {
           center_id?: string
           lesson_id?: string
           sent_at?: string
+          starts_at?: string
         }
         Relationships: [
           {
@@ -4060,6 +4089,42 @@ export type Database = {
           },
         ]
       }
+      subscription_period_reminders_sent: {
+        Row: {
+          center_id: string
+          ends_at: string
+          sent_at: string
+          subscription_id: string
+        }
+        Insert: {
+          center_id: string
+          ends_at: string
+          sent_at?: string
+          subscription_id: string
+        }
+        Update: {
+          center_id?: string
+          ends_at?: string
+          sent_at?: string
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_period_reminders_sent_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_period_reminders_sent_sub_fk"
+            columns: ["subscription_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       subscription_reminders_sent: {
         Row: {
           center_id: string
@@ -4452,6 +4517,42 @@ export type Database = {
           },
           {
             foreignKeyName: "teacher_rates_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      teacher_schedule_sent: {
+        Row: {
+          center_id: string
+          day: string
+          sent_at: string
+          teacher_id: string
+        }
+        Insert: {
+          center_id: string
+          day: string
+          sent_at?: string
+          teacher_id: string
+        }
+        Update: {
+          center_id?: string
+          day?: string
+          sent_at?: string
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_schedule_sent_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_schedule_sent_teacher_fk"
             columns: ["teacher_id", "center_id"]
             isOneToOne: false
             referencedRelation: "teachers"
@@ -5198,6 +5299,10 @@ export type Database = {
       center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
+      center_notification_enabled: {
+        Args: { p_center_id: string; p_event_type: string }
+        Returns: boolean
+      }
       center_payments_day: {
         Args: { p_center: string; p_day: string }
         Returns: Json
@@ -5399,6 +5504,13 @@ export type Database = {
           center_count: number
         }[]
       }
+      debt_payers_center: {
+        Args: { p_center: string; p_user: string }
+        Returns: {
+          payer_id: string
+        }[]
+      }
+      debt_reminders_at: { Args: { p_now: string }; Returns: number }
       decline_booking_request: {
         Args: { p_reason?: string; p_request_id: string }
         Returns: undefined
@@ -5664,12 +5776,17 @@ export type Database = {
         }[]
       }
       lesson_debt_lock: { Args: { p_student_id: string }; Returns: undefined }
+      lesson_reminder_day: {
+        Args: { p_now: string; p_starts_at: string; p_tz: string }
+        Returns: string
+      }
       lesson_reminders: {
         Args: never
         Returns: {
           sent_count: number
         }[]
       }
+      lesson_reminders_at: { Args: { p_now: string }; Returns: number }
       lesson_slot_conflicts: {
         Args: {
           p_center: string
@@ -5790,6 +5907,14 @@ export type Database = {
           user_id: string
         }[]
       }
+      notification_schedules: {
+        Args: never
+        Returns: {
+          debt_reminders: number
+          period_reminders: number
+          teacher_schedules: number
+        }[]
+      }
       notification_skip: {
         Args: { p_event_id: number; p_reason: string }
         Returns: string
@@ -5838,6 +5963,10 @@ export type Database = {
           phone_alt: string
           relation: string
         }[]
+      }
+      period_subscription_reminders_at: {
+        Args: { p_now: string }
+        Returns: number
       }
       plan_limit: {
         Args: { p_center_id: string; p_key: string }
@@ -6513,6 +6642,10 @@ export type Database = {
           skipped_count: number
         }[]
       }
+      subscription_renewed: {
+        Args: { p_subscription_id: string }
+        Returns: boolean
+      }
       subscription_state: {
         Args: { p_subscription_id: string }
         Returns: string
@@ -6552,6 +6685,7 @@ export type Database = {
       }
       switch_center: { Args: { p_center_id: string }; Returns: undefined }
       teacher_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
+      teacher_schedules_at: { Args: { p_now: string }; Returns: number }
       teacher_teaches_student: {
         Args: { p_student_id: string }
         Returns: boolean

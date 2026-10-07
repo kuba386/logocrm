@@ -115,7 +115,8 @@ insert into public.group_students (center_id, group_id, student_id, joined_at) v
   ('cccccccc-0000-0000-0000-00000000000a','9a9a9a9a-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002', current_date - 7);
 
 insert into public.lessons (id, center_id, teacher_id, group_id, service_id, status, starts_at, ends_at) values
-  ('ffffffff-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','9a9a9a9a-0000-0000-0000-000000000001','bbbbbbbb-0000-0000-0000-000000000001','planned','2026-10-01 10:00+06','2026-10-01 10:45+06');
+  ('ffffffff-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-000000000001','9a9a9a9a-0000-0000-0000-000000000001','bbbbbbbb-0000-0000-0000-000000000001','planned','2099-10-01 10:00+06','2099-10-01 10:45+06');
+-- 0097: дата в будущем — прошедшее занятие напоминания не получает (п.9).
 
 create or replace function public.tests_claims(p_user uuid, p_center uuid)
   returns void language plpgsql as $$

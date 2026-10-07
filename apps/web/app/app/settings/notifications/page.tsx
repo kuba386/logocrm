@@ -11,8 +11,17 @@ export const metadata = { title: 'Уведомления — LogoCRM' }
  * (event_messages, 0034). Тип, которого здесь нет, сообщений не порождает, и
  * добавить его правкой текста нельзя — нужна миграция.
  */
-const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: string[]; mandatory?: boolean }[] = [
-  { type: 'lesson.reminder', placeholders: ['{child}', '{date}', '{time}', '{teacher}'] },
+const EVENTS: {
+  type: string
+  placeholders: string[]
+  whatsappPlaceholders?: string[]
+  mandatory?: boolean
+  // Каналы из notification_event_types.channels (зеркало: справочник закрыт
+  // для чтения из браузера). База шаблон в чужой канал не примет (0097).
+  channels?: readonly Channel[]
+}[] = [
+  // 0097: {day} — «сегодня», «завтра» или дата; уходит накануне в 18:00.
+  { type: 'lesson.reminder', placeholders: ['{child}', '{day}', '{date}', '{time}', '{teacher}'] },
   { type: 'subscription.low_balance', placeholders: ['{child}', '{left}'] },
   { type: 'subscription.exhausted', placeholders: ['{child}'] },
   { type: 'student.absent_streak', placeholders: ['{child}', '{count}'] },
@@ -50,9 +59,16 @@ const EVENTS: { type: string; placeholders: string[]; whatsappPlaceholders?: str
   // но решение о блокировке смотрит и на работы в полёте, которых эти числа
   // не показывают — дефолтный текст их не называет намеренно.
   { type: 'ai.quota_exceeded', placeholders: ['{child}', '{used}', '{limit}'], whatsappPlaceholders: ['{used}', '{limit}'], mandatory: true },
+  // 0097: долг раз в неделю (понедельник 10:00), окончание абонемента на срок,
+  // отметка со статусом «Уведомлять родителя», расписание специалисту.
+  { type: 'debt.reminder', placeholders: ['{child}', '{debt}'] },
+  { type: 'subscription.period_ending', placeholders: ['{child}', '{date}'] },
+  { type: 'attendance.status_changed', placeholders: ['{child}', '{date}', '{time}', '{status}'] },
+  { type: 'teacher.schedule', placeholders: ['{date}', '{center}', '{lesson_count}', '{lesson_list}'], channels: ['telegram'] },
 ]
 
 const CHANNELS = ['telegram', 'whatsapp_link'] as const
+type Channel = (typeof CHANNELS)[number]
 
 export default async function NotificationsSettingsPage() {
   const supabase = await createClient()
@@ -95,7 +111,7 @@ export default async function NotificationsSettingsPage() {
             <CardTitle className="text-base">{label('eventType', event.type)}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 sm:grid-cols-2">
-            {CHANNELS.map((channel) => {
+            {(event.channels ?? CHANNELS).map((channel) => {
               const current = byKey.get(`${event.type}:${channel}`)
               const placeholders =
                 channel === 'whatsapp_link' && event.whatsappPlaceholders

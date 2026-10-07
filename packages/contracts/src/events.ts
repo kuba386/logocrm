@@ -636,8 +636,10 @@ export const expenseRecordedSchema = z.object({
 // --- Этап 6: уведомления ------------------------------------------------------
 
 /**
- * Занятие начнётся не позже чем через 18 часов. Шлётся один раз на занятие
- * (lesson_reminders_sent, 0032), поэтому обработчик может не дедуплицировать.
+ * Напоминание о занятии: накануне с 18 до 21 по часам центра, поставленное
+ * поздно — утром с 8 (0097). Шлётся один раз на занятие и его время
+ * (lesson_reminders_sent: lesson_id + starts_at): перенос — новое напоминание,
+ * старое при доставке молчит.
  */
 export const lessonReminderSchema = z.object({
   type: z.literal('lesson.reminder'),
@@ -1066,6 +1068,50 @@ export const bookingRequestedSchema = z.object({
   }),
 })
 
+// --- Этап 11: уведомления по часам центра (0097) ------------------------------
+
+/** Долг раз в неделю — по плательщику; сумма считается при доставке. */
+export const debtReminderSchema = z.object({
+  type: z.literal('debt.reminder'),
+  payload: centerRef.extend({
+    payer_id: z.string().uuid(),
+    week_start: z.string(),
+  }),
+})
+
+/** Абонемент на срок заканчивается через 0–3 дня (не продлён, не заморожен). */
+export const subscriptionPeriodEndingSchema = z.object({
+  type: z.literal('subscription.period_ending'),
+  payload: centerRef.extend({
+    subscription_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    ends_at: z.string(),
+  }),
+})
+
+/**
+ * Отметка поставлена или статус сменён на статус с галочкой «Уведомлять
+ * родителя». status_id — чтобы доставка отличила перекрытое событие.
+ */
+export const attendanceStatusChangedSchema = z.object({
+  type: z.literal('attendance.status_changed'),
+  payload: centerRef.extend({
+    attendance_id: z.string().uuid(),
+    lesson_id: z.string().uuid(),
+    student_id: z.string().uuid(),
+    status_id: z.string().uuid(),
+  }),
+})
+
+/** Специалисту — его занятия на date; список собирается при доставке. */
+export const teacherScheduleSchema = z.object({
+  type: z.literal('teacher.schedule'),
+  payload: centerRef.extend({
+    teacher_id: z.string().uuid(),
+    date: z.string(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -1160,6 +1206,10 @@ export const appEventSchema = z.discriminatedUnion('type', [
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,
   bookingRequestedSchema,
+  debtReminderSchema,
+  subscriptionPeriodEndingSchema,
+  attendanceStatusChangedSchema,
+  teacherScheduleSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

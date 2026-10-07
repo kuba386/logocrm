@@ -38,9 +38,11 @@ select is_empty(
   $$ select c.oid::regclass::text || ' ' || a.privilege_type
        from pg_class c, aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
       where c.oid in ('public.lesson_reminders_sent'::regclass, 'public.center_digest_runs'::regclass,
-                      'public.subscription_reminders_sent'::regclass)
+                      'public.subscription_reminders_sent'::regclass,
+                      'public.teacher_schedule_sent'::regclass, 'public.debt_reminder_runs'::regclass,
+                      'public.subscription_period_reminders_sent'::regclass)
         and a.grantee = 'service_role'::regrole $$,
-  'Служебные таблицы планировщиков (0032, 0052) — у service_role ни одной привилегии');
+  'Служебные таблицы планировщиков (0032, 0052, 0097) — у service_role ни одной привилегии');
 
 select is_empty(
   $$ select c.oid::regclass::text || ' ' || a.grantee::regrole::text || ' ' || a.privilege_type
