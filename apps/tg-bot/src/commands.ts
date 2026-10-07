@@ -43,7 +43,7 @@ type NoteResult = { student_name: string; appended: boolean; preview: string }
 
 export const HELP =
   'Команды: /today — занятия на сегодня, /balance — остаток по детям, ' +
-  '/debts — долги по центру, /cash — поступления за сегодня.'
+  '/debts — долги по центру, /cash — поступления за сегодня, /stop — отключить сообщения.'
 
 /** Готовый текст по центру — деньги и слова считает база (0072), здесь только отправка. */
 type FinanceRow = { center_name: string; message: string }
@@ -69,7 +69,12 @@ const MAX_VOICE_SECONDS = 15 * 60
 /** Префикс deep-link «записать резюме»: t.me/<bot>?start=voice_<токен>. */
 const VOICE_PREFIX = 'voice_'
 
-export async function handleStart(chatId: number, code: string | undefined): Promise<void> {
+/** Префикс личной ссылки родителя с карточки плательщика (0098): start=p_<код>. */
+const PARENT_PREFIX = 'p_'
+
+type ParentLinkResult = { center_name: string; payer_name: string; already: boolean }
+
+export async function handleStart(chatId: number, code: string | undefined, tgName?: string): Promise<void> {
   // Ветвление до link_telegram: иначе токен диктовки уходит в привязку
   // аккаунта, и специалист по собственной кнопке получает «код
   // недействителен».
@@ -86,17 +91,50 @@ export async function handleStart(chatId: number, code: string | undefined): Pro
     return
   }
 
+  // Родитель по ссылке из центра — до link_telegram, по той же причине, что voice_.
+  if (code?.startsWith(PARENT_PREFIX)) {
+    const linked = await rpc<ParentLinkResult>('link_payer_telegram', {
+      p_code: code.slice(PARENT_PREFIX.length),
+      p_chat_id: chatId,
+      p_tg_name: tgName ?? null,
+    })
+    await sendMessage(
+      chatId,
+      (linked.already ? 'Вы уже подключены' : 'Готово! Вы подключены') +
+        ` к «${linked.center_name}» (${linked.payer_name}). ` +
+        'Сюда будут приходить напоминания о занятиях, долги и отчёты специалиста. ' +
+        '/balance — остаток по детям, /today — занятия сегодня, /stop — отключить сообщения.',
+    )
+    return
+  }
+
   if (!code) {
     await sendMessage(
       chatId,
-      'Чтобы привязать аккаунт, откройте LogoCRM → раздел «Telegram» → «Получить код» ' +
-        'и отправьте его сюда командой /start с кодом.',
+      'Родителю: попросите в центре ссылку для подключения и откройте её. ' +
+        'Сотруднику: LogoCRM → раздел «Telegram» → «Получить код», затем /start с кодом.',
     )
     return
   }
 
   await rpc('link_telegram', { p_code: code, p_chat_id: chatId })
   await sendMessage(chatId, `Аккаунт привязан. ${HELP}`)
+}
+
+/** /stop — чат перестаёт получать сообщения (0098); подключиться снова — новой ссылкой из центра. */
+export async function handleStop(chatId: number): Promise<void> {
+  const result = await rpc<{ unlinked: boolean; bot_only: boolean }>('bot_unlink_telegram', { p_chat_id: chatId })
+  if (!result.unlinked) {
+    await sendMessage(chatId, 'Этот чат и так не подключён.')
+    return
+  }
+  // Родитель по ссылке и сотрудник подключаются по-разному (0098).
+  await sendMessage(
+    chatId,
+    result.bot_only
+      ? 'Сообщения отключены. Чтобы подключиться снова, попросите в центре новую ссылку.'
+      : 'Сообщения отключены. Чтобы подключиться снова: LogoCRM → раздел «Telegram» → «Получить код».',
+  )
 }
 
 export async function handleToday(chatId: number): Promise<void> {

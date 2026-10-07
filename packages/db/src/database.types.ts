@@ -5496,6 +5496,13 @@ export type Database = {
           student_id: string
         }[]
       }
+      create_payer_telegram_link: {
+        Args: { p_payer_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
       create_telegram_link_code: { Args: never; Returns: string }
       current_center: { Args: never; Returns: string }
       daily_digest: {
@@ -5951,6 +5958,7 @@ export type Database = {
       }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
       payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
+      payer_telegram_status: { Args: { p_payer_id: string }; Returns: Json }
       payers_brief: {
         Args: never
         Returns: {

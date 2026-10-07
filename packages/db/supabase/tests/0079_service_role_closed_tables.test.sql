@@ -40,7 +40,8 @@ select is_empty(
       where c.oid in ('public.lesson_reminders_sent'::regclass, 'public.center_digest_runs'::regclass,
                       'public.subscription_reminders_sent'::regclass,
                       'public.teacher_schedule_sent'::regclass, 'public.debt_reminder_runs'::regclass,
-                      'public.subscription_period_reminders_sent'::regclass)
+                      'public.subscription_period_reminders_sent'::regclass,
+                      'public.payer_telegram_invites'::regclass, 'public.bot_accounts'::regclass)
         and a.grantee = 'service_role'::regrole $$,
   'Служебные таблицы планировщиков (0032, 0052, 0097) — у service_role ни одной привилегии');
 

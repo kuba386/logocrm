@@ -55,8 +55,8 @@ select set_eq(
         and not exists (select 1 from information_schema.columns c
                          where c.table_schema = 'public' and c.table_name = t.table_name and c.column_name = 'center_id') $$,
   $$ values ('centers'), ('plans'), ('platform_admins'), ('notification_event_types'), ('telegram_accounts'), ('telegram_link_codes'), ('funnel_stages'),
-            ('speech_conclusions'), ('clinical_forms'), ('referral_targets') $$,
-  'Таблицы без center_id — ровно десять (funnel_stages с 0055, три справочника диагностики с 0059), все в списке исключений с причиной; новая требует решения (Р7)');
+            ('speech_conclusions'), ('clinical_forms'), ('referral_targets'), ('bot_accounts') $$,
+  'Таблицы без center_id — ровно одиннадцать (funnel_stages с 0055, три справочника диагностики с 0059, bot_accounts с 0098), все в списке исключений с причиной; новая требует решения (Р7)');
 
 -- Р4: memberships/invitations — только insert. tgtype: 1 = ROW, 2 = BEFORE,
 -- 4 = INSERT, 8 = DELETE, 16 = UPDATE — время и уровень тоже под забором,
