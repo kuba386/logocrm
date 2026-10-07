@@ -493,7 +493,11 @@
     "subscription.voice_blocked": "Голосовое не расшифровано: подписка истекла",
     "subscription.ending": "Срок подписки заканчивается",
     "subscription.expired": "Срок подписки истёк",
-    "ai.quota_exceeded": "Лимит голосовых резюме исчерпан"
+    "ai.quota_exceeded": "Лимит голосовых резюме исчерпан",
+    "debt.reminder": "Напоминание о долге (раз в неделю)",
+    "subscription.period_ending": "Абонемент на срок заканчивается",
+    "attendance.status_changed": "Отметка посещения родителю",
+    "teacher.schedule": "Расписание специалисту на завтра"
   },
   "funnel": {
     "title": "Воронка",

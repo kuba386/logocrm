@@ -310,35 +310,47 @@ select throws_ok($q$ select * from public.claim_events(501) $q$, '22023', null, 
 
 -- 34-43. Напоминания о занятии ---------------------------------------------------------------------
 
-select is((select sent_count from public.lesson_reminders()), 1,
-  'Напоминание уходит по одному занятию: далёкое, отменённое, прошедшее и занятие закрытого центра не в счёт');
-select is((select sent_count from public.lesson_reminders()), 0,
-  'Второй вызов — ноль: первичный ключ lesson_reminders_sent и есть инвариант (Р8)');
+-- С 0097 окно — по часам центра (накануне 18–21, догоняющее 8–21): результат
+-- lesson_reminders() зависит от часа прогона CI. Здесь — вызов и отметки,
+-- окна на фиксированных моментах — tests/0097.
+select lives_ok($q$ select * from public.lesson_reminders() $q$,
+  'lesson_reminders() без сессии исполняется (окна по часам центра — tests/0097)');
+
+-- Приводим к известному состоянию, что бы ни отправил вызов выше.
+delete from public.lesson_reminders_sent;
+delete from public.events where type = 'lesson.reminder';
+
+select lives_ok(
+  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id, starts_at)
+      select id, center_id, starts_at from public.lessons where id = 'ffffffff-0000-0000-0000-000000000001' $q$,
+  'Отметка кладётся парой (занятие, время) — так её пишет lesson_reminders_at (0097 п.9)');
+select throws_ok(
+  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id, starts_at)
+      select id, center_id, starts_at from public.lessons where id = 'ffffffff-0000-0000-0000-000000000001' $q$,
+  '23505', null,
+  'Вторая отметка того же занятия на то же время — отказ: первичный ключ и есть инвариант (Р8)');
 select is(
   (select count(*)::int from public.lesson_reminders_sent), 1,
   'В lesson_reminders_sent ровно одна строка');
 select is(
   (select lesson_id from public.lesson_reminders_sent), 'ffffffff-0000-0000-0000-000000000001'::uuid,
   'Отмечено именно ближайшее занятие действующего центра');
-select is(
-  (select count(*)::int from public.events where type = 'lesson.reminder'), 1,
-  'Одно событие lesson.reminder');
-select is(
-  (select payload->>'lesson_id' from public.events where type = 'lesson.reminder'),
-  'ffffffff-0000-0000-0000-000000000001',
-  'В payload — то же занятие');
+select ok(
+  not has_function_privilege('bot_worker', 'public.lesson_reminders_at(timestamptz)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.lesson_reminders_at(timestamptz)', 'EXECUTE'),
+  'Сдвинуть время нельзя: lesson_reminders_at(p_now) не исполняет ни воркер, ни пользователь (0097 п.5)');
 
 select throws_ok(
-  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id)
-      values ('ffffffff-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-00000000000b') $q$,
+  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id, starts_at)
+      values ('ffffffff-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-00000000000b', now()) $q$,
   '23503', null,
   'Занятие одного центра с center_id другого не проходит: составной FK, как после 0022');
 
 select public.tests_claims('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 select throws_ok(
-  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id)
-      values ('ffffffff-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-00000000000a') $q$,
+  $q$ insert into public.lesson_reminders_sent (lesson_id, center_id, starts_at)
+      values ('ffffffff-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-00000000000a', now()) $q$,
   '42501', null,
   'Отметку о напоминании нельзя подделать: гранта на запись нет ни у кого (Р8)');
 select is((select count(*)::int from public.lesson_reminders_sent), 1,
