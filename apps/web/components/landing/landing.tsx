@@ -149,6 +149,39 @@ export function Landing() {
           <LandingMotion />
         </section>
 
+        <section className={s.section} aria-labelledby="film-title">
+          <h2 id="film-title" className={s.sectionTitle}>
+            LogoCRM за минуту
+          </h2>
+          <p className={s.sectionLead}>
+            Как выглядит обычный день центра: расписание, отчёт родителю из голосового, цели по звукам
+            и абонементы.
+          </p>
+          <figure className={s.film}>
+            {/* preload="none": минута видео не грузится, пока её не включили, — мобильный трафик. */}
+            <div className={s.filmFrame}>
+              <video
+                className={s.filmVideo}
+                src="/video/logocrm-60s.mp4"
+                poster="/video/logocrm-60s.jpg"
+                controls
+                playsInline
+                preload="none"
+                width={1280}
+                height={720}
+                aria-describedby="film-caption"
+              >
+                <a href="/video/logocrm-60s.mp4">Открыть видео</a>
+              </video>
+            </div>
+            <figcaption id="film-caption" className={s.filmCaption}>
+              1 минута, со звуком. Расписание не даёт поставить два занятия в один кабинет · голосовое
+              после занятия становится отчётом родителю · нарушенные звуки сразу становятся целями ·
+              абонементы и долги считаются сами · LogoCRM ставится на телефон как приложение.
+            </figcaption>
+          </figure>
+        </section>
+
         <section className={s.section} aria-labelledby="audiences-title">
           <h2 id="audiences-title" className={s.sectionTitle}>
             Каждый видит своё

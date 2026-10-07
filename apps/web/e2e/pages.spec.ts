@@ -129,7 +129,8 @@ test.describe('гость', () => {
     for (const icon of body.icons as { src: string }[]) {
       expect((await request.get(icon.src, { maxRedirects: 0 })).status(), icon.src).toBe(200)
     }
-    for (const path of ['/sw.js', '/offline.html', '/apple-icon.png']) {
+    // Ролик лендинга — тоже без входа (matcher middleware исключает mp4).
+    for (const path of ['/sw.js', '/offline.html', '/apple-icon.png', '/video/logocrm-60s.mp4', '/video/logocrm-60s.jpg']) {
       expect((await request.get(path, { maxRedirects: 0 })).status(), path).toBe(200)
     }
   })

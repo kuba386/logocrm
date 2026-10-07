@@ -1,0 +1,6 @@
+{
+  "name": "logocrm-film",
+  "private": true,
+  "description": "Рендер ролика лендинга (см. README). Не часть pnpm-воркспейса.",
+  "dependencies": { "mp4-muxer": "5.2.2" }
+}
