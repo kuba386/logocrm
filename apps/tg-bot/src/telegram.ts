@@ -63,6 +63,8 @@ export async function answerCallback(id: string, text?: string, alert = false): 
 export type Update = {
   message?: {
     chat: { id: number; type?: string }
+    /** Автор — имя попадает на карточку плательщика: «кто подключился» (0098). */
+    from?: { first_name?: string; last_name?: string; username?: string }
     text?: string
     /** Подпись к фото/файлу — заметкой не становится (0071 Р14). */
     caption?: string

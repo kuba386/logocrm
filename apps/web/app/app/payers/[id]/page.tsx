@@ -7,11 +7,12 @@ import { buttonVariants } from '@/components/ui/button'
 import { statusLabel, studentAge } from '@/lib/students'
 import { isFrontDesk } from '@/lib/roles'
 import { debtProblems } from '@/lib/debts'
-import { label } from '@/lib/messages'
+import { label, t } from '@/lib/messages'
 import { calendarDay, centerTimeZone, dayInZone } from '@/lib/timezone'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
+import { PayerTelegramPanel, type PayerTelegramStatus } from './payer-telegram-panel'
 
 export const metadata = { title: 'Плательщик — LogoCRM' }
 
@@ -41,7 +42,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
 
   // Бейдж — узкой функцией, а не чтением telegram_accounts: таблица привязок
   // стойке не положена, ответ нужен один — «да/нет» (0033).
-  const [{ data: children }, { data: teachers }, { data: telegramLinked }] = await Promise.all([
+  const [{ data: children }, { data: teachers }, { data: telegramLinked }, { data: telegramStatus }] = await Promise.all([
     supabase
       .from('students')
       .select('id, full_name, birth_date, status')
@@ -57,6 +58,8 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
     // Бейдж и действия стойки — только стойке; родитель видит свою карточку
     // без кнопок (RLS пустила бы его к строке, а RPC отказал бы).
     frontDesk ? supabase.rpc('payer_telegram_linked', { p_payer_id: id }) : Promise.resolve({ data: null }),
+    // Кто подключён и живая ссылка (0098) — без кода: он показывается один раз.
+    frontDesk ? supabase.rpc('payer_telegram_status', { p_payer_id: id }) : Promise.resolve({ data: null }),
   ])
 
   // Долги — тем же единым источником, что /app/debts и дашборд (0076): права
@@ -136,18 +139,6 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                   WhatsApp
                 </a>
               ) : null}
-              {!telegramLinked && wa ? (
-                <a
-                  href={`https://wa.me/${wa}?text=${encodeURIComponent(
-                    'Здравствуйте! Чтобы получать напоминания о занятиях и остаток абонемента, привяжите Telegram: откройте LogoCRM → раздел Telegram → «Получить код».',
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                >
-                  Пригласить в бот
-                </a>
-              ) : null}
               <AddStudentDialog
                 teachers={(teachers ?? []).map((t) => ({ id: t.id, fullName: t.full_name }))}
                 presetPayer={{ id: payer.id, fullName: payer.full_name }}
@@ -157,6 +148,24 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           ) : null
         }
       />
+
+      {frontDesk && telegramStatus ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('payerTelegram', 'title')}</CardTitle>
+            <CardDescription>{t('payerTelegram', 'description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PayerTelegramPanel
+              payerId={payer.id}
+              whatsapp={wa}
+              status={telegramStatus as unknown as PayerTelegramStatus}
+              canManage={role === 'owner' || role === 'admin'}
+              timeZone={timeZone}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

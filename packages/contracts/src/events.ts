@@ -50,6 +50,9 @@ export const membershipCreatedSchema = z.object({
     center_id: z.string().uuid(),
     user_id: z.string().uuid(),
     role: roleSchema,
+    /** 0098: родитель подключился ссылкой с карточки — бот-аккаунт без почты. */
+    payer_id: z.string().uuid().optional(),
+    via: z.literal('telegram_link').optional(),
   }),
 })
 export type MembershipCreated = z.infer<typeof membershipCreatedSchema>
@@ -1112,6 +1115,18 @@ export const teacherScheduleSchema = z.object({
   }),
 })
 
+// --- Этап 12: родитель в боте по ссылке (0098) ---------------------------------
+
+/** Владелец или администратор выдал личную ссылку на бота плательщику. Кода в событии нет. */
+export const payerTelegramLinkCreatedSchema = z.object({
+  type: z.literal('payer.telegram_link_created'),
+  payload: centerRef.extend({
+    payer_id: z.string().uuid(),
+    created_by: z.string().uuid(),
+    expires_at: z.string(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -1210,6 +1225,7 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionPeriodEndingSchema,
   attendanceStatusChangedSchema,
   teacherScheduleSchema,
+  payerTelegramLinkCreatedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

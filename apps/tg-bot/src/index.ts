@@ -9,6 +9,7 @@ import {
   handleDebts,
   handlePick,
   handleStart,
+  handleStop,
   handleStatus,
   handleText,
   handleToday,
@@ -73,7 +74,14 @@ async function handleUpdate(update: Update): Promise<void> {
         return
       }
       const [command, argument] = text.split(/\s+/, 2)
-      if (command === '/start') await handleStart(chatId, argument)
+      if (command === '/start') {
+        const from = message.from
+        const tgName =
+          [from?.first_name, from?.last_name].filter(Boolean).join(' ') ||
+          (from?.username ? `@${from.username}` : undefined)
+        await handleStart(chatId, argument, tgName)
+      }
+      else if (command === '/stop') await handleStop(chatId)
       else if (command === '/today') await handleToday(chatId)
       else if (command === '/balance') await handleBalance(chatId)
       else if (command === '/debts' || command === '/cash') {
@@ -170,11 +178,12 @@ server.listen(env.port, () => {
 // новый специалист жмёт его из меню, а не гадает, с чего начать. /debts и
 // /cash видны всем: список команд общий на бота, отказ по роли даёт база.
 void setMyCommands([
-  { command: 'start', description: 'Привязать аккаунт LogoCRM' },
+  { command: 'start', description: 'Подключиться к центру' },
   { command: 'today', description: 'Занятия на сегодня' },
   { command: 'balance', description: 'Остаток по детям' },
   { command: 'debts', description: 'Долги по центру' },
   { command: 'cash', description: 'Поступления за сегодня' },
+  { command: 'stop', description: 'Отключить сообщения в этом чате' },
 ]).catch((error: unknown) => {
   console.error('Не удалось задать список команд', error)
 })
