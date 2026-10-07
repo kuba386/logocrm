@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
 import s from './landing.module.css'
+import { LandingMotion } from './landing-motion'
 
 // Этапы — сид goal_stages (0036): тот же порядок и те же названия, что видит логопед.
 const STAGES = [
@@ -142,6 +143,10 @@ export function Landing() {
               ))}
             </ol>
           </figure>
+        </section>
+
+        <section className={s.section} aria-label="Как работает LogoCRM">
+          <LandingMotion />
         </section>
 
         <section className={s.section} aria-labelledby="audiences-title">

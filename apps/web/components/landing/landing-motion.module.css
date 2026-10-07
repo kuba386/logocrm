@@ -1,0 +1,541 @@
+/*
+ * Ролик лендинга — 15 с, бесконечно. Одна шкала времени на всё: каждая
+ * анимация длится 15 с, сцена задаётся процентами (1 с = 6.667%).
+ * A 0–20% · B 20–40% · C 40–60% · D 60–80% · E 80–100%.
+ * Кадр 100% совпадает с 0%: всё сворачивается в точку, из которой начинается.
+ * Цвета — токены лендинга (--ink, --teal, --margin… задаёт .page).
+ */
+
+.frame {
+  margin: 0;
+}
+
+.stage {
+  --dur: 15s;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ink-c: var(--ink, #1f2b66);
+  --teal-c: var(--teal, #0f7468);
+  --margin-c: var(--margin, #d6424e);
+  --rule-c: var(--rule, #d3deea);
+  --sheet-c: var(--sheet, #fbfdfe);
+  --graphite-c: var(--graphite, #586176);
+
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--rule-c);
+  border-radius: 14px;
+  background: var(--sheet-c);
+  box-shadow: 0 1px 0 var(--rule-c), 0 30px 60px -30px rgba(31, 43, 102, 0.35);
+  perspective: 120cqw;
+  color: var(--ink-c);
+  font-family: var(--font-display), Georgia, serif;
+  isolation: isolate;
+}
+
+.stage * {
+  animation-duration: var(--dur);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+.stage[data-paused='true'] * {
+  animation-play-state: paused;
+}
+
+/* --- Бумага: линовка медленно ползёт ровно на две строки за цикл — бесшовно --- */
+
+.paper {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(3cqw - 1px),
+    var(--rule-c) calc(3cqw - 1px),
+    var(--rule-c) 3cqw
+  );
+  opacity: 0.7;
+  animation-name: paperDrift;
+  animation-timing-function: linear;
+}
+
+@keyframes paperDrift {
+  from { background-position: 0 0; }
+  to { background-position: 0 6cqw; }
+}
+
+.margin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 9cqw;
+  width: 2px;
+  background: var(--margin-c);
+  opacity: 0.55;
+  transform-origin: top;
+  animation-name: marginDraw;
+  animation-timing-function: var(--ease-io);
+}
+
+@keyframes marginDraw {
+  0% { transform: scaleY(0); }
+  6%, 94% { transform: scaleY(1); }
+  100% { transform: scaleY(0); }
+}
+
+/* --- Перетекающая форма: точка → круг → лист → кольцо → пузырь → подчёркивание → точка --- */
+
+.blob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2cqw;
+  height: 2cqw;
+  border-radius: 50%;
+  background: var(--ink-c);
+  transform: translate(-50%, -50%);
+  animation-name: blobMorph;
+  animation-timing-function: var(--ease-io);
+  z-index: 0;
+}
+
+@keyframes blobMorph {
+  0% { left: 50%; top: 50%; width: 2cqw; height: 2cqw; border-radius: 50%; background: var(--ink-c); opacity: 1; }
+  5% { left: 72%; top: 48%; width: 30cqw; height: 30cqw; border-radius: 42% 58% 61% 39% / 45% 41% 59% 55%; background: rgba(15, 116, 104, 0.12); opacity: 1; }
+  12% { border-radius: 58% 42% 38% 62% / 52% 61% 39% 48%; }
+  17% { left: 72%; top: 48%; width: 30cqw; height: 30cqw; border-radius: 45% 55% 52% 48% / 50% 46% 54% 50%; background: rgba(15, 116, 104, 0.12); }
+  23% { left: 71%; top: 52%; width: 40cqw; height: 34cqw; border-radius: 2cqw; background: rgba(31, 43, 102, 0.06); }
+  37% { left: 71%; top: 52%; width: 40cqw; height: 34cqw; border-radius: 2cqw; background: rgba(31, 43, 102, 0.06); }
+  43% { left: 72%; top: 50%; width: 30cqw; height: 30cqw; border-radius: 50%; background: rgba(15, 116, 104, 0.1); }
+  57% { left: 72%; top: 50%; width: 30cqw; height: 30cqw; border-radius: 50%; background: rgba(15, 116, 104, 0.1); }
+  63% { left: 70%; top: 62%; width: 42cqw; height: 9cqw; border-radius: 4.5cqw 4.5cqw 4.5cqw 1cqw; background: var(--teal-c); }
+  77% { left: 70%; top: 62%; width: 42cqw; height: 9cqw; border-radius: 4.5cqw 4.5cqw 4.5cqw 1cqw; background: var(--teal-c); }
+  83% { left: 50%; top: 61%; width: 44cqw; height: 0.5cqw; border-radius: 0.25cqw; background: var(--margin-c); opacity: 1; }
+  94% { left: 50%; top: 61%; width: 44cqw; height: 0.5cqw; border-radius: 0.25cqw; background: var(--margin-c); }
+  100% { left: 50%; top: 50%; width: 2cqw; height: 2cqw; border-radius: 50%; background: var(--ink-c); opacity: 1; }
+}
+
+/* --- Кинетическая типографика: буквы поднимаются из-под строки в 3D --- */
+
+.title,
+.sub {
+  position: absolute;
+  left: 13cqw;
+  display: flex;
+  white-space: nowrap;
+  transform-style: preserve-3d;
+  z-index: 2;
+}
+
+.title {
+  top: 31%;
+  font-size: 6.2cqw;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.sub {
+  top: 47%;
+  font-family: var(--font-text), system-ui, sans-serif;
+  font-size: 3cqw;
+  color: var(--graphite-c);
+  line-height: 1;
+}
+
+.ch {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  backface-visibility: hidden;
+  animation-timing-function: var(--ease-out);
+  animation-delay: calc(var(--i) * 30ms);
+}
+
+.sub .ch {
+  animation-delay: calc(250ms + var(--i) * 18ms);
+}
+
+.sceneA .ch { animation-name: chA; }
+.sceneB .ch { animation-name: chB; }
+.sceneC .ch { animation-name: chC; }
+.sceneD .ch { animation-name: chD; }
+
+@keyframes chA {
+  0% { opacity: 0; transform: translateY(0.9em) rotateX(-85deg); }
+  4%, 15.5% { opacity: 1; transform: none; }
+  18.5%, 100% { opacity: 0; transform: translateY(-0.5em) rotateX(70deg); }
+}
+
+@keyframes chB {
+  0%, 20% { opacity: 0; transform: translateY(0.9em) rotateX(-85deg); }
+  24%, 35.5% { opacity: 1; transform: none; }
+  38.5%, 100% { opacity: 0; transform: translateY(-0.5em) rotateX(70deg); }
+}
+
+@keyframes chC {
+  0%, 40% { opacity: 0; transform: translateY(0.9em) rotateX(-85deg); }
+  44%, 55.5% { opacity: 1; transform: none; }
+  58.5%, 100% { opacity: 0; transform: translateY(-0.5em) rotateX(70deg); }
+}
+
+@keyframes chD {
+  0%, 60% { opacity: 0; transform: translateY(0.9em) rotateX(-85deg); }
+  64%, 75.5% { opacity: 1; transform: none; }
+  78.5%, 100% { opacity: 0; transform: translateY(-0.5em) rotateX(70deg); }
+}
+
+/* --- A: буква и звуковая волна --- */
+
+.glyph {
+  position: absolute;
+  left: 72%;
+  top: 48%;
+  font-size: 20cqw;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-c);
+  transform: translate(-50%, -50%);
+  animation-name: glyphIn;
+  animation-timing-function: var(--ease-out);
+  z-index: 1;
+}
+
+@keyframes glyphIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotateY(-100deg); }
+  5%, 14% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotateY(0); }
+  18.5%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5) rotateY(110deg); }
+}
+
+.wave {
+  position: absolute;
+  left: 13cqw;
+  top: 60%;
+  width: 34cqw;
+  height: 7cqw;
+  overflow: visible;
+  z-index: 1;
+}
+
+.wave path {
+  fill: none;
+  stroke: var(--teal-c);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 520;
+  vector-effect: non-scaling-stroke;
+  animation-name: waveDraw;
+  animation-timing-function: var(--ease-io);
+}
+
+@keyframes waveDraw {
+  0%, 3% { stroke-dashoffset: 520; opacity: 1; }
+  12% { stroke-dashoffset: 0; opacity: 1; }
+  17% { stroke-dashoffset: -520; opacity: 0; }
+  100% { stroke-dashoffset: -520; opacity: 0; }
+}
+
+/* --- B: 3D-карточки занятий складываются в сетку --- */
+
+.deck {
+  position: absolute;
+  left: 71%;
+  top: 52%;
+  width: 36cqw;
+  height: 30cqw;
+  transform: translate(-50%, -50%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6cqw;
+  transform-style: preserve-3d;
+  z-index: 1;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr;
+  align-content: center;
+  gap: 0.4cqw 1cqw;
+  padding: 1.6cqw;
+  border: 1px solid var(--rule-c);
+  border-left: 0.5cqw solid var(--teal-c);
+  border-radius: 1.2cqw;
+  background: #fff;
+  box-shadow: 0 2cqw 3cqw -2cqw rgba(31, 43, 102, 0.35);
+  transform-origin: 50% 100%;
+  backface-visibility: hidden;
+  animation-name: cardIn;
+  animation-timing-function: var(--ease-out);
+  animation-delay: calc(var(--i) * 110ms);
+}
+
+.cardTime {
+  font-family: var(--font-text), system-ui, sans-serif;
+  font-size: 1.6cqw;
+  color: var(--graphite-c);
+}
+
+.cardWho {
+  grid-column: 1;
+  font-size: 2.4cqw;
+  font-weight: 700;
+}
+
+.cardSound {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-size: 4cqw;
+  font-weight: 700;
+  color: var(--teal-c);
+}
+
+@keyframes cardIn {
+  0%, 20% { opacity: 0; transform: translate3d(14cqw, -6cqw, -40cqw) rotateY(-75deg) rotateZ(8deg); }
+  25%, 35% { opacity: 1; transform: none; }
+  39%, 100% { opacity: 0; transform: translate3d(0, 6cqw, -10cqw) rotateX(85deg); }
+}
+
+/* --- C: кольцо абонемента выходит из наклона, счётчик 8 → 7 → 6 --- */
+
+.ringWrap {
+  position: absolute;
+  left: 72%;
+  top: 50%;
+  width: 26cqw;
+  height: 26cqw;
+  transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
+  animation-name: ringTilt;
+  animation-timing-function: var(--ease-out);
+  z-index: 1;
+}
+
+@keyframes ringTilt {
+  0%, 40% { opacity: 0; transform: translate(-50%, -50%) rotateX(75deg) rotateZ(-60deg) scale(0.7); }
+  45%, 55% { opacity: 1; transform: translate(-50%, -50%) rotateX(0) rotateZ(0) scale(1); }
+  59%, 100% { opacity: 0; transform: translate(-50%, -50%) rotateY(-80deg) scale(0.8); }
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ringTrack,
+.ringFill {
+  fill: none;
+  stroke-width: 7;
+}
+
+.ringTrack {
+  stroke: var(--rule-c);
+}
+
+.ringFill {
+  stroke: var(--teal-c);
+  stroke-linecap: round;
+  stroke-dasharray: 251.33;
+  animation-name: ringFill;
+  animation-timing-function: var(--ease-io);
+}
+
+/* 8/12, затем отметка — 7/12, ещё одна — 6/12 */
+@keyframes ringFill {
+  0%, 42% { stroke-dashoffset: 251.33; }
+  47%, 49% { stroke-dashoffset: 83.78; }
+  51%, 52.5% { stroke-dashoffset: 104.72; }
+  54.5%, 100% { stroke-dashoffset: 125.66; }
+}
+
+.counter {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  height: 8cqw;
+  overflow: hidden;
+  transform: translate(-50%, -50%);
+  font-size: 8cqw;
+  font-weight: 700;
+  line-height: 8cqw;
+}
+
+.digits {
+  display: flex;
+  flex-direction: column;
+  animation-name: digitsRoll;
+  animation-timing-function: var(--pop);
+}
+
+@keyframes digitsRoll {
+  0%, 49% { transform: translateY(0); }
+  51%, 52.5% { transform: translateY(-8cqw); }
+  54.5%, 100% { transform: translateY(-16cqw); }
+}
+
+.counterLabel {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  transform: translateX(-50%);
+  font-family: var(--font-text), system-ui, sans-serif;
+  font-size: 1.7cqw;
+  color: var(--graphite-c);
+  white-space: nowrap;
+}
+
+/* --- D: этапы звука заполняются, приходит сообщение --- */
+
+.track {
+  position: absolute;
+  left: 13cqw;
+  top: 62%;
+  display: flex;
+  gap: 0.7cqw;
+  z-index: 2;
+}
+
+.seg,
+.segDone {
+  width: 4.2cqw;
+  height: 1.2cqw;
+  border-radius: 0.6cqw;
+  transform-origin: left center;
+  animation-name: segFill;
+  animation-timing-function: var(--ease-out);
+  animation-delay: calc(var(--i) * 90ms);
+}
+
+.seg {
+  background: var(--rule-c);
+}
+
+.segDone {
+  background: var(--teal-c);
+}
+
+@keyframes segFill {
+  0%, 61% { opacity: 0; transform: scaleX(0); }
+  64%, 76% { opacity: 1; transform: scaleX(1); }
+  79%, 100% { opacity: 0; transform: scaleX(1); }
+}
+
+.bubble {
+  position: absolute;
+  left: 70%;
+  top: 62%;
+  display: flex;
+  align-items: center;
+  gap: 1.2cqw;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-text), system-ui, sans-serif;
+  font-size: 2.1cqw;
+  color: #fff;
+  white-space: nowrap;
+  animation-name: bubbleIn;
+  animation-timing-function: var(--pop);
+  z-index: 2;
+}
+
+.bubble b {
+  font-weight: 700;
+}
+
+.plane {
+  width: 2.6cqw;
+  height: 2.6cqw;
+  fill: #fff;
+}
+
+@keyframes bubbleIn {
+  0%, 64% { opacity: 0; transform: translate(-50%, -20%) scale(0.6); }
+  67%, 76% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78.5%, 100% { opacity: 0; transform: translate(-50%, -90%) scale(0.95); }
+}
+
+/* --- E: логотип собирается из разлетевшихся букв и уходит в точку --- */
+
+.wordmark {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  display: flex;
+  transform: translate(-50%, -50%);
+  font-size: 12cqw;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  transform-style: preserve-3d;
+  z-index: 2;
+}
+
+.wmCh {
+  display: inline-block;
+  animation-name: wmIn;
+  animation-timing-function: var(--ease-out);
+  animation-delay: calc(var(--i) * 45ms);
+}
+
+@keyframes wmIn {
+  0%, 80% { opacity: 0; transform: translate3d(var(--dx), var(--dy), -30cqw) rotateZ(var(--rz)) rotateY(80deg); }
+  87%, 94% { opacity: 1; transform: none; }
+  99%, 100% { opacity: 0; transform: translateY(0.1em) scale(0.2); }
+}
+
+.tagline {
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  transform: translateX(-50%);
+  font-family: var(--font-text), system-ui, sans-serif;
+  font-size: 2.6cqw;
+  color: var(--graphite-c);
+  white-space: nowrap;
+  animation-name: tagIn;
+  animation-timing-function: var(--ease-out);
+  z-index: 2;
+}
+
+@keyframes tagIn {
+  0%, 85% { opacity: 0; transform: translate(-50%, 1em); letter-spacing: 0.3em; }
+  89%, 95% { opacity: 1; transform: translate(-50%, 0); letter-spacing: 0; }
+  98.5%, 100% { opacity: 0; transform: translate(-50%, -0.4em); letter-spacing: 0; }
+}
+
+/* --- Меньше движения: статичный кадр с логотипом --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .stage * {
+    animation: none !important;
+  }
+
+  .glyph,
+  .wave,
+  .title,
+  .sub,
+  .deck,
+  .ringWrap,
+  .track,
+  .bubble {
+    display: none;
+  }
+
+  .blob {
+    left: 50%;
+    top: 61%;
+    width: 44cqw;
+    height: 0.5cqw;
+    border-radius: 0.25cqw;
+    background: var(--margin-c);
+  }
+
+  .wmCh,
+  .tagline {
+    opacity: 1;
+  }
+}
