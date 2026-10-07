@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>LogoCRM — ролик</title>
+<style>
+  @font-face { font-family: 'Golos'; src: url('FONT_GOLOS') format('woff2'); font-weight: 400 900; }
+  @font-face { font-family: 'Unb'; src: url('FONT_UNB') format('woff2'); font-weight: 400 900; }
+  :root {
+    --teal: #0F7466; --teal-2: #14937F; --mint: #9FE3D3; --mint-bg: #DAF1EC;
+    --navy: #07131C; --navy-2: #0C2230; --ink: #EAF3F2; --muted: #8FB3B0;
+    --amber: #F2A93B; --red: #E5534B; --grey: #6F8790; --white: #FFFFFF;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--navy); }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden;
+           font-family: 'Golos', sans-serif; color: var(--ink); background: radial-gradient(120% 90% at 50% 40%, var(--navy-2), var(--navy)); }
+  .abs { position: absolute; }
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .center { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .disp { font-family: 'Unb', sans-serif; font-weight: 600; letter-spacing: -0.02em; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
+  .grid { position: absolute; inset: -200px; background-image: linear-gradient(rgba(159,227,211,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(159,227,211,.06) 1px, transparent 1px); background-size: 80px 80px; }
+  .word { position: absolute; left: 50%; font-size: 112px; white-space: nowrap; }
+  .title { position: absolute; left: 140px; top: 120px; font-size: 64px; line-height: 1.08; max-width: 820px; }
+  .title .sub { display: block; margin-top: 24px; font-family: 'Golos', sans-serif; font-weight: 500; font-size: 30px; letter-spacing: 0; color: var(--muted); line-height: 1.35; }
+  .chip { display: inline-block; padding: 10px 22px; border-radius: 999px; font-size: 26px; font-weight: 600; }
+  .card { position: absolute; background: rgba(234,243,242,.06); border: 1.5px solid rgba(159,227,211,.22); border-radius: 28px; backdrop-filter: blur(6px); }
+  .tnum { font-variant-numeric: tabular-nums; }
+  #wipe { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; background: var(--teal); border-radius: 50%; transform: translate(-50%,-50%) scale(0); z-index: 50; }
+  /* расписание */
+  .board { position: absolute; left: 1010px; top: 190px; width: 780px; height: 700px; transform-style: preserve-3d; }
+  .col { position: absolute; top: 0; width: 140px; height: 700px; border-radius: 18px; background: rgba(234,243,242,.05); border: 1.5px solid rgba(159,227,211,.14); }
+  .col span { position: absolute; top: 16px; left: 0; right: 0; text-align: center; font-size: 22px; color: var(--muted); font-weight: 600; }
+  .lesson { position: absolute; width: 124px; height: 92px; border-radius: 14px; background: var(--teal); padding: 12px 14px; font-size: 19px; line-height: 1.25; font-weight: 600; color: var(--white); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+  .lesson small { display: block; font-weight: 500; opacity: .8; font-size: 16px; }
+  /* телефон */
+  .phone { position: absolute; width: 420px; height: 860px; border-radius: 64px; background: #0B171F; border: 3px solid rgba(159,227,211,.35); box-shadow: 0 60px 120px rgba(0,0,0,.55), inset 0 0 0 10px #0B171F; overflow: hidden; }
+  .phone .notch { position: absolute; top: 18px; left: 50%; width: 120px; height: 30px; border-radius: 20px; background: #000; transform: translateX(-50%); }
+  .bubble { position: absolute; border-radius: 26px; }
+  .bar { position: absolute; bottom: 0; width: 8px; border-radius: 4px; background: var(--white); }
+  .doc { position: absolute; background: #F6FBFA; color: #13302C; border-radius: 26px; box-shadow: 0 40px 90px rgba(0,0,0,.45); }
+  .line { height: 14px; border-radius: 7px; background: #CFE3DF; margin-bottom: 14px; }
+  /* звуки */
+  .tile { position: absolute; width: 150px; height: 150px; transform-style: preserve-3d; }
+  .tile > div { position: absolute; inset: 0; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-family: 'Unb'; font-size: 56px; font-weight: 600; backface-visibility: hidden; }
+  .tile .front { background: rgba(234,243,242,.08); border: 1.5px solid rgba(159,227,211,.25); color: var(--ink); }
+  .tile .back { transform: rotateY(180deg); color: var(--white); flex-direction: column; gap: 6px; }
+  .tile .back i { font-family: 'Golos'; font-style: normal; font-size: 18px; font-weight: 600; opacity: .9; }
+  .goal { position: absolute; padding: 18px 26px; border-radius: 20px; background: var(--white); color: #13302C; font-size: 28px; font-weight: 600; box-shadow: 0 20px 50px rgba(0,0,0,.35); white-space: nowrap; }
+  .goal b { color: var(--teal); }
+  .ring { position: absolute; }
+  .check { position: absolute; width: 64px; height: 64px; border-radius: 50%; background: var(--teal-2); color: var(--white); font-size: 36px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .btn { position: absolute; padding: 18px 34px; border-radius: 18px; background: var(--teal-2); color: var(--white); font-size: 28px; font-weight: 700; }
+  .app { position: absolute; width: 96px; height: 96px; border-radius: 24px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid" id="grid"></div>
+  <div class="blob" id="b1" style="width:900px;height:900px;background:#0F7466"></div>
+  <div class="blob" id="b2" style="width:700px;height:700px;background:#1B4F8A"></div>
+  <div class="blob" id="b3" style="width:600px;height:600px;background:#14937F"></div>
+
+  <!-- 1. Хук -->
+  <div class="scene" id="s1">
+    <div class="word disp" id="w0">Расписание.</div>
+    <div class="word disp" id="w1">Абонементы.</div>
+    <div class="word disp" id="w2">Отчёты родителям.</div>
+    <div class="word disp" id="w3">Речевые карты.</div>
+    <div class="abs disp" id="hookQ" style="left:50%;top:50%;font-size:46px;color:var(--mint);white-space:nowrap;font-weight:500">Всё это — в одном месте</div>
+  </div>
+
+  <!-- 2. Логотип -->
+  <div class="scene" id="s2">
+    <div class="abs" id="logoShape" style="left:50%;top:44%;width:240px;height:240px;background:var(--teal);"></div>
+    <svg class="abs" id="logoMark" viewBox="0 0 64 64" style="left:50%;top:44%;width:240px;height:240px;transform:translate(-50%,-50%);overflow:visible">
+      <path id="logoL" d="M22 16v28h20" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+      <circle id="logoDot" cx="44" cy="20" r="5" fill="#DAF1EC"/>
+    </svg>
+    <div class="abs disp" id="logoText" style="left:50%;top:66%;font-size:120px;white-space:nowrap"></div>
+    <div class="abs" id="logoTag" style="left:50%;top:80%;font-size:38px;color:var(--muted);white-space:nowrap;font-weight:500">CRM, которую сделали для логопедов</div>
+  </div>
+
+  <!-- 3. Расписание -->
+  <div class="scene" id="s3">
+    <div class="title disp" id="t3">Расписание<br>без накладок<span class="sub">Два занятия в один кабинет база поставить не даст — проверка внутри, а не в табличке.</span></div>
+    <div class="board" id="board"></div>
+    <div class="abs chip" id="clash" style="left:1180px;top:930px;background:var(--red);color:#fff;font-size:28px">Кабинет 2 занят в 10:00</div>
+    <div class="abs chip" id="saved" style="left:1180px;top:930px;background:var(--teal-2);color:#fff;font-size:28px">✓ Перенесено на 11:00</div>
+  </div>
+
+  <!-- 4. Голосовое -->
+  <div class="scene" id="s4">
+    <div class="title disp" id="t4">20 секунд<br>голосом —<br>отчёт родителю<br>готов<span class="sub">Наговорите итог занятия в Telegram. Резюме, оценки по целям и задание соберутся сами.</span></div>
+    <div class="phone" id="ph4" style="left:1020px;top:110px">
+      <div class="notch"></div>
+      <div class="abs" style="left:28px;top:70px;font-size:22px;color:var(--muted);font-weight:600">LogoCRM · бот</div>
+      <div class="bubble" id="voice" style="left:70px;top:520px;width:300px;height:96px;background:var(--teal)">
+        <div class="abs" style="left:22px;top:24px;width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.22)"></div>
+        <div class="abs" style="left:38px;top:36px;width:0;height:0;border-left:20px solid #fff;border-top:12px solid transparent;border-bottom:12px solid transparent"></div>
+        <div class="abs" id="wave" style="left:88px;top:22px;width:160px;height:52px"></div>
+        <div class="abs tnum" style="right:20px;bottom:10px;font-size:16px;opacity:.85">0:18</div>
+      </div>
+    </div>
+    <div class="doc" id="doc" style="left:1430px;top:240px;width:420px;height:560px;padding:38px">
+      <div style="font-family:'Unb';font-size:28px;font-weight:600;margin-bottom:8px">Резюме занятия</div>
+      <div style="font-size:18px;color:#5B7672;margin-bottom:24px">Для родителя</div>
+      <div id="typed" style="font-size:22px;line-height:1.45;min-height:250px;white-space:pre-wrap"></div>
+      <div class="btn" id="approve" style="left:38px;bottom:38px;font-size:24px;padding:14px 26px">Утвердить</div>
+    </div>
+    <div class="abs chip" id="sent" style="left:1230px;top:880px;white-space:nowrap;background:var(--mint-bg);color:var(--teal);font-size:28px">✈ Отправлено родителю в Telegram</div>
+  </div>
+
+  <!-- 5. Речевая карта -->
+  <div class="scene" id="s5">
+    <div class="title disp" id="t5">Карта звуков →<br>цели одной<br>кнопкой<span class="sub">Нарушенные звуки сразу становятся целями. Речевая карта печатается для школы и ПМПК.</span></div>
+    <div class="abs" id="tiles" style="left:1000px;top:200px;width:820px;height:520px;perspective:1400px"></div>
+    <div id="goals"></div>
+    <div class="doc" id="a4" style="left:1250px;top:150px;width:520px;height:735px;padding:46px">
+      <div style="font-family:'Unb';font-size:26px;font-weight:600">Речевая карта</div>
+      <div style="font-size:18px;color:#5B7672;margin:6px 0 30px">для школы и ПМПК · А4</div>
+      <div class="line" style="width:90%"></div><div class="line" style="width:70%"></div><div class="line" style="width:82%"></div>
+      <div style="display:flex;gap:10px;margin:22px 0">
+        <span class="chip" style="background:#FBE3D9;color:#B4462F;font-size:18px">Р — искажение</span>
+        <span class="chip" style="background:#FDEFD3;color:#9A6409;font-size:18px">Ш — замена</span>
+      </div>
+      <div class="line" style="width:88%"></div><div class="line" style="width:60%"></div><div class="line" style="width:76%"></div><div class="line" style="width:84%"></div>
+      <div class="abs disp" id="pdf" style="right:40px;bottom:40px;font-size:30px;color:var(--teal);border:4px solid var(--teal);border-radius:14px;padding:8px 18px">PDF</div>
+    </div>
+  </div>
+
+  <!-- 6. Деньги -->
+  <div class="scene" id="s6">
+    <div class="title disp" id="t6">Абонементы<br>и долги<br>считаются сами<span class="sub">Отметили «Пришёл» — занятие списалось. Долг виден сразу и гасится оплатой в два клика.</span></div>
+    <div class="card" id="subCard" style="left:1020px;top:170px;width:760px;height:340px;padding:44px">
+      <div style="font-size:26px;color:var(--muted);font-weight:600">Абонемент · 8 занятий</div>
+      <div class="disp tnum" id="left" style="font-size:120px;margin-top:18px">8</div>
+      <div style="font-size:26px;color:var(--muted)">осталось занятий</div>
+      <svg class="ring" viewBox="0 0 120 120" style="right:44px;top:56px;width:230px;height:230px"><circle cx="60" cy="60" r="50" fill="none" stroke="rgba(159,227,211,.18)" stroke-width="12"/><circle id="arc" cx="60" cy="60" r="50" fill="none" stroke="#9FE3D3" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="0" transform="rotate(-90 60 60)"/></svg>
+    </div>
+    <div id="checks"></div>
+    <div class="card" id="debtCard" style="left:1020px;top:560px;width:760px;height:300px;padding:44px">
+      <div style="font-size:26px;color:var(--muted);font-weight:600">Долг за занятия</div>
+      <div class="disp tnum" id="debt" style="font-size:84px;margin-top:22px;color:var(--amber)">1 600 сом</div>
+      <div class="btn" id="pay" style="right:44px;top:44px">Принять оплату</div>
+    </div>
+  </div>
+
+  <!-- 7. Телефон -->
+  <div class="scene" id="s7">
+    <div class="title disp" id="t7">Как приложение —<br>в телефоне<br>у каждого<br>специалиста<span class="sub">Иконка на экране, расписание дня и отметка посещения прямо на занятии.</span></div>
+    <div class="phone" id="ph7" style="left:1180px;top:110px">
+      <div class="notch"></div>
+      <div id="home"></div>
+      <div class="abs" id="appScreen" style="inset:0;background:#F4F7FA;color:#13302C;padding:90px 30px 30px">
+        <div style="font-family:'Unb';font-size:30px;font-weight:600">Сегодня</div>
+        <div style="font-size:20px;color:#5B7672;margin:6px 0 24px">6 занятий</div>
+        <div id="dayList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. Финал -->
+  <div class="scene" id="s8">
+    <svg class="abs" id="endMark" viewBox="0 0 64 64" style="left:50%;top:36%;width:200px;height:200px;transform:translate(-50%,-50%)">
+      <rect width="64" height="64" rx="14" fill="#0F7466"/>
+      <path d="M22 16v28h20" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="44" cy="20" r="5" fill="#DAF1EC"/>
+    </svg>
+    <div class="abs disp" id="endName" style="left:50%;top:55%;font-size:110px;white-space:nowrap">LogoCRM</div>
+    <div class="abs" id="endOffer" style="left:50%;top:68%;font-size:46px;font-weight:600;white-space:nowrap;color:var(--mint)">14 дней бесплатно, без карты</div>
+    <div class="abs" id="endList" style="left:50%;top:78%;font-size:28px;white-space:nowrap;color:var(--muted)">Расписание · Абонементы · Голосовые отчёты · Речевая карта</div>
+  </div>
+
+  <div id="wipe"></div>
+</div>
+
+<script>
+// ---------- движок: всё — функция времени t (секунды) ----------
+const $ = (id) => document.getElementById(id)
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+const lerp = (a, b, p) => a + (b - a) * p
+const seg = (t, a, b) => clamp((t - a) / (b - a))
+const easeOut = (p) => 1 - Math.pow(1 - p, 3)
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
+const easeBack = (p) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2) }
+const set = (el, css) => { for (const k in css) el.style[k] = css[k] }
+// Появление и уход сцены: мягкий масштаб и размытие, без резких склеек.
+function sceneVis(el, t, a, b, fade = 0.55) {
+  const pin = easeOut(seg(t, a, a + fade)), pout = easeInOut(seg(t, b - fade, b))
+  const on = t >= a && t < b
+  set(el, { opacity: on ? String(pin * (1 - pout)) : '0', transform: `scale(${lerp(1.04, 1, pin) * lerp(1, 0.96, pout)})`, filter: `blur(${(1 - pin) * 10 + pout * 12}px)` })
+  return on
+}
+
+// ---------- статическая разметка ----------
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт']
+const board = $('board')
+DAYS.forEach((d, i) => { const c = document.createElement('div'); c.className = 'col'; c.style.left = i * 160 + 'px'; c.innerHTML = `<span>${d}</span>`; board.appendChild(c) })
+const LESSONS = [[0, 0, 'Айжан', '9:00'], [0, 2, 'Тимур', '11:00'], [1, 1, 'Мирлан', '10:00'], [1, 3, 'Алина', '12:00'], [2, 0, 'Эрмек', '9:00'], [2, 2, 'Сафия', '11:00'], [3, 1, 'Данияр', '10:00'], [3, 4, 'Амира', '13:00'], [4, 0, 'Нурай', '9:00'], [4, 3, 'Алихан', '12:00']]
+const lessonEls = LESSONS.map(([d, s, n, h]) => { const e = document.createElement('div'); e.className = 'lesson'; e.innerHTML = `${n}<small>${h} · каб. ${1 + ((d + s) % 3)}</small>`; e.style.left = d * 160 + 8 + 'px'; e.style.top = 70 + s * 120 + 'px'; board.appendChild(e); return e })
+const mover = document.createElement('div'); mover.className = 'lesson'; mover.innerHTML = 'Новое<small>10:00 · каб. 2</small>'; board.appendChild(mover)
+
+const wave = $('wave'); const BARS = 22
+const barEls = Array.from({ length: BARS }, (_, i) => { const b = document.createElement('div'); b.className = 'bar'; b.style.left = i * 7.4 + 'px'; wave.appendChild(b); return b })
+const SUMMARY = 'Звук Р: в слогах — уверенно, в словах — пока с опорой.\n\nДома: 5 минут в день, слоги ра-ро-ру перед зеркалом.\n\nСледующее занятие — четверг, 10:00.'
+
+const SOUNDS = [['Р', 'искажение', '#E5534B'], ['Рь', 'норма', '#14937F'], ['Л', 'норма', '#14937F'], ['Ль', 'норма', '#14937F'], ['Ш', 'замена', '#F2A93B'], ['Ж', 'замена', '#F2A93B'], ['С', 'норма', '#14937F'], ['З', 'норма', '#14937F'], ['Ц', 'норма', '#14937F'], ['Ч', 'отсутствует', '#6F8790']]
+const tiles = $('tiles')
+const tileEls = SOUNDS.map(([s, st, c], i) => { const e = document.createElement('div'); e.className = 'tile'; e.style.left = (i % 5) * 168 + 'px'; e.style.top = Math.floor(i / 5) * 176 + 60 + 'px'; e.innerHTML = `<div class="front">${s}</div><div class="back" style="background:${c}">${s}<i>${st}</i></div>`; tiles.appendChild(e); return e })
+const GOALS = [['Р', 'Постановка'], ['Ш', 'Постановка'], ['Ж', 'Постановка'], ['Ч', 'Постановка']]
+const goalEls = GOALS.map(([s, st]) => { const e = document.createElement('div'); e.className = 'goal'; e.innerHTML = `<b>${s}</b> — цель: ${st}`; $('goals').appendChild(e); return e })
+
+const checkEls = [0, 1, 2].map(() => { const e = document.createElement('div'); e.className = 'check'; e.textContent = '✓'; $('checks').appendChild(e); return e })
+
+const APPS = ['#2A6FDB', '#E5534B', '#F2A93B', '#7A5AF8', '#14937F', '#E66FA8', '#3BA55D', '#6F8790', '#0F7466', '#C2410C', '#2563EB', '#9333EA']
+const home = $('home')
+const appEls = APPS.map((c, i) => { const e = document.createElement('div'); e.className = 'app'; e.style.background = c; e.style.left = 36 + (i % 3) * 120 + 'px'; e.style.top = 110 + Math.floor(i / 3) * 140 + 'px'; home.appendChild(e); return e })
+appEls[8].innerHTML = '<svg viewBox="0 0 64 64" width="96" height="96"><rect width="64" height="64" rx="14" fill="#0F7466"/><path d="M22 16v28h20" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="44" cy="20" r="5" fill="#DAF1EC"/></svg>'
+const appLabel = document.createElement('div'); appLabel.className = 'abs'; appLabel.textContent = 'LogoCRM'; set(appLabel, { left: '252px', top: '660px', width: '120px', textAlign: 'center', fontSize: '18px', color: '#EAF3F2', fontWeight: '600' }); home.appendChild(appLabel)
+const DAY = [['9:00', 'Айжан', 'Пришёл'], ['10:00', 'Мирлан', 'Пришёл'], ['11:00', 'Тимур', ''], ['12:00', 'Алина', ''], ['14:00', 'Группа «Звуки»', '']]
+const dayEls = DAY.map(([h, n, s]) => { const e = document.createElement('div'); set(e, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 20px', marginBottom: '12px', borderRadius: '16px', background: '#fff', boxShadow: '0 6px 16px rgba(19,48,44,.08)', fontSize: '20px', fontWeight: '600' }); e.innerHTML = `<span><span class="tnum" style="color:#5B7672;margin-right:12px">${h}</span>${n}</span>` + (s ? `<span style="font-size:16px;color:#0F7466;background:#DAF1EC;padding:6px 12px;border-radius:999px">✓ ${s}</span>` : ''); $('dayList').appendChild(e); return e })
+
+const LOGO = 'LogoCRM'
+$('logoText').innerHTML = [...LOGO].map((ch) => `<span style="display:inline-block">${ch}</span>`).join('')
+const logoLetters = [...$('logoText').children]
+
+// ---------- рендер кадра ----------
+const SCENES = [0, 6, 11, 20, 31, 40, 48, 54, 60]
+
+window.renderAt = function (t) {
+  // фон: медленный дрейф пятен и сетки
+  set($('b1'), { left: 200 + Math.sin(t * 0.21) * 220 + 'px', top: -200 + Math.cos(t * 0.17) * 160 + 'px' })
+  set($('b2'), { left: 1100 + Math.cos(t * 0.15) * 260 + 'px', top: 500 + Math.sin(t * 0.19) * 180 + 'px' })
+  set($('b3'), { left: 700 + Math.sin(t * 0.12 + 1) * 300 + 'px', top: 300 + Math.cos(t * 0.23) * 220 + 'px' })
+  set($('grid'), { transform: `translate(${(t * 14) % 80}px, ${(t * 9) % 80}px) perspective(900px) rotateX(${8 + Math.sin(t * 0.2) * 3}deg)` })
+
+  // переход форм: круг раскрывается из центра на стыке сцен и схлопывается в следующую
+  let w = 0
+  for (const b of SCENES.slice(2, 8)) { const d = t - b; if (d > -0.45 && d < 0.45) w = Math.max(w, 1 - Math.abs(d) / 0.45) }
+  set($('wipe'), { transform: `translate(-50%,-50%) scale(${easeInOut(w) * 260})`, borderRadius: `${50 - easeInOut(w) * 30}%`, opacity: w > 0 ? '1' : '0' })
+
+  // 1. хук: слова по одному, затем сжимаются в точку
+  if (sceneVis($('s1'), t, 0, 6.05, 0.3)) {
+    for (let i = 0; i < 4; i++) {
+      const a = 0.25 + i * 0.85, p = easeBack(seg(t, a, a + 0.6)), q = easeInOut(seg(t, 4.6, 5.6))
+      const y = 300 + i * 130
+      set($('w' + i), { top: lerp(y + 60, y, p) + lerp(0, 540 - y, q) - 70 + 'px', opacity: String(seg(t, a, a + 0.35) * (1 - q)), transform: `translateX(-50%) scale(${lerp(0.92, 1, p) * lerp(1, 0.2, q)})`, filter: `blur(${(1 - seg(t, a, a + 0.4)) * 14}px)`, color: i % 2 ? '#9FE3D3' : '#EAF3F2' })
+    }
+    const hq = seg(t, 3.9, 4.4) * (1 - seg(t, 4.7, 5.1))
+    set($('hookQ'), { opacity: String(hq), transform: `translate(-50%, ${lerp(520, 470, easeOut(seg(t, 3.9, 4.4)))}%)` })
+  }
+
+  // 2. логотип: точка → скруглённый квадрат, L прорисовывается, буквы въезжают
+  if (sceneVis($('s2'), t, 5.4, 11, 0.4)) {
+    const m = easeInOut(seg(t, 5.5, 7.0)), pop = easeBack(seg(t, 5.4, 6.0))
+    set($('logoShape'), { transform: `translate(-50%,-50%) scale(${lerp(0.08, 1, pop)}) rotate(${lerp(-90, 0, m)}deg)`, borderRadius: `${lerp(50, 23, m)}%` })
+    $('logoL').setAttribute('stroke-dashoffset', String(100 - easeInOut(seg(t, 6.9, 8.0)) * 100))
+    const dp = easeBack(seg(t, 7.9, 8.4))
+    $('logoDot').setAttribute('r', String(5 * dp))
+    logoLetters.forEach((el, i) => { const p = easeOut(seg(t, 8.1 + i * 0.07, 8.7 + i * 0.07)); set(el, { opacity: String(p), transform: `translateY(${(1 - p) * 70}px) rotateX(${(1 - p) * 80}deg)` }) })
+    set($('logoText'), { transform: 'translate(-50%,-50%)' })
+    const tg = easeOut(seg(t, 9.0, 9.6))
+    set($('logoTag'), { opacity: String(tg), transform: `translate(-50%, ${lerp(-10, -50, tg)}%)` })
+  }
+
+  // 3. расписание в 3D
+  if (sceneVis($('s3'), t, 11, 20)) {
+    titleIn($('t3'), t, 11.3)
+    const tilt = easeOut(seg(t, 11, 13))
+    set(board, { transform: `perspective(1600px) rotateX(${lerp(70, 48, tilt) + Math.sin(t * 0.6) * 1.5}deg) rotateZ(${lerp(-40, -24, tilt)}deg) translateY(${lerp(120, 0, tilt)}px)` })
+    lessonEls.forEach((el, i) => { const p = easeBack(seg(t, 11.8 + i * 0.12, 12.4 + i * 0.12)); set(el, { opacity: String(seg(t, 11.8 + i * 0.12, 12.1 + i * 0.12)), transform: `translateZ(${(1 - p) * 260}px)` }) })
+    // новое занятие летит в занятый слот (Вт 10:00), краснеет, дрожит, уезжает на 11:00
+    const fly = easeInOut(seg(t, 14.0, 15.2)), clash = seg(t, 15.2, 15.4) * (1 - seg(t, 16.6, 16.8)), move = easeInOut(seg(t, 16.6, 17.6))
+    const sx = 1 * 160 + 8, sy = 70 + 1 * 120, ex = sx, ey = 70 + 2 * 120
+    const shake = clash > 0 && t < 16.6 ? Math.sin(t * 60) * 10 * (1 - seg(t, 15.4, 16.4)) : 0
+    set(mover, { left: lerp(700, sx, fly) + shake + 'px', top: lerp(-260, sy, fly) + (move * (ey - sy)) + 'px', opacity: String(seg(t, 13.9, 14.2)), transform: `translateZ(${lerp(320, 30, fly)}px)`, background: clash > 0.5 ? '#E5534B' : t > 17.4 ? '#14937F' : '#1B4F8A' })
+    const c = seg(t, 15.3, 15.6) * (1 - seg(t, 16.5, 16.8))
+    set($('clash'), { opacity: String(c), transform: `translateY(${(1 - c) * 20}px)` })
+    const s = easeOut(seg(t, 17.5, 17.9))
+    set($('saved'), { opacity: String(s * (1 - seg(t, 19.4, 19.8))), transform: `translateY(${(1 - s) * 20}px)` })
+  }
+
+  // 4. голосовое → резюме → отправлено
+  if (sceneVis($('s4'), t, 20, 31)) {
+    titleIn($('t4'), t, 20.3)
+    const ph = easeOut(seg(t, 20, 21.2))
+    set($('ph4'), { transform: `perspective(1600px) rotateY(${lerp(-38, -14, ph) + Math.sin(t * 0.5) * 2}deg) rotateX(${lerp(14, 6, ph)}deg) translateY(${(1 - ph) * 80}px)` })
+    const vb = easeBack(seg(t, 21.2, 21.8))
+    // голосовое «дышит», затем вытягивается и перетекает в документ
+    const morph = easeInOut(seg(t, 24.2, 25.4))
+    set($('voice'), { transform: `scale(${vb})`, opacity: String(1 - morph * 0.9) })
+    barEls.forEach((b, i) => { const live = seg(t, 21.6, 22) * (1 - seg(t, 23.8, 24.2)); const h = 10 + (Math.sin(t * 9 + i * 0.9) * 0.5 + 0.5) * (Math.sin(i * 1.7) * 0.4 + 0.6) * 42 * live + 4; set(b, { height: h + 'px', opacity: String(0.5 + 0.5 * seg(t, 21.6, 22)) }) })
+    set($('doc'), { opacity: String(morph), transform: `perspective(1600px) translate(${lerp(-330, 0, morph)}px, ${lerp(330, 0, morph)}px) scale(${lerp(0.35, 1, morph)}) rotateY(${lerp(-30, -6, morph)}deg)`, borderRadius: lerp(48, 26, morph) + 'px' })
+    const n = Math.floor(easeInOut(seg(t, 25.4, 28.0)) * SUMMARY.length)
+    $('typed').textContent = SUMMARY.slice(0, n) + (t > 25.4 && t < 28.2 && Math.floor(t * 4) % 2 ? '▍' : '')
+    const press = seg(t, 28.4, 28.6) * (1 - seg(t, 28.6, 28.9))
+    set($('approve'), { opacity: String(seg(t, 27.6, 28.0)), transform: `scale(${1 - press * 0.08})`, background: t > 28.6 ? '#0F7466' : '#14937F' })
+    if (t > 28.6) $('approve').textContent = '✓ Утверждено'; else $('approve').textContent = 'Утвердить'
+    const se = easeBack(seg(t, 29.0, 29.6))
+    set($('sent'), { opacity: String(seg(t, 29.0, 29.3)), transform: `translateX(${(1 - se) * -60}px) scale(${lerp(0.9, 1, se)})` })
+  }
+
+  // 5. карта звуков → цели → лист А4
+  if (sceneVis($('s5'), t, 31, 40)) {
+    titleIn($('t5'), t, 31.3)
+    const exit = easeInOut(seg(t, 36.6, 37.4))
+    tileEls.forEach((el, i) => {
+      const a = 31.5 + i * 0.09, ap = easeBack(seg(t, a, a + 0.5))
+      const flip = easeInOut(seg(t, 32.6 + i * 0.12, 33.4 + i * 0.12))
+      const isGoal = ['Р', 'Ш', 'Ж', 'Ч'].includes(SOUNDS[i][0])
+      const lift = isGoal ? easeOut(seg(t, 34.4, 34.8)) : 0
+      const op = String(seg(t, a, a + 0.3) * (1 - exit) * (isGoal || t < 34.4 ? 1 : lerp(1, 0.3, seg(t, 34.4, 34.8))))
+      for (const face of el.children) face.style.opacity = op
+      set(el, { transform: `translateY(${(1 - ap) * 60 - lift * 18}px) rotateY(${flip * 180}deg) scale(${1 + lift * 0.06})` })
+    })
+    goalEls.forEach((el, i) => {
+      const p = easeOut(seg(t, 34.9 + i * 0.18, 35.6 + i * 0.18))
+      const src = tileEls[SOUNDS.findIndex((s) => s[0] === GOALS[i][0])]
+      const sx = 1000 + parseFloat(src.style.left), sy = 200 + parseFloat(src.style.top)
+      set(el, { left: lerp(sx, 1000 + (i % 2) * 420, p) + 'px', top: lerp(sy, 680 + Math.floor(i / 2) * 104, p) + 'px', opacity: String(seg(t, 34.9 + i * 0.18, 35.2 + i * 0.18) * (1 - exit)), transform: `scale(${lerp(0.6, 1, p)})` })
+    })
+    const a4 = easeOut(seg(t, 37.0, 38.2))
+    set($('a4'), { opacity: String(seg(t, 37.0, 37.4)), transform: `perspective(1800px) rotateX(${lerp(60, 8, a4)}deg) rotateZ(${lerp(-12, -3, a4)}deg) translateY(${(1 - a4) * 200}px)` })
+    const st = easeBack(seg(t, 38.3, 38.8))
+    set($('pdf'), { opacity: String(seg(t, 38.3, 38.5)), transform: `rotate(-8deg) scale(${lerp(2.2, 1, st)})` })
+  }
+
+  // 6. абонемент тает, долг гасится
+  if (sceneVis($('s6'), t, 40, 48)) {
+    titleIn($('t6'), t, 40.3)
+    const c1 = easeOut(seg(t, 40.2, 41.0)), c2 = easeOut(seg(t, 40.5, 41.3))
+    set($('subCard'), { opacity: String(c1), transform: `perspective(1600px) rotateX(${(1 - c1) * 30}deg) translateY(${(1 - c1) * 60}px)` })
+    set($('debtCard'), { opacity: String(c2), transform: `perspective(1600px) rotateX(${(1 - c2) * 30}deg) translateY(${(1 - c2) * 60}px)` })
+    let used = 0
+    checkEls.forEach((el, i) => { const a = 41.6 + i * 0.9, p = easeBack(seg(t, a, a + 0.4)); if (t > a + 0.2) used++; set(el, { left: 1200 + i * 84 + 'px', top: '300px', opacity: String(seg(t, a, a + 0.2) * (1 - seg(t, 44.6, 45))), transform: `scale(${p})` }) })
+    $('left').textContent = String(8 - used)
+    $('arc').setAttribute('stroke-dashoffset', String(lerp((used - 1) / 8, used / 8, easeOut(seg(t, 41.6 + Math.max(0, used - 1) * 0.9 + 0.2, 41.6 + Math.max(0, used - 1) * 0.9 + 0.7))) * 100 * (used > 0 ? 1 : 0)))
+    const press = seg(t, 45.4, 45.6) * (1 - seg(t, 45.6, 45.9))
+    set($('pay'), { transform: `scale(${1 - press * 0.08})`, opacity: String(1 - seg(t, 46.0, 46.4)) })
+    const d = easeInOut(seg(t, 45.7, 46.6))
+    const debt = Math.round(lerp(1600, 0, d) / 100) * 100
+    $('debt').textContent = debt.toLocaleString('ru-RU').replace(/ /g, ' ') + ' сом'
+    set($('debt'), { color: d >= 1 ? '#9FE3D3' : '#F2A93B' })
+  }
+
+  // 7. телефон: иконка → приложение
+  if (sceneVis($('s7'), t, 48, 54)) {
+    titleIn($('t7'), t, 48.3)
+    const ph = easeOut(seg(t, 48, 49.2))
+    set($('ph7'), { transform: `perspective(1600px) rotateY(${lerp(30, 10, ph) + Math.sin(t * 0.6) * 2}deg) rotateX(${lerp(10, 4, ph)}deg) translateY(${(1 - ph) * 70}px)` })
+    appEls.forEach((el, i) => { const p = easeBack(seg(t, 48.4 + i * 0.04, 48.8 + i * 0.04)); set(el, { transform: `scale(${p * (i === 8 ? 1 + 0.08 * Math.sin(t * 6) * seg(t, 49.4, 50.2) : 1)})` }) })
+    set(appLabel, { opacity: String(seg(t, 49, 49.4)) })
+    const open = easeInOut(seg(t, 50.4, 51.2))
+    set($('appScreen'), { opacity: String(open), transform: `scale(${lerp(0.22, 1, open)})`, transformOrigin: '300px 158px', borderRadius: lerp(24, 0, open) + 'px' })
+    dayEls.forEach((el, i) => { const p = easeOut(seg(t, 51.1 + i * 0.12, 51.6 + i * 0.12)); set(el, { opacity: String(p), transform: `translateY(${(1 - p) * 24}px)` }) })
+  }
+
+  // 8. финал
+  if (sceneVis($('s8'), t, 54, 60.1, 0.5)) {
+    const m = easeBack(seg(t, 54.2, 54.9))
+    set($('endMark'), { transform: `translate(-50%,-50%) scale(${m}) rotate(${(1 - m) * -40}deg)` })
+    const n = easeOut(seg(t, 54.7, 55.4)), o = easeOut(seg(t, 55.3, 56.0)), l = easeOut(seg(t, 56.0, 56.7))
+    set($('endName'), { opacity: String(n), transform: `translate(-50%, ${lerp(-10, -50, n)}%)`, letterSpacing: lerp(0.2, -0.02, n) + 'em' })
+    set($('endOffer'), { opacity: String(o), transform: `translate(-50%, ${lerp(-10, -50, o)}%)` })
+    set($('endList'), { opacity: String(l), transform: `translate(-50%, ${lerp(-10, -50, l)}%)` })
+  }
+}
+
+// заголовок сцены: слова въезжают снизу по очереди (кинетическая типографика)
+const titleCache = new Map()
+function titleIn(el, t, a) {
+  if (!titleCache.has(el)) {
+    const sub = el.querySelector('.sub')
+    const html = el.innerHTML.replace(sub.outerHTML, '')
+    const parts = html.split(/(<br>)/)
+    el.innerHTML = parts.map((p) => (p === '<br>' ? p : p.split(' ').filter(Boolean).map((w) => `<span class="kw" style="display:inline-block;margin-right:.28em">${w}</span>`).join(''))).join('') + sub.outerHTML
+    titleCache.set(el, { words: [...el.querySelectorAll('.kw')], sub: el.querySelector('.sub') })
+  }
+  const { words, sub } = titleCache.get(el)
+  words.forEach((w, i) => { const p = easeOut(seg(t, a + i * 0.08, a + 0.55 + i * 0.08)); set(w, { opacity: String(p), transform: `translateY(${(1 - p) * 50}px) rotate(${(1 - p) * 6}deg)`, filter: `blur(${(1 - p) * 8}px)` }) })
+  const sp = easeOut(seg(t, a + 0.6 + words.length * 0.08, a + 1.2 + words.length * 0.08))
+  set(sub, { opacity: String(sp), transform: `translateY(${(1 - sp) * 20}px)` })
+}
+
+function fit() { const k = Math.min(innerWidth / 1920, innerHeight / 1080); $('stage').style.transform = `scale(${k})` }
+addEventListener('resize', fit); fit()
+// Предпросмотр в браузере: ?play — проигрывать в реальном времени.
+if (location.search.includes('play')) { const s = performance.now(); const loop = () => { renderAt(((performance.now() - s) / 1000) % 60); requestAnimationFrame(loop) }; loop() } else renderAt(0)
+window.filmReady = document.fonts.ready.then(() => true)
+</script>
+</body>
+</html>
