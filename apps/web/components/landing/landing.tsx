@@ -165,7 +165,6 @@ export function Landing() {
                 src="/video/logocrm-60s.mp4"
                 poster="/video/logocrm-60s.jpg"
                 controls
-                muted
                 playsInline
                 preload="none"
                 width={1280}
@@ -176,7 +175,7 @@ export function Landing() {
               </video>
             </div>
             <figcaption id="film-caption" className={s.filmCaption}>
-              1 минута, без звука. Расписание не даёт поставить два занятия в один кабинет · голосовое
+              1 минута, со звуком. Расписание не даёт поставить два занятия в один кабинет · голосовое
               после занятия становится отчётом родителю · нарушенные звуки сразу становятся целями ·
               абонементы и долги считаются сами · LogoCRM ставится на телефон как приложение.
             </figcaption>

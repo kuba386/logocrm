@@ -10,7 +10,7 @@ const FILM = path.join(__dirname, '.film.html')
 fs.writeFileSync(FILM, fs.readFileSync(path.join(__dirname, 'film.html'), 'utf8')
   .replace('FONT_GOLOS', font('golos-text', 'golos-text-cyrillic-wght-normal.woff2'))
   .replace('FONT_UNB', font('unbounded', 'unbounded-cyrillic-wght-normal.woff2')))
-fs.writeFileSync(path.join(__dirname, '.encoder.html'), '<!doctype html><meta charset="utf-8"><script src="node_modules/mp4-muxer/build/mp4-muxer.js"></script>')
+fs.writeFileSync(path.join(__dirname, '.encoder.html'), '<!doctype html><meta charset="utf-8"><script src="node_modules/mp4-muxer/build/mp4-muxer.js"></script><script src="soundtrack.js"></script>')
 const W = 1280, H = 720, FPS = 30, DUR = 60, N = FPS * DUR
 ;(async () => {
   const b = await chromium.launch({ channel: 'chrome' })
@@ -20,11 +20,35 @@ const W = 1280, H = 720, FPS = 30, DUR = 60, N = FPS * DUR
   const enc = await b.newPage()
   await enc.goto('file://' + path.join(__dirname, '.encoder.html'))
   await enc.evaluate(({ W, H, FPS }) => {
-    window.muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H, frameRate: FPS }, fastStart: 'in-memory' })
+    window.muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H, frameRate: FPS }, audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 48000 }, fastStart: 'in-memory' })
     window.encErr = null
     window.encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => (window.encErr = String(e)) })
     encoder.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 1_000_000, bitrateMode: 'variable', framerate: FPS, avc: { format: 'avc' } })
   }, { W, H, FPS })
+  // Звук: синтез (soundtrack.js) → AAC 128 кбит/с → та же MP4. Уровни по секундам —
+  // вместо прослушивания: нет ли клиппинга (peak ≥ 1) и провалов в тишину.
+  const levels = await enc.evaluate(async () => {
+    const buf = await buildSoundtrack()
+    const SR = buf.sampleRate, L = buf.getChannelData(0), R = buf.getChannelData(1)
+    const aenc = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (e) => (window.encErr = String(e)) })
+    aenc.configure({ codec: 'mp4a.40.2', sampleRate: SR, numberOfChannels: 2, bitrate: 128000 })
+    const STEP = 1024
+    for (let i = 0; i < L.length; i += STEP) {
+      const n = Math.min(STEP, L.length - i), data = new Float32Array(n * 2)
+      data.set(L.subarray(i, i + n), 0); data.set(R.subarray(i, i + n), n)
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i / SR) * 1e6), data })
+      aenc.encode(ad); ad.close()
+    }
+    await aenc.flush()
+    const out = []
+    for (let s = 0; s < 60; s++) {
+      let sum = 0, peak = 0
+      for (let i = s * SR; i < (s + 1) * SR; i++) { const v = Math.max(Math.abs(L[i]), Math.abs(R[i])); peak = Math.max(peak, v); sum += L[i] * L[i] }
+      out.push([s, +(20 * Math.log10(Math.sqrt(sum / SR) + 1e-9)).toFixed(1), +peak.toFixed(2)])
+    }
+    return out
+  })
+  console.log('звук, [секунда, RMS дБ, пик]:', JSON.stringify(levels))
   const t0 = Date.now()
   for (let i = 0; i < N; i++) {
     const t = i / FPS
