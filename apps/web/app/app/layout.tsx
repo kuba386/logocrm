@@ -7,6 +7,7 @@ import { canPayments, isFinance, isFrontDesk, roleLabel } from '@/lib/roles'
 import { noCenterRedirectPath } from '@/lib/access'
 import { cn } from '@/lib/utils'
 import { MobileNav } from '@/app/app/mobile-nav'
+import { InstallApp } from '@/components/pwa/install-app'
 import { SidebarNav, type NavGroup } from '@/app/app/sidebar-nav'
 import { BottomTabs } from '@/app/app/bottom-tabs'
 import { PlanBanner } from '@/app/app/plan-banner'
@@ -156,6 +157,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
   const accountActions = (
     <>
+      <InstallApp />
       {(centersCount ?? 0) > 1 ? (
         <Link href="/select-center" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
           Сменить центр
