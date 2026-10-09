@@ -5,6 +5,10 @@
 
 begin;
 
+-- Даты — 2037 год (календарь совпадает с 2026: те же дни недели). Триггер
+-- состава группы пересобирает только будущие занятия (starts_at >= now()),
+-- и даты октября 2026 к 10.10.2026 перестали быть будущими — тест 8 упал.
+
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
@@ -66,7 +70,7 @@ $$;
 insert into public.lessons (id, center_id, service_id, teacher_id, student_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000001','cccccccc-cccc-cccc-cccc-cccccccccccc',
         '99999999-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000001',
-        'eeeeeeee-0000-0000-0000-000000000001','2026-10-05 10:00+06','2026-10-05 10:45+06');
+        'eeeeeeee-0000-0000-0000-000000000001','2037-10-05 10:00+06','2037-10-05 10:45+06');
 
 
 -- 1–5. Занятость специалиста, кабинета, замена -------------------------------
@@ -74,27 +78,27 @@ values ('44444444-0000-0000-0000-000000000001','cccccccc-cccc-cccc-cccc-cccccccc
 select throws_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000001',
-              'eeeeeeee-0000-0000-0000-000000000002','2026-10-05 10:30+06','2026-10-05 11:15+06') $q$,
+              'eeeeeeee-0000-0000-0000-000000000002','2037-10-05 10:30+06','2037-10-05 11:15+06') $q$,
   '23P01', null, 'Специалист не может вести два занятия внахлёст'
 );
 
 select lives_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000001',
-              'eeeeeeee-0000-0000-0000-000000000002','2026-10-05 10:45+06','2026-10-05 11:30+06') $q$,
+              'eeeeeeee-0000-0000-0000-000000000002','2037-10-05 10:45+06','2037-10-05 11:30+06') $q$,
   'Занятие впритык (10:45 после 10:00–10:45) не считается накладкой'
 );
 
 insert into public.lessons (id, center_id, teacher_id, student_id, room_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000002','cccccccc-cccc-cccc-cccc-cccccccccccc',
         'aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
-        '11111111-0000-0000-0000-000000000001','2026-10-06 10:00+06','2026-10-06 10:45+06');
+        '11111111-0000-0000-0000-000000000001','2037-10-06 10:00+06','2037-10-06 10:45+06');
 
 select throws_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, room_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000002',
               'eeeeeeee-0000-0000-0000-000000000002','11111111-0000-0000-0000-000000000001',
-              '2026-10-06 10:15+06','2026-10-06 11:00+06') $q$,
+              '2037-10-06 10:15+06','2037-10-06 11:00+06') $q$,
   '23P01', null, 'Кабинет не может быть занят дважды'
 );
 
@@ -104,18 +108,18 @@ select lives_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, room_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000002',
               'eeeeeeee-0000-0000-0000-000000000002','11111111-0000-0000-0000-000000000001',
-              '2026-10-06 10:15+06','2026-10-06 11:00+06') $q$,
+              '2037-10-06 10:15+06','2037-10-06 11:00+06') $q$,
   'Отменённое занятие освобождает кабинет'
 );
 
 insert into public.lessons (id, center_id, teacher_id, student_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000003','cccccccc-cccc-cccc-cccc-cccccccccccc',
         'aaaaaaaa-0000-0000-0000-000000000002','eeeeeeee-0000-0000-0000-000000000002',
-        '2026-10-07 09:00+06','2026-10-07 09:45+06');
+        '2037-10-07 09:00+06','2037-10-07 09:45+06');
 insert into public.lessons (id, center_id, teacher_id, student_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000004','cccccccc-cccc-cccc-cccc-cccccccccccc',
         'aaaaaaaa-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
-        '2026-10-07 09:00+06','2026-10-07 09:45+06');
+        '2037-10-07 09:00+06','2037-10-07 09:45+06');
 
 select throws_ok(
   $q$ update public.lessons set substitute_teacher_id = 'aaaaaaaa-0000-0000-0000-000000000002'
@@ -128,12 +132,12 @@ select throws_ok(
 
 insert into public.group_students (center_id, group_id, student_id, joined_at)
 values ('cccccccc-cccc-cccc-cccc-cccccccccccc','33333333-0000-0000-0000-000000000001',
-        'eeeeeeee-0000-0000-0000-000000000001','2026-01-01');
+        'eeeeeeee-0000-0000-0000-000000000001','2037-01-01');
 
 insert into public.lessons (id, center_id, teacher_id, group_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000005','cccccccc-cccc-cccc-cccc-cccccccccccc',
         'aaaaaaaa-0000-0000-0000-000000000001','33333333-0000-0000-0000-000000000001',
-        '2026-10-08 10:00+06','2026-10-08 10:45+06');
+        '2037-10-08 10:00+06','2037-10-08 10:45+06');
 
 select is(
   (select count(*)::int from public.lesson_participants
@@ -145,19 +149,19 @@ select is(
 select throws_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000002',
-              'eeeeeeee-0000-0000-0000-000000000001','2026-10-08 10:15+06','2026-10-08 11:00+06') $q$,
+              'eeeeeeee-0000-0000-0000-000000000001','2037-10-08 10:15+06','2037-10-08 11:00+06') $q$,
   '23P01', null, 'Ребёнок из группы не может взять индивидуальное внахлёст'
 );
 
 insert into public.lessons (id, center_id, teacher_id, student_id, starts_at, ends_at)
 values ('44444444-0000-0000-0000-000000000006','cccccccc-cccc-cccc-cccc-cccccccccccc',
         'aaaaaaaa-0000-0000-0000-000000000002','eeeeeeee-0000-0000-0000-000000000002',
-        '2026-10-08 10:00+06','2026-10-08 10:45+06');
+        '2037-10-08 10:00+06','2037-10-08 10:45+06');
 
 select throws_ok(
   $q$ insert into public.group_students (center_id, group_id, student_id, joined_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','33333333-0000-0000-0000-000000000001',
-              'eeeeeeee-0000-0000-0000-000000000002','2026-01-01') $q$,
+              'eeeeeeee-0000-0000-0000-000000000002','2037-01-01') $q$,
   '23P01', null, 'Нельзя добавить в группу ребёнка, у которого слот уже занят'
 );
 
@@ -166,7 +170,7 @@ update public.lessons set status = 'cancelled' where id = '44444444-0000-0000-00
 select lives_ok(
   $q$ insert into public.group_students (center_id, group_id, student_id, joined_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','33333333-0000-0000-0000-000000000001',
-              'eeeeeeee-0000-0000-0000-000000000002','2026-01-01') $q$,
+              'eeeeeeee-0000-0000-0000-000000000002','2037-01-01') $q$,
   'Отмена занятия освобождает слот для добавления в группу'
 );
 
@@ -179,7 +183,7 @@ set local role authenticated;
 select throws_ok(
   $q$ insert into public.lesson_participants (lesson_id, student_id, center_id, starts_at, ends_at)
       values ('44444444-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002',
-              'cccccccc-cccc-cccc-cccc-cccccccccccc','2026-11-01 10:00+06','2026-11-01 10:45+06') $q$,
+              'cccccccc-cccc-cccc-cccc-cccccccccccc','2037-11-01 10:00+06','2037-11-01 10:45+06') $q$,
   '42501', null, 'В lesson_participants не может писать даже владелец центра'
 );
 
@@ -192,7 +196,7 @@ select is(
        'service_id','99999999-0000-0000-0000-000000000001',
        'teacher_id','aaaaaaaa-0000-0000-0000-000000000001',
        'student_id','eeeeeeee-0000-0000-0000-000000000001',
-       'first_date','2026-10-05','until','2026-10-05','time','10:00','weekdays', '[1]'::jsonb))
+       'first_date','2037-10-05','until','2037-10-05','time','10:00','weekdays', '[1]'::jsonb))
    where jsonb_array_length(conflicts) > 0),
   1,
   'Предпросмотр серии показывает занятый слот'
@@ -204,7 +208,7 @@ select throws_ok(
           'service_id','99999999-0000-0000-0000-000000000001',
           'teacher_id','aaaaaaaa-0000-0000-0000-000000000001',
           'student_id','eeeeeeee-0000-0000-0000-000000000001',
-          'first_date','2026-10-05','until','2026-10-12','time','10:00','weekdays','[1]'::jsonb)) $q$,
+          'first_date','2037-10-05','until','2037-10-12','time','10:00','weekdays','[1]'::jsonb)) $q$,
   '23P01', null, 'Серия с конфликтом не создаётся целиком'
 );
 
@@ -232,7 +236,7 @@ select throws_ok(
 select throws_ok(
   $q$ insert into public.lessons (center_id, teacher_id, student_id, starts_at, ends_at)
       values ('cccccccc-cccc-cccc-cccc-cccccccccccc','aaaaaaaa-0000-0000-0000-000000000001',
-              'eeeeeeee-0000-0000-0000-000000000001','2026-12-01 10:00+06','2026-12-01 10:45+06') $q$,
+              'eeeeeeee-0000-0000-0000-000000000001','2037-12-01 10:00+06','2037-12-01 10:45+06') $q$,
   '42501', null, 'Специалист не может создать занятие'
 );
 
@@ -268,7 +272,7 @@ select throws_ok(
   $q$ select * from public.create_lesson_series_preview(
         jsonb_build_object('teacher_id','aaaaaaaa-0000-0000-0000-000000000001',
           'student_id','eeeeeeee-0000-0000-0000-000000000001',
-          'first_date','2026-11-02','until','2026-11-02','time','10:00','weekdays','[1]'::jsonb)) $q$,
+          'first_date','2037-11-02','until','2037-11-02','time','10:00','weekdays','[1]'::jsonb)) $q$,
   '42501', null, 'Специалист не может открыть предпросмотр серии'
 );
 
@@ -282,15 +286,15 @@ set local role authenticated;
 
 select results_eq(
   $q$ select day from public.series_dates(jsonb_build_object(
-        'first_date','2026-10-05','until','2026-10-19','time','10:00',
+        'first_date','2037-10-05','until','2037-10-19','time','10:00',
         'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek')) $q$,
-  $q$ values ('2026-10-05'::date), ('2026-10-12'::date), ('2026-10-19'::date) $q$,
+  $q$ values ('2037-10-05'::date), ('2037-10-12'::date), ('2037-10-19'::date) $q$,
   'Случай 1: обычная неделя — три понедельника'
 );
 
 select is(
   (select count(*)::int from public.series_dates(jsonb_build_object(
-     'first_date','2026-10-05','until','2026-10-12','time','10:00',
+     'first_date','2037-10-05','until','2037-10-12','time','10:00',
      'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek'))),
   2,
   'Случай 2: until ровно на нужный день недели — включается'
@@ -298,7 +302,7 @@ select is(
 
 select throws_ok(
   $q$ select * from public.series_dates(jsonb_build_object(
-        'first_date','2026-10-05','until','2026-10-19','time','10:00',
+        'first_date','2037-10-05','until','2037-10-19','time','10:00',
         'weekdays','[3,3]'::jsonb,'timezone','Asia/Bishkek')) $q$,
   '22023', 'День недели указан дважды',
   'Случай 3: повтор дня недели — ошибка, а не два занятия'
@@ -306,9 +310,9 @@ select throws_ok(
 
 select is(
   (select starts_at from public.series_dates(jsonb_build_object(
-     'first_date','2026-10-05','until','2026-10-05','time','10:00',
+     'first_date','2037-10-05','until','2037-10-05','time','10:00',
      'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek')) limit 1),
-  '2026-10-05 04:00:00+00'::timestamptz,
+  '2037-10-05 04:00:00+00'::timestamptz,
   'Случай 4: Asia/Bishkek 10:00 — это 04:00 UTC'
 );
 
@@ -322,10 +326,10 @@ set local role authenticated;
 
 select isnt(
   (select starts_at from public.series_dates(
-     jsonb_build_object('first_date','2026-11-02','until','2026-11-02','time','10:00',
+     jsonb_build_object('first_date','2037-11-02','until','2037-11-02','time','10:00',
                         'weekdays','[1]'::jsonb,'timezone','Asia/Bishkek')) limit 1),
   (select starts_at from public.series_dates(
-     jsonb_build_object('first_date','2026-11-02','until','2026-11-02','time','10:00',
+     jsonb_build_object('first_date','2037-11-02','until','2037-11-02','time','10:00',
                         'weekdays','[1]'::jsonb,'timezone','Europe/Moscow')) limit 1),
   'Случай 5: одно локальное время в разных поясах даёт разные моменты UTC'
 );
