@@ -49,6 +49,12 @@ function loadScript(): Promise<void> {
  * ничего не рисует, формы работают как раньше. Токен одноразовый: после
  * каждой отправки виджет сбрасывается и выдаёт новый — иначе повторная
  * попытка после опечатки в пароле уходила бы с уже погашенным токеном.
+ *
+ * Пока нового токена нет (первые 1–3 секунды и после каждой отправки), форма
+ * не уходит: поле токена — `required`, браузер сам останавливает отправку и
+ * просит подождать. Раньше быстрый повтор уходил с пустым токеном и получал
+ * от Supabase «captcha protection: no captcha_token found» — на prod 7.10
+ * таких отказов было ~20 подряд на входе и регистрации.
  */
 export function TurnstileField() {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
@@ -57,6 +63,13 @@ export function TurnstileField() {
   // Проверка не загрузилась (блокировщик рекламы, сеть) — говорим сразу, а не
   // после отправки невнятным отказом сервера (UX-аудит, правило UX33).
   const [failed, setFailed] = useState(false)
+  const tokenInput = useRef<HTMLInputElement>(null)
+
+  // Своё сообщение вместо «Заполните это поле»: поле невидимое, человеку нужно
+  // понять, чего ждать.
+  useEffect(() => {
+    tokenInput.current?.setCustomValidity(token ? '' : 'Подождите секунду — идёт проверка «я не робот»')
+  }, [token])
 
   useEffect(() => {
     const container = box.current
@@ -108,8 +121,27 @@ export function TurnstileField() {
   return (
     <>
       {/* min-h — место под виджет заранее: без него он сдвигал кнопку при загрузке. */}
-      <div ref={box} className="min-h-[65px]" />
-      <input type="hidden" name="captcha_token" value={token} />
+      <div className="relative">
+        <div ref={box} className="min-h-[65px]" />
+        {/* Не hidden: скрытые поля не проверяются браузером, а нам нужен required.
+            Невидимое и вне Tab-порядка, но подсказка браузера встанет под виджетом. */}
+        <input
+          ref={tokenInput}
+          name="captcha_token"
+          value={token}
+          onChange={() => {}}
+          required
+          tabIndex={-1}
+          aria-hidden="true"
+          autoComplete="off"
+          className="pointer-events-none absolute bottom-0 left-1/2 h-px w-px opacity-0"
+        />
+      </div>
+      {!token && !failed ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          Проверяем, что вы не робот…
+        </p>
+      ) : null}
       {failed ? (
         <p role="alert" className="text-sm text-destructive">
           Не загрузилась проверка «я не робот». Обновите страницу; если не помогло — отключите блокировщик рекламы для этого сайта.
