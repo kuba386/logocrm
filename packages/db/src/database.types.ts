@@ -5423,6 +5423,10 @@ export type Database = {
         Args: { p_center_id: string }
         Returns: number
       }
+      center_deleted_by_platform: {
+        Args: { p_center_id: string }
+        Returns: boolean
+      }
       center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
