@@ -25,7 +25,9 @@ begin
       ('e0000000-0000-0000-0000-0000000000a1'::uuid, 'owner-e2e@logocrm.kg',   'Владелец Тестов'),
       ('e0000000-0000-0000-0000-0000000000a2'::uuid, 'admin-e2e@logocrm.kg',   'Администратор Тестов'),
       ('e0000000-0000-0000-0000-0000000000a3'::uuid, 'teacher-e2e@logocrm.kg', 'Нургуль Абдырахманова'),
-      ('e0000000-0000-0000-0000-0000000000a4'::uuid, 'parent-e2e@logocrm.kg',  'Гульмира Иванова')
+      ('e0000000-0000-0000-0000-0000000000a4'::uuid, 'parent-e2e@logocrm.kg',  'Гульмира Иванова'),
+      -- Администратор платформы (/admin, platform.spec.ts): без членства в центрах.
+      ('e0000000-0000-0000-0000-0000000000a5'::uuid, 'platform-e2e@logocrm.kg', 'Платформа Тестов')
     ) as t(id, email, full_name)
   loop
     insert into auth.users (
@@ -72,6 +74,22 @@ values (
   '{"timezone": "Asia/Bishkek", "features": {"ai_reports": true}}'::jsonb
 )
 on conflict (id) do nothing;
+
+
+-- Центр для ручных действий платформы (0099, platform.spec.ts): свой, чтобы
+-- продление, удаление и восстановление не задевали сценарии центра e2e.
+insert into public.centers (id, name, slug, plan, subscription_until, settings)
+values (
+  'e0000000-0000-0000-0000-0000000000c9',
+  'Центр платформы e2e',
+  'centr-platformy-e2e',
+  'solo',
+  now() + interval '30 days',
+  '{"timezone": "Asia/Bishkek"}'::jsonb
+)
+on conflict (id) do nothing;
+
+insert into public.platform_admins (email) values ('platform-e2e@logocrm.kg') on conflict (email) do nothing;
 
 
 -- Справочники -----------------------------------------------------------------
