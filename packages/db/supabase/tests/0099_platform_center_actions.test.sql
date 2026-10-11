@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(46);
+select plan(55);
 
 
 -- 1. Фикстура -------------------------------------------------------------------------------------
@@ -103,6 +103,7 @@ select is_empty(
       where p.oid in ('public.platform_day_end(uuid,date)'::regprocedure,
                       'public.platform_reason(text)'::regprocedure,
                       'public.center_deleted_by_platform(uuid)'::regprocedure,
+                      'public.platform_payments_center_live()'::regprocedure,
                       'public.centers_deletion_source_guard()'::regprocedure,
                       'public.platform_center_actions_immutable()'::regprocedure)
         and has_function_privilege(r, p.oid, 'EXECUTE') $$,
@@ -135,6 +136,15 @@ select throws_ok(
 select throws_ok(
   $$ select * from public.platform_deleted_centers() $$,
   '42501', 'Недостаточно прав', 'и список удалённых центров');
+select throws_ok(
+  $$ select public.platform_extend_trial('99000000-0000-0000-0000-0000000000c2', current_date + 5, null, 'Хочу') $$,
+  '42501', 'Недостаточно прав', 'и продление trial');
+select throws_ok(
+  $$ select * from public.platform_center_actions_recent(10) $$,
+  '42501', 'Недостаточно прав', 'и журнал через RPC');
+select throws_ok(
+  $$ select public.platform_gifted_since_payment('99000000-0000-0000-0000-0000000000c2') $$,
+  '42501', 'Недостаточно прав', 'и признак подарка');
 reset role;
 
 
@@ -208,6 +218,10 @@ select is(
   to_char((select bsk_today + 20 from t99), 'YYYY-MM-DD'),
   'Пробный — до последнего дня в поясе центра');
 
+create temporary table t99c on commit drop as
+  select trial_ends_at as c1_trial_now from public.centers where id = '99000000-0000-0000-0000-0000000000c1';
+grant select on t99c to authenticated;
+
 select public.tests_claims('99000000-0000-0000-0000-000000000001', null);
 set local role authenticated;
 select throws_ok(
@@ -216,8 +230,12 @@ select throws_ok(
   '22023', 'Центр уже на платном тарифе — продлевайте подписку', 'Платному центру trial не продлевается');
 select throws_ok(
   $$ select public.platform_extend_trial('99000000-0000-0000-0000-0000000000c1',
-       (select bsk_today + 90 from t99), null, 'Долго') $$,
-  null, null, 'Пробный дальше 60 дней (или устаревший срок формы) — отказ');
+       (select bsk_today + 61 from t99), (select c1_trial_now from t99c), 'Долго') $$,
+  '22023', 'Пробный период — не дальше 60 дней от сегодня', 'Пробный дальше 60 дней — отказ');
+select throws_ok(
+  $$ select public.platform_extend_trial('99000000-0000-0000-0000-0000000000c1',
+       (select bsk_today + 5 from t99), (select c1_trial_now from t99c), 'Короче') $$,
+  '22023', null, 'Пробный период только продлевается — раньше текущей даты нельзя');
 
 
 -- 6. Удаление и восстановление (Р2, Р3, Р7) --------------------------------------------------------
@@ -286,6 +304,26 @@ select throws_ok(
   '42501', null, 'После перехвата владелец удаление уже не отменит');
 reset role;
 
+-- Заявка к удалённому центру база не примет (Р7, гонка с «Я оплатил»).
+select throws_ok(
+  $$ insert into public.platform_payments (center_id, claimed_plan, claimed_months, claimed_amount_tiyin, source)
+     values ('99000000-0000-0000-0000-0000000000c4', 'solo', 1, 99000, 'mbank') $$,
+  'PT402', 'Центр удалён — заявка на оплату недоступна', 'Заявка к удалённому центру не вставляется');
+
+-- Владелец удалил центр с открытой заявкой сам — платформа перехватывает удаление.
+select public.tests_claims('99000000-0000-0000-0000-000000000003', '99000000-0000-0000-0000-0000000000c3');
+set local role authenticated;
+select lives_ok(
+  $$ select public.request_center_deletion('Центр 0099 заявка') $$,
+  'Владелец удаляет центр с открытой заявкой сам');
+reset role;
+select public.tests_claims('99000000-0000-0000-0000-000000000001', null);
+set local role authenticated;
+select lives_ok(
+  $$ select public.platform_delete_center('99000000-0000-0000-0000-0000000000c3', 'Центр 0099 заявка', 'Спам с заявкой') $$,
+  'Удаление владельцем с открытой заявкой платформа перехватывает — заявка уже выпала из очереди');
+reset role;
+
 select public.tests_claims('99000000-0000-0000-0000-000000000001', null);
 set local role authenticated;
 select is(
@@ -337,6 +375,28 @@ select throws_ok(
   '42501', 'Запись журнала платформы не изменяется и не удаляется',
   'Запись журнала не правится даже владельцем таблиц с сессией');
 select public.tests_claims(null, null);
+
+-- Оплата подтверждена после подарка — предупреждения больше нет.
+insert into public.platform_payments (center_id, claimed_plan, claimed_months, claimed_amount_tiyin, source,
+                                      confirmed_at, plan, months, amount_tiyin)
+values ('99000000-0000-0000-0000-0000000000c2', 'studio', 1, 390000, 'mbank', now() + interval '1 second', 'studio', 1, 390000);
+select public.tests_claims('99000000-0000-0000-0000-000000000001', null);
+set local role authenticated;
+select is(
+  public.platform_gifted_since_payment('99000000-0000-0000-0000-0000000000c2'), false,
+  'Оплата позже подарка — предупреждение снято');
+reset role;
+select public.tests_claims(null, null);
+
+-- Удаление автора записей из auth.users (без сессии): FK set null проходит,
+-- остальное в записи не меняется.
+create temporary table t99d on commit drop as
+  select id, reason from public.platform_center_actions where created_by = '99000000-0000-0000-0000-000000000001';
+delete from auth.users where id = '99000000-0000-0000-0000-000000000001';
+select ok(
+  (select count(*) > 0 and bool_and(a.created_by is null and a.reason = d.reason)
+     from t99d d join public.platform_center_actions a on a.id = d.id),
+  'Автор удалён — created_by обнулён, причина и прочее не тронуты');
 
 
 select * from finish();

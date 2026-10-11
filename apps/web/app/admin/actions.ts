@@ -130,6 +130,11 @@ export async function previewConfirm(
 // Права, даты, сверку срока и причину решают RPC; здесь — только разбор формы.
 
 const reasonOf = (formData: FormData) => String(formData.get('reason') ?? '')
+// Пустая дата — null: функция ответит по-русски, а не PostgREST английским 22007.
+const dayOf = (formData: FormData) => {
+  const v = String(formData.get('until') ?? '')
+  return v === '' ? null : v
+}
 const expectedOf = (formData: FormData) => {
   const v = String(formData.get('expectedUntil') ?? '')
   return v === '' ? null : v
@@ -140,7 +145,7 @@ export async function grantSubscription(_prev: AdminState, formData: FormData): 
   const { error } = await supabase.rpc('platform_grant_subscription', {
     p_center_id: String(formData.get('centerId') ?? ''),
     p_plan: String(formData.get('plan') ?? ''),
-    p_until: String(formData.get('until') ?? ''),
+    p_until: dayOf(formData) as string,
     p_expected_until: expectedOf(formData) as string,
     p_reason: reasonOf(formData),
     p_allow_shorten: formData.get('shorten') === 'on',
@@ -154,7 +159,7 @@ export async function extendTrial(_prev: AdminState, formData: FormData): Promis
   const supabase = await createClient()
   const { error } = await supabase.rpc('platform_extend_trial', {
     p_center_id: String(formData.get('centerId') ?? ''),
-    p_until: String(formData.get('until') ?? ''),
+    p_until: dayOf(formData) as string,
     p_expected_until: expectedOf(formData) as string,
     p_reason: reasonOf(formData),
   })

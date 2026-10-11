@@ -6126,6 +6126,7 @@ export type Database = {
           action: string
           center_id: string
           center_name: string
+          center_timezone: string
           created_at: string
           created_by_email: string
           details: Json
@@ -6171,6 +6172,7 @@ export type Database = {
         Args: never
         Returns: {
           center_id: string
+          center_timezone: string
           deleted_at: string
           deletion_source: string
           name: string

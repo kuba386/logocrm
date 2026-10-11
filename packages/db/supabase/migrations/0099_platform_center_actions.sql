@@ -31,8 +31,12 @@
 --     «подарком на месяц». Сокращение срока — только явным флагом.
 -- Р6. Причина — только в журнале. events читают owner/admin центра
 --     (events_select_admin, 0001), поэтому в payload событий её нет.
--- Р7. Удалить центр с открытой заявкой на оплату нельзя: заявка выпала бы
---     из очереди платформы (0052 Р11), деньги остались бы без ответа.
+-- Р7. Удалить живой центр с открытой заявкой на оплату нельзя: заявка
+--     выпала бы из очереди платформы (0052 Р11). Обратная сторона — триггер
+--     на platform_payments: заявка к удалённому центру не вставляется, строка
+--     центра блокируется (иначе «Я оплатил» проскакивал бы в гонке с
+--     удалением). Центр, уже удалённый владельцем, перехватывается и с
+--     заявкой — она выпала из очереди ещё при удалении владельцем.
 -- Р8. Центр, удалённый платформой, получает свои тексты: «отмена в
 --     настройках тарифа» для него неправда. Состояние center_write_state
 --     то же ('deleted') — новое значение веб превратил бы в 'ok' (lib/plan.ts).
@@ -134,10 +138,17 @@ create or replace function public.platform_center_actions_immutable()
   set search_path = ''
 as $$
 begin
-  if tg_op = 'UPDATE' or auth.uid() is not null then
-    raise exception 'Запись журнала платформы не изменяется и не удаляется' using errcode = '42501';
+  -- Без сессии: каскад удаления центра (delete) и FK on delete set null при
+  -- удалении автора из auth.users (update только created_by → null).
+  if auth.uid() is null then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    if new.created_by is null and (to_jsonb(new) - 'created_by') = (to_jsonb(old) - 'created_by') then
+      return new;
+    end if;
   end if;
-  return old;
+  raise exception 'Запись журнала платформы не изменяется и не удаляется' using errcode = '42501';
 end;
 $$;
 revoke all on function public.platform_center_actions_immutable() from public, anon, authenticated, service_role;
@@ -355,8 +366,9 @@ begin
   if p_confirm_name is null or btrim(p_confirm_name) <> v_c.name then
     raise exception 'Название центра не совпадает — удаление не выполнено' using errcode = '22023';
   end if;
-  -- Р7: заявка выпала бы из очереди платформы.
-  if exists (select 1 from public.platform_payments p
+  -- Р7: заявка выпала бы из очереди платформы. У центра, уже удалённого
+  -- владельцем, она выпала раньше — перехват ничего не ухудшает.
+  if v_c.deleted_at is null and exists (select 1 from public.platform_payments p
               where p.center_id = p_center_id
                 and p.confirmed_at is null and p.rejected_at is null and p.withdrawn_at is null) then
     raise exception 'У центра есть открытая заявка на оплату — сначала подтвердите или отклоните её' using errcode = '22023';
@@ -431,7 +443,7 @@ grant execute on function public.platform_restore_center(uuid, text) to authenti
 
 -- 4.5. Удалённые центры — раздел «Удалённые» в /admin --------------------------------------------------
 create or replace function public.platform_deleted_centers()
-  returns table (center_id uuid, name text, slug text, plan text, deleted_at timestamptz, deletion_source text, owner_email text)
+  returns table (center_id uuid, name text, slug text, plan text, deleted_at timestamptz, deletion_source text, owner_email text, center_timezone text)
   language plpgsql
   stable
   security definer
@@ -444,7 +456,8 @@ begin
   return query
     select c.id, c.name, c.slug, c.plan, c.deleted_at, c.deletion_source,
            (select u.email::text from public.memberships m join auth.users u on u.id = m.user_id
-             where m.center_id = c.id and m.role = 'owner' order by m.created_at, m.user_id limit 1)
+             where m.center_id = c.id and m.role = 'owner' order by m.created_at, m.user_id limit 1),
+           public.center_timezone(c.id)
       from public.centers c
      where c.deleted_at is not null
      order by c.deleted_at desc;
@@ -459,7 +472,7 @@ grant execute on function public.platform_deleted_centers() to authenticated;
 -- Прямой select журнала не покажет ни название (centers прячет RLS от
 -- платформы), ни автора (auth.users закрыта).
 create or replace function public.platform_center_actions_recent(p_limit integer default 30)
-  returns table (id uuid, center_id uuid, center_name text, action text, reason text, details jsonb, created_by_email text, created_at timestamptz)
+  returns table (id uuid, center_id uuid, center_name text, action text, reason text, details jsonb, created_by_email text, created_at timestamptz, center_timezone text)
   language plpgsql
   stable
   security definer
@@ -470,7 +483,7 @@ begin
     raise exception 'Недостаточно прав' using errcode = '42501';
   end if;
   return query
-    select a.id, a.center_id, c.name, a.action, a.reason, a.details, u.email::text, a.created_at
+    select a.id, a.center_id, c.name, a.action, a.reason, a.details, u.email::text, a.created_at, public.center_timezone(a.center_id)
       from public.platform_center_actions a
       join public.centers c on c.id = a.center_id
       left join auth.users u on u.id = a.created_by
@@ -506,6 +519,31 @@ comment on function public.platform_gifted_since_payment(uuid) is
   'Было ли ручное продление после последней подтверждённой оплаты (0099 Р3): подаренные дни при смене тарифа считаются как оплаченные (platform_switch_calc), пульт предупреждает.';
 revoke all on function public.platform_gifted_since_payment(uuid) from public, anon, service_role;
 grant execute on function public.platform_gifted_since_payment(uuid) to authenticated;
+
+
+-- 4.8. Заявка на оплату — только живому центру (Р7) ------------------------------------------------
+-- FOR SHARE ждёт платформенное удаление (FOR UPDATE) и видит его результат:
+-- проверка в submit_platform_payment без блокировки пропускала заявку в гонке.
+create or replace function public.platform_payments_center_live()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  perform 1 from public.centers c where c.id = new.center_id and c.deleted_at is null for share;
+  if not found then
+    raise exception 'Центр удалён — заявка на оплату недоступна' using errcode = 'PT402';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.platform_payments_center_live() from public, anon, authenticated, service_role;
+
+drop trigger if exists platform_payments_center_live on public.platform_payments;
+create trigger platform_payments_center_live
+  before insert on public.platform_payments
+  for each row execute function public.platform_payments_center_live();
 
 
 -- 5. Переиздания: удаление владельцем и тексты для центра, удалённого платформой (Р2, Р8) -----------
@@ -627,7 +665,7 @@ begin
     'name',        v_c.name,
     'deleted',     v_c.deleted_at is not null,
     'deleted_at',  v_c.deleted_at,
-    'by_platform', v_c.deletion_source = 'platform'
+    'by_platform', coalesce(v_c.deletion_source = 'platform', false)
   );
 end;
 $$;

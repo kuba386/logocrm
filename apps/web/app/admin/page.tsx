@@ -284,7 +284,7 @@ export default async function AdminPage() {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="font-medium">{d.name}</span>
                     <span className="text-xs text-muted-foreground">
-                      {formatInTimeZone(d.deleted_at, DEFAULT_TIME_ZONE, { day: '2-digit', month: '2-digit', year: 'numeric' })} ·{' '}
+                      {formatInTimeZone(d.deleted_at, d.center_timezone, { day: '2-digit', month: '2-digit', year: 'numeric' })} ·{' '}
                       {d.deletion_source === 'platform' ? t('admin', 'deletedByPlatform') : t('admin', 'deletedByOwner')}
                       {d.owner_email ? ` · ${d.owner_email}` : ''}
                     </span>
@@ -319,7 +319,7 @@ export default async function AdminPage() {
                 {(journal ?? []).map((j) => (
                   <TableRow key={j.id}>
                     <TableCell className="whitespace-nowrap text-xs">
-                      {formatInTimeZone(j.created_at, DEFAULT_TIME_ZONE, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {formatInTimeZone(j.created_at, j.center_timezone, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </TableCell>
                     <TableCell>{j.center_name}</TableCell>
                     <TableCell className="whitespace-nowrap">

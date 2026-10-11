@@ -131,6 +131,11 @@ function DeleteForm({ center }: { center: ActionCenter }) {
     <form action={action} className="space-y-3" {...keep}>
       <h3 className="font-medium text-destructive">{t('admin', 'deleteTitle')}</h3>
       <p className="text-xs text-muted-foreground">{t('admin', 'deleteHint')}</p>
+      {center.hasOpenClaim ? (
+        <p role="note" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {t('admin', 'deleteOpenClaim')}
+        </p>
+      ) : null}
       <input type="hidden" name="centerId" value={center.id} />
       <div className="space-y-1">
         <Label htmlFor={`${id}-name`}>{t('admin', 'deleteConfirmName')}</Label>
