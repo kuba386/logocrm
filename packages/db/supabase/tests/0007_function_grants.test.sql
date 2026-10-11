@@ -154,7 +154,10 @@ from unnest(array[
   'public.export_center_predicate(text)',
   'public.exercise_is_specialist_only(text[])',
   'public.center_payments_day(uuid,date)',
-  'public.saved_filter_params_ok(text,jsonb)'
+  'public.saved_filter_params_ok(text,jsonb)',
+  'public.platform_day_end(uuid,date)',
+  'public.platform_reason(text)',
+  'public.center_deleted_by_platform(uuid)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -450,7 +453,15 @@ select set_eq(
     -- 0094: сохранённые фильтры; saved_filter_pages — предикат политики чтения.
     ('save_filter(text,text,jsonb)'),
     ('archive_saved_filter(uuid)'),
-    ('saved_filter_pages()')
+    ('saved_filter_pages()'),
+    -- 0099: ручные действия платформы над центрами (первой строкой is_platform_admin).
+    ('platform_grant_subscription(uuid,text,date,timestamp with time zone,text,boolean)'),
+    ('platform_extend_trial(uuid,date,timestamp with time zone,text)'),
+    ('platform_delete_center(uuid,text,text)'),
+    ('platform_restore_center(uuid,text)'),
+    ('platform_deleted_centers()'),
+    ('platform_center_actions_recent(integer)'),
+    ('platform_gifted_since_payment(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

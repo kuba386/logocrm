@@ -7,6 +7,7 @@ import { DEFAULT_TIME_ZONE, formatInTimeZone, monthLabel } from '@/lib/timezone'
 import { cn } from '@/lib/utils'
 import { ConfirmForm, RejectForm } from './claim-forms'
 import { CreateCenterForm } from './create-center-form'
+import { CenterActions, RestoreForm } from './center-actions'
 
 export const metadata = { title: 'Платформа — LogoCRM' }
 
@@ -74,6 +75,8 @@ export default async function AdminPage() {
     { data: open, error: openError },
     { data: plans },
     { data: confirmed },
+    { data: deletedCenters },
+    { data: journal },
   ] = await Promise.all([
     supabase.rpc('platform_summary'),
     supabase.rpc('platform_centers'),
@@ -85,7 +88,16 @@ export default async function AdminPage() {
       .not('confirmed_at', 'is', null)
       .order('confirmed_at', { ascending: false })
       .limit(10),
+    supabase.rpc('platform_deleted_centers'),
+    supabase.rpc('platform_center_actions_recent', { p_limit: 30 }),
   ])
+  // 0099 Р3: подаренные вручную дни при смене тарифа считаются оплаченными —
+  // у заявки такого центра пульт предупреждает. Решает SQL, по центру заявки.
+  const openCenterIds = [...new Set((open ?? []).map((row) => row.center_id))]
+  const giftedEntries = await Promise.all(
+    openCenterIds.map(async (id) => [id, (await supabase.rpc('platform_gifted_since_payment', { p_center_id: id })).data === true] as const),
+  )
+  const gifted = new Map(giftedEntries)
 
   const summary = parseSummary(summaryJson)
   const planOptions = (plans ?? [])
@@ -170,6 +182,11 @@ export default async function AdminPage() {
                   <dd className="font-mono text-xs sm:col-span-3">{row.payment_id}</dd>
                 </dl>
 
+                {gifted.get(row.center_id) ? (
+                  <p role="note" className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
+                    {t('admin', 'giftWarning')}
+                  </p>
+                ) : null}
                 <div className="grid gap-4 md:grid-cols-2">
                   <ConfirmForm
                     paymentId={row.payment_id}
@@ -204,6 +221,9 @@ export default async function AdminPage() {
                   <TableHead>{t('admin', 'colUntil')}</TableHead>
                   <TableHead className="text-right">{t('admin', 'colUsage')}</TableHead>
                   <TableHead>{t('admin', 'colOwner')}</TableHead>
+                  <TableHead>
+                    <span className="sr-only">{t('admin', 'actions')}</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -226,6 +246,89 @@ export default async function AdminPage() {
                       {c.teachers} / {c.students}
                     </TableCell>
                     <TableCell className="text-xs">{c.owner_email ?? '—'}</TableCell>
+                    <TableCell className="text-right">
+                      <CenterActions
+                        center={{
+                          id: c.center_id,
+                          name: c.name,
+                          plan: c.plan,
+                          isTrial: c.is_trial,
+                          until: c.until ?? null,
+                          // until_text — ДД.ММ.ГГГГ в поясе центра (0052) → ГГГГ-ММ-ДД для поля даты.
+                          untilDay: c.until_text ? c.until_text.split('.').reverse().join('-') : null,
+                          hasOpenClaim: c.open_claims > 0,
+                        }}
+                        plans={planOptions.map((p) => ({ code: p.code, name: p.name }))}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('admin', 'deletedTitle')}</CardTitle>
+          <CardDescription>{t('admin', 'deletedSubtitle')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {(deletedCenters ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('admin', 'deletedEmpty')}</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {(deletedCenters ?? []).map((d) => (
+                <li key={d.center_id} className="space-y-2 py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">{d.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatInTimeZone(d.deleted_at, d.center_timezone, { day: '2-digit', month: '2-digit', year: 'numeric' })} ·{' '}
+                      {d.deletion_source === 'platform' ? t('admin', 'deletedByPlatform') : t('admin', 'deletedByOwner')}
+                      {d.owner_email ? ` · ${d.owner_email}` : ''}
+                    </span>
+                  </div>
+                  {d.deletion_source === 'platform' ? <RestoreForm centerId={d.center_id} /> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('admin', 'journalTitle')}</CardTitle>
+          <CardDescription>{t('admin', 'journalSubtitle')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {(journal ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('admin', 'journalEmpty')}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('admin', 'colDate')}</TableHead>
+                  <TableHead>{t('admin', 'colCenter')}</TableHead>
+                  <TableHead>{t('admin', 'actions')}</TableHead>
+                  <TableHead>{t('admin', 'reason')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(journal ?? []).map((j) => (
+                  <TableRow key={j.id}>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {formatInTimeZone(j.created_at, j.center_timezone, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </TableCell>
+                    <TableCell>{j.center_name}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {t('admin', `journalAction_${j.action}` as 'journalAction_grant')}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {j.reason}
+                      {j.created_by_email ? <span className="block text-xs text-muted-foreground">{j.created_by_email}</span> : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

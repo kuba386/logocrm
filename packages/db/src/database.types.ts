@@ -595,6 +595,7 @@ export type Database = {
         Row: {
           created_at: string
           deleted_at: string | null
+          deletion_source: string | null
           id: string
           name: string
           plan: string
@@ -607,6 +608,7 @@ export type Database = {
         Insert: {
           created_at?: string
           deleted_at?: string | null
+          deletion_source?: string | null
           id?: string
           name: string
           plan?: string
@@ -619,6 +621,7 @@ export type Database = {
         Update: {
           created_at?: string
           deleted_at?: string | null
+          deletion_source?: string | null
           id?: string
           name?: string
           plan?: string
@@ -3228,6 +3231,44 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_center_actions: {
+        Row: {
+          action: string
+          center_id: string
+          created_at: string
+          created_by: string | null
+          details: Json
+          id: string
+          reason: string
+        }
+        Insert: {
+          action: string
+          center_id: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          id?: string
+          reason: string
+        }
+        Update: {
+          action?: string
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_center_actions_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_payments: {
         Row: {
           amount_tiyin: number | null
@@ -5382,6 +5423,10 @@ export type Database = {
         Args: { p_center_id: string }
         Returns: number
       }
+      center_deleted_by_platform: {
+        Args: { p_center_id: string }
+        Returns: boolean
+      }
       center_deletion_state: { Args: never; Returns: Json }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
@@ -6079,6 +6124,20 @@ export type Database = {
         }
         Returns: number
       }
+      platform_center_actions_recent: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          center_id: string
+          center_name: string
+          center_timezone: string
+          created_at: string
+          created_by_email: string
+          details: Json
+          id: string
+          reason: string
+        }[]
+      }
       platform_centers: {
         Args: never
         Returns: {
@@ -6104,6 +6163,51 @@ export type Database = {
       platform_create_center: {
         Args: { p_city?: string; p_name: string; p_owner_email: string }
         Returns: string
+      }
+      platform_day_end: {
+        Args: { p_center_id: string; p_day: string }
+        Returns: string
+      }
+      platform_delete_center: {
+        Args: { p_center_id: string; p_confirm_name: string; p_reason: string }
+        Returns: undefined
+      }
+      platform_deleted_centers: {
+        Args: never
+        Returns: {
+          center_id: string
+          center_timezone: string
+          deleted_at: string
+          deletion_source: string
+          name: string
+          owner_email: string
+          plan: string
+          slug: string
+        }[]
+      }
+      platform_extend_trial: {
+        Args: {
+          p_center_id: string
+          p_expected_until: string
+          p_reason: string
+          p_until: string
+        }
+        Returns: Json
+      }
+      platform_gifted_since_payment: {
+        Args: { p_center_id: string }
+        Returns: boolean
+      }
+      platform_grant_subscription: {
+        Args: {
+          p_allow_shorten?: boolean
+          p_center_id: string
+          p_expected_until: string
+          p_plan: string
+          p_reason: string
+          p_until: string
+        }
+        Returns: Json
       }
       platform_open_payments: {
         Args: never
@@ -6149,6 +6253,11 @@ export type Database = {
       platform_prepay_discount_pct: {
         Args: { p_months: number }
         Returns: number
+      }
+      platform_reason: { Args: { p_reason: string }; Returns: string }
+      platform_restore_center: {
+        Args: { p_center_id: string; p_reason: string }
+        Returns: undefined
       }
       platform_summary: { Args: never; Returns: Json }
       platform_switch_calc: {

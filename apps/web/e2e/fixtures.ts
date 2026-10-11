@@ -11,6 +11,7 @@ export const USERS = {
   admin: 'admin-e2e@logocrm.kg',
   teacher: 'teacher-e2e@logocrm.kg',
   parent: 'parent-e2e@logocrm.kg',
+  platform: 'platform-e2e@logocrm.kg',
 } as const
 
 export const TEACHERS = {

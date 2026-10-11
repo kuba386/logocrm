@@ -85,7 +85,7 @@ export default async function PlanPage() {
     supabase.rpc('center_today', {}),
   ])
 
-  const deletion = deletionJson as { name: string; deleted: boolean; deleted_at: string | null } | null
+  const deletion = deletionJson as { name: string; deleted: boolean; deleted_at: string | null; by_platform?: boolean | null } | null
   const bookingEnabled = Boolean((center?.settings as Record<string, unknown> | null)?.booking_enabled)
   const today = todayStr ?? new Date().toISOString().slice(0, 10)
   const monthAgo = new Date(new Date(`${today}T00:00:00Z`).getTime() - 30 * 86400000).toISOString().slice(0, 10)
@@ -364,7 +364,12 @@ export default async function PlanPage() {
                 <CardDescription>{t('plan', 'deleteSectionSubtitle')}</CardDescription>
               </CardHeader>
               <CardContent>
-                {deletion?.deleted ? (
+                {deletion?.deleted && deletion.by_platform ? (
+                  // 0099: удалила платформа — отмены у владельца нет (база её и не пропустит).
+                  <p className="text-sm text-destructive">
+                    {t('plan', 'deletedByPlatformNotice', { date: deletion.deleted_at ? date(deletion.deleted_at) : '—' })}
+                  </p>
+                ) : deletion?.deleted ? (
                   <div className="space-y-3">
                     <p className="text-sm text-destructive">
                       {t('plan', 'deletedNotice', { date: deletion.deleted_at ? date(deletion.deleted_at) : '—' })}

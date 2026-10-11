@@ -125,3 +125,68 @@ export async function previewConfirm(
     },
   }
 }
+
+// ---------- Ручные действия над центрами (0099) ----------
+// Права, даты, сверку срока и причину решают RPC; здесь — только разбор формы.
+
+const reasonOf = (formData: FormData) => String(formData.get('reason') ?? '')
+// Пустая дата — null: функция ответит по-русски, а не PostgREST английским 22007.
+const dayOf = (formData: FormData) => {
+  const v = String(formData.get('until') ?? '')
+  return v === '' ? null : v
+}
+const expectedOf = (formData: FormData) => {
+  const v = String(formData.get('expectedUntil') ?? '')
+  return v === '' ? null : v
+}
+
+export async function grantSubscription(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('platform_grant_subscription', {
+    p_center_id: String(formData.get('centerId') ?? ''),
+    p_plan: String(formData.get('plan') ?? ''),
+    p_until: dayOf(formData) as string,
+    p_expected_until: expectedOf(formData) as string,
+    p_reason: reasonOf(formData),
+    p_allow_shorten: formData.get('shorten') === 'on',
+  })
+  if (error) return { message: toAppError(error, t('admin', 'actionFailed')).message }
+  revalidatePath('/admin')
+  return { notice: t('admin', 'grantDone') }
+}
+
+export async function extendTrial(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('platform_extend_trial', {
+    p_center_id: String(formData.get('centerId') ?? ''),
+    p_until: dayOf(formData) as string,
+    p_expected_until: expectedOf(formData) as string,
+    p_reason: reasonOf(formData),
+  })
+  if (error) return { message: toAppError(error, t('admin', 'actionFailed')).message }
+  revalidatePath('/admin')
+  return { notice: t('admin', 'trialDone') }
+}
+
+export async function deleteCenter(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('platform_delete_center', {
+    p_center_id: String(formData.get('centerId') ?? ''),
+    p_confirm_name: String(formData.get('confirmName') ?? ''),
+    p_reason: reasonOf(formData),
+  })
+  if (error) return { message: toAppError(error, t('admin', 'actionFailed')).message }
+  revalidatePath('/admin')
+  return { notice: t('admin', 'deleteDone') }
+}
+
+export async function restoreCenter(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('platform_restore_center', {
+    p_center_id: String(formData.get('centerId') ?? ''),
+    p_reason: reasonOf(formData),
+  })
+  if (error) return { message: toAppError(error, t('admin', 'actionFailed')).message }
+  revalidatePath('/admin')
+  return { notice: t('admin', 'restoreDone') }
+}
