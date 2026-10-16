@@ -1031,6 +1031,9 @@ export default async function StudentPage({
     existingStatus: r.existing_status,
   }))
 
+  // Узлы строятся сразу для всех разделов, а рисуются только с show: true. Поэтому
+  // никаких `clinicalSection!.` — у стойки и бухгалтера клиники нет (null), и
+  // обращение к полю роняло всю карточку в 500 (нашёл e2e регистратора 16.10.2026).
   const sectionBlocks: Record<string, { label: string; show: boolean; node: React.ReactNode }> = {
     subscriptions: {
       label: 'Абонементы',
@@ -1223,7 +1226,7 @@ export default async function StudentPage({
           <CardContent>
             <DiagnosticsPanel
               studentId={id}
-              entries={clinicalSection!.diagnostics}
+              entries={clinicalSection?.diagnostics ?? []}
               canWrite={canEditClinical}
               conclusions={conclusionLookup}
               forms={formLookup}
@@ -1250,8 +1253,8 @@ export default async function StudentPage({
           <CardContent>
             <GoalsPanel
               studentId={id}
-              goals={clinicalSection!.goals}
-              stages={clinicalSection!.stages}
+              goals={clinicalSection?.goals ?? []}
+              stages={clinicalSection?.stages ?? []}
               canWrite={canEditClinical}
             />
           </CardContent>
@@ -1270,8 +1273,8 @@ export default async function StudentPage({
           <CardContent>
             <HomeworkPanel
               studentId={id}
-              homework={clinicalSection!.homework}
-              exercises={clinicalSection!.exercises}
+              homework={clinicalSection?.homework ?? []}
+              exercises={clinicalSection?.exercises ?? []}
               canWrite={canEditClinical}
             />
           </CardContent>
@@ -1294,7 +1297,7 @@ export default async function StudentPage({
           <CardContent>
             <NotesPanel
               studentId={id}
-              notes={clinicalSection!.notes}
+              notes={clinicalSection?.notes ?? []}
               canWrite={canEditClinical}
               timeZone={clinicalTimeZone}
             />
