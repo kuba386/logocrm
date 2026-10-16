@@ -1,8 +1,7 @@
 'use client'
 
-import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from 'react'
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { useFormStatus } from 'react-dom'
 import { formatSom, installmentDueDates, splitInstallments } from '@logocrm/core'
 import {
   acceptSubscriptionPayment,
@@ -15,14 +14,19 @@ import {
   writeOffSubscription,
   type SubscriptionState,
 } from './subscription-actions'
-import { Button } from '@/components/ui/button'
+import { Button, type ButtonProps } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { FormError, FormNotice } from '@/components/ui/alert'
+import { FormError } from '@/components/ui/alert'
+import { NoticeLine, usePageNotice, type Notice } from '@/components/ui/page-notice'
+import { receiptHref } from '@/lib/receipt'
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
 import { attendanceStatusClasses, SUBSCRIPTION_STATE_CLASSES, SUBSCRIPTION_STATE_LABELS } from '@/lib/attendance'
 import { dayInZone, formatInTimeZone, timeInZone } from '@/lib/timezone'
+import { useLastSource } from '@/lib/use-last-source'
 import { label, t } from '@/lib/messages'
 
 const initial: SubscriptionState = { message: '' }
@@ -65,6 +69,8 @@ export type SubscriptionView = {
   priceTiyin: number
   startsAt: string
   endsAt: string | null
+  /** Сколько занятий в пакете (subscriptions.lessons_total); null — срок или безлимит. */
+  lessonsTotal?: number | null
   lessonsLeft: number | null
   state: string
   freezeDays: number
@@ -94,6 +100,14 @@ const INSTALLMENT_STATE_CLASSES: Record<string, string> = {
   paid: 'text-muted-foreground line-through',
 }
 
+const PAYMENT_STATE_TONES: Record<string, StatusTone> = {
+  unpaid: 'danger',
+  partial: 'warning',
+  paid: 'success',
+  overpaid: 'info',
+  closed: 'neutral',
+}
+
 export type BalanceView = {
   /** null здесь двусмыслен: и «безлимит», и «нет активного абонемента» — различает только activeSubscriptionId. */
   lessonsLeft: number | null
@@ -101,6 +115,8 @@ export type BalanceView = {
   endsAt: string | null
   debtTiyin: number
   overdrawnTiyin: number
+  /** Аванс за занятия (student_balance.lesson_credit_tiyin, 0087): переплата долга, ждёт будущих занятий. */
+  creditTiyin?: number
 }
 
 export type SiblingOption = { id: string; fullName: string; payerId?: string | null }
@@ -113,6 +129,9 @@ export type AttendanceHistoryRow = {
   comment: string | null
 }
 
+/** Итог действия: текст и, если проведён платёж, его id — для ссылки «Квитанция». */
+type Done = (notice: string, paymentId?: string) => void
+
 /**
  * Формы панели отправляются через onSubmit, а не <form action>. React 19
  * после action-формы сбрасывает её, и при отказе сервера (оплата больше цены,
@@ -120,14 +139,26 @@ export type AttendanceHistoryRow = {
  * оплаты — на первый в списке, дата начала и «по» заморозки — на пустые,
  * select типа — на «Выберите тип» при цене от прежнего типа. Повторная
  * отправка провела бы деньги не через ту кассу и не с той даты. Теперь при
- * отказе введённое остаётся как есть, а очищается форма только после
- * успеха — чтобы второй клик не провёл ту же операцию ещё раз.
+ * отказе введённое остаётся как есть.
+ *
+ * Итог (onDone) зовётся прямо из обёртки действия, до коммита ответа, а не из
+ * эффекта после него: ответ сервера и перерисовка по revalidatePath приходят
+ * одним коммитом, и если успех убирает хозяина формы (оплачено целиком —
+ * кнопки «Принять оплату» больше нет, заморозили — нет «Заморозить»), эффект
+ * уже не выполнится и итог с квитанцией пропал бы. Форма живёт в диалоге и
+ * пересоздаётся при каждом открытии — второй клик начинает с чистого листа.
  */
-function useSubmit(state: SubscriptionState, formAction: (payload: FormData) => void) {
-  const formRef = useRef<HTMLFormElement>(null)
-  useEffect(() => {
-    if (state.notice) formRef.current?.reset()
-  }, [state])
+function useFormAction(
+  action: (prev: SubscriptionState, formData: FormData) => Promise<SubscriptionState>,
+  onDone?: Done,
+) {
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
+  const [state, formAction, pending] = useActionState(async (prev: SubscriptionState, formData: FormData) => {
+    const next = await action(prev, formData)
+    if (next.notice) onDoneRef.current?.(next.notice, next.paymentId)
+    return next
+  }, initial)
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -135,7 +166,7 @@ function useSubmit(state: SubscriptionState, formAction: (payload: FormData) => 
     startTransition(() => formAction(formData))
   }
 
-  return { formRef, submit }
+  return { state, submit, pending }
 }
 
 /** pending — из useActionState: useFormStatus без <form action> всегда false. */
@@ -144,7 +175,7 @@ function SubmitButton({
   pending,
   variant,
 }: {
-  children: React.ReactNode
+  children: ReactNode
   pending: boolean
   variant?: 'outline' | 'destructive'
 }) {
@@ -152,6 +183,74 @@ function SubmitButton({
     <Button type="submit" size="sm" variant={variant} disabled={pending}>
       {pending ? 'Секунду…' : children}
     </Button>
+  )
+}
+
+/**
+ * Кнопка действия и диалог с его формой. Форма пересоздаётся на каждое
+ * открытие (key): прошлый отказ и прошлая сумма не всплывают при новом
+ * открытии, а сумма по умолчанию берётся из свежих данных карточки.
+ */
+function ActionDialog({
+  label: buttonLabel,
+  title,
+  description,
+  variant = 'outline',
+  onOpen,
+  children,
+}: {
+  label: ReactNode
+  title: string
+  description?: string
+  variant?: ButtonProps['variant']
+  onOpen?: () => void
+  children: (close: () => void) => ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const [round, setRound] = useState(0)
+  return (
+    <>
+      {/* На телефоне — во всю ширину: длинные подписи («Покрыть неоплаченные занятия (1)») не вылезают за карточку. */}
+      <Button
+        type="button"
+        size="sm"
+        variant={variant}
+        className="max-sm:h-auto max-sm:min-h-9 max-sm:w-full max-sm:whitespace-normal"
+        onClick={() => {
+          onOpen?.()
+          setRound((r) => r + 1)
+          setOpen(true)
+        }}
+      >
+        {buttonLabel}
+      </Button>
+      <Dialog open={open} onClose={() => setOpen(false)} title={title} description={description}>
+        <div key={round}>{open ? children(() => setOpen(false)) : null}</div>
+      </Dialog>
+    </>
+  )
+}
+
+/** Источник оплаты: по умолчанию — последний выбранный на этом устройстве (useLastSource). */
+function SourceSelect({
+  id,
+  sources,
+  disabled,
+}: {
+  id: string
+  sources: SourceOption[]
+  disabled?: boolean
+}) {
+  const [value, remember] = useLastSource(sources)
+  return (
+    <Select id={id} name="sourceId" value={value} onChange={(e) => remember(e.target.value)} disabled={disabled}>
+      {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
+      {sources.map((source) => (
+        <option key={source.id} value={source.id}>
+          {source.name}
+        </option>
+      ))}
+    </Select>
   )
 }
 
@@ -177,6 +276,7 @@ function BalanceStrip({ balance, timeZone }: { balance: BalanceView; timeZone: s
         <dd className={cn('font-medium', balance.debtTiyin > 0 && 'text-destructive')}>
           {balance.debtTiyin > 0 ? formatSom(balance.debtTiyin) : '—'}
         </dd>
+        {balance.creditTiyin ? <dd className="text-xs text-success">аванс {formatSom(balance.creditTiyin)}</dd> : null}
       </div>
       <div>
         <dt className="text-xs text-muted-foreground">Перерасход</dt>
@@ -189,18 +289,18 @@ function BalanceStrip({ balance, timeZone }: { balance: BalanceView; timeZone: s
 }
 
 function somToTiyin(som: string): number {
-  const value = Number(som)
+  const value = Number(som.replace(',', '.'))
   return Number.isFinite(value) ? Math.round(value * 100) : 0
 }
 
 /**
  * Продажа с оплатой и рассрочкой (промт этапа 5: «Продать абонемент → сразу
  * форма оплаты»). Внесённая сумма по умолчанию — полная цена; источник —
- * первый в списке центра. Предпросмотр графика — из core (splitInstallments
- * / installmentDueDates, зеркало SQL), а фактические строки создаёт RPC и
- * отдаёт в ответе — панель перерисовывается по ним, не по предпросмотру.
- * saleKey — ключ идемпотентности: живёт с открытия формы до успешного
- * ответа, потом меняется; двойной клик со старым ключом сервер отбивает.
+ * последний выбранный. Предпросмотр графика — из core (splitInstallments /
+ * installmentDueDates, зеркало SQL), а фактические строки создаёт RPC —
+ * карточка перерисовывается по ним, не по предпросмотру.
+ * saleKey — ключ идемпотентности: живёт с открытия формы до ответа сервера,
+ * двойной клик со старым ключом сервер отбивает.
  */
 function SellForm({
   studentId,
@@ -208,15 +308,16 @@ function SellForm({
   sources,
   today,
   timeZone,
+  onDone,
 }: {
   studentId: string
   types: SubscriptionTypeOption[]
   sources: SourceOption[]
   today: string
   timeZone: string
+  onDone: Done
 }) {
-  const [state, formAction, pending] = useActionState(sellSubscriptionPaid, initial)
-  const { formRef, submit } = useSubmit(state, formAction)
+  const { state, submit, pending } = useFormAction(sellSubscriptionPaid, onDone)
   const [typeId, setTypeId] = useState('')
   const [priceSom, setPriceSom] = useState('')
   const [paidSom, setPaidSom] = useState('')
@@ -224,31 +325,24 @@ function SellForm({
   const [installments, setInstallments] = useState(2)
   // Первый платёж рассрочки — через месяц от сегодня, а не сегодня: в день
   // продажи семья уже внесла первую часть, и платёж «сегодня» назавтра
-  // становился просрочкой (аудит финансов 5.10.2026).
+  // становился просрочкой (аудит финансов 5.10.2026). Форма создаётся заново
+  // при каждом открытии диалога — раньше после продажи сюда подставлялось
+  // «сегодня», и вторая продажа без перезагрузки снова давала просрочку.
   const [firstDue, setFirstDue] = useState(() => installmentDueDates(today, 2, 1)[1] ?? today)
   const [stepMonths, setStepMonths] = useState(1)
   // Не при инициализации: случайный uuid на сервере и клиенте разошёлся бы
-  // в гидратации. Новый ключ — на каждый ответ сервера, а не на смену текста
-  // notice: две продажи подряд дают одинаковый notice, и третья ушла бы со
-  // старым ключом. После отказа продажа откатилась, новый ключ ничего не
-  // ломает. После успеха поля очищаются вслед за сбросом формы в useSubmit.
+  // в гидратации. Новый ключ — на каждый ответ сервера: после отказа продажа
+  // откатилась, новый ключ ничего не ломает.
   const [saleKey, setSaleKey] = useState('')
   useEffect(() => {
     setSaleKey(crypto.randomUUID())
-    if (!state.notice) return
-    setTypeId('')
-    setPriceSom('')
-    setPaidSom('')
-    setWithInstallments(false)
-    setInstallments(2)
-    setFirstDue(today)
-    setStepMonths(1)
-  }, [state, today])
+  }, [state])
 
-  const selected = types.find((t) => t.id === typeId)
+  const selected = types.find((type) => type.id === typeId)
   const priceTiyin = somToTiyin(priceSom)
   const paidTiyin = somToTiyin(paidSom)
   const remainingTiyin = Math.max(priceTiyin - paidTiyin, 0)
+  const discountTiyin = selected && priceSom !== '' ? selected.priceTiyin - priceTiyin : 0
   const previewAmounts =
     withInstallments && remainingTiyin > 0 && installments >= 1 && installments <= Math.min(24, remainingTiyin)
       ? splitInstallments(remainingTiyin, installments)
@@ -257,14 +351,22 @@ function SellForm({
 
   function onTypeChange(id: string) {
     setTypeId(id)
-    const type = types.find((t) => t.id === id)
+    const type = types.find((item) => item.id === id)
     const som = type ? String(type.priceTiyin / 100) : ''
     setPriceSom(som)
     setPaidSom(som)
   }
 
+  // Правка цены (скидка) тянет за собой «Внесено», пока его не трогали
+  // руками: раньше цена становилась 3 500, а внесено оставалось 4 000 — и
+  // сервер отказывал «переплата» на ровном месте.
+  function onPriceChange(value: string) {
+    if (paidSom === priceSom) setPaidSom(value)
+    setPriceSom(value)
+  }
+
   return (
-    <form ref={formRef} onSubmit={submit} className="space-y-3 rounded-md border border-border p-3">
+    <form onSubmit={submit} className="space-y-4">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="saleKey" value={saleKey} />
       <input type="hidden" name="expectedRemainingTiyin" value={remainingTiyin} />
@@ -282,6 +384,11 @@ function SellForm({
               </option>
             ))}
           </Select>
+          {types.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Типов абонементов пока нет — их заводят в «Настройки → Типы абонементов».
+            </p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <Label htmlFor="priceSom">Цена, сом</Label>
@@ -289,12 +396,18 @@ function SellForm({
             id="priceSom"
             name="priceSom"
             type="number"
+            inputMode="decimal"
             min={0}
             step="0.01"
             value={priceSom}
-            onChange={(e) => setPriceSom(e.target.value)}
+            onChange={(e) => onPriceChange(e.target.value)}
             placeholder={selected ? String(selected.priceTiyin / 100) : ''}
           />
+          {discountTiyin > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Скидка {formatSom(discountTiyin)} от цены типа {selected ? formatSom(selected.priceTiyin) : ''}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="space-y-1">
@@ -311,22 +424,26 @@ function SellForm({
               id="paidSom"
               name="paidSom"
               type="number"
+              inputMode="decimal"
               min={0}
               step="0.01"
               value={paidSom}
               onChange={(e) => setPaidSom(e.target.value)}
             />
+            {priceTiyin > 0 ? (
+              <div className="flex flex-wrap gap-x-3 text-xs">
+                <button type="button" className="text-primary underline-offset-4 hover:underline" onClick={() => setPaidSom(priceSom)}>
+                  Вся сумма
+                </button>
+                <button type="button" className="text-primary underline-offset-4 hover:underline" onClick={() => setPaidSom('0')}>
+                  Без оплаты
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label htmlFor="sourceId">{t('sale', 'source')}</Label>
-            <Select id="sourceId" name="sourceId" defaultValue={sources[0]?.id ?? ''} disabled={paidTiyin === 0}>
-              {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </Select>
+            <SourceSelect id="sourceId" sources={sources} disabled={paidTiyin === 0} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="paidOn">{t('sale', 'paidOn')}</Label>
@@ -416,48 +533,48 @@ function SellForm({
       ) : null}
 
       <FormError message={state.message} />
-      <FormNotice message={state.notice} />
-      <SubmitButton pending={pending}>{t('sale', 'submit')}</SubmitButton>
+      <SubmitButton pending={pending}>
+        {paidTiyin > 0 ? t('sale', 'submitPaid', { sum: formatSom(paidTiyin) }) : t('sale', 'submitUnpaid')}
+      </SubmitButton>
     </form>
   )
 }
 
-function FreezeForm({ studentId, subscriptionId }: { studentId: string; subscriptionId: string }) {
-  const [state, formAction, pending] = useActionState(freezeSubscription, initial)
-  const { formRef, submit } = useSubmit(state, formAction)
+function FreezeForm({ studentId, subscriptionId, today, onDone }: { studentId: string; subscriptionId: string; today: string; onDone: Done }) {
+  const { state, submit, pending } = useFormAction(freezeSubscription, onDone)
   return (
-    <form ref={formRef} onSubmit={submit} className="flex flex-wrap items-end gap-2">
+    <form onSubmit={submit} className="space-y-3">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
-      <div className="space-y-1">
-        <Label htmlFor={`freeze-from-${subscriptionId}`}>С</Label>
-        <Input id={`freeze-from-${subscriptionId}`} name="from" type="date" required />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor={`freeze-from-${subscriptionId}`}>С</Label>
+          <Input id={`freeze-from-${subscriptionId}`} name="from" type="date" defaultValue={today} required />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`freeze-to-${subscriptionId}`}>По (пусто — пока не разморозят)</Label>
+          <Input id={`freeze-to-${subscriptionId}`} name="to" type="date" />
+        </div>
       </div>
-      <div className="space-y-1">
-        <Label htmlFor={`freeze-to-${subscriptionId}`}>По (пусто — пока не разморозят)</Label>
-        <Input id={`freeze-to-${subscriptionId}`} name="to" type="date" />
-      </div>
-      <SubmitButton pending={pending} variant="outline">
-        Заморозить
-      </SubmitButton>
+      <p className="text-xs text-muted-foreground">
+        У абонемента на срок дата окончания сдвинется на дни заморозки. Отметить посещение в эти дни будет нельзя.
+      </p>
       <FormError message={state.message} />
-      <FormNotice message={state.notice} />
+      <SubmitButton pending={pending}>Заморозить</SubmitButton>
     </form>
   )
 }
 
-function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscriptionId: string }) {
-  const [state, formAction, pending] = useActionState(unfreezeSubscription, initial)
-  const { formRef, submit } = useSubmit(state, formAction)
+function UnfreezeForm({ studentId, subscriptionId, onDone }: { studentId: string; subscriptionId: string; onDone: Done }) {
+  const { state, submit, pending } = useFormAction(unfreezeSubscription, onDone)
   return (
-    <form ref={formRef} onSubmit={submit} className="flex items-center gap-2">
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <SubmitButton pending={pending} variant="outline">
         Разморозить
       </SubmitButton>
       <FormError message={state.message} />
-      <FormNotice message={state.notice} />
     </form>
   )
 }
@@ -472,7 +589,7 @@ function UnfreezeForm({ studentId, subscriptionId }: { studentId: string; subscr
  * refundTiyin === 0 — законный случай (истёкший срок, исчерпанный пакет), не
  * повод прятать кнопку: «Отменить» доступно всегда, «вернуть деньги» —
  * только когда есть что возвращать (0054, решение владельца, Р0б). Источник
- * оплаты в форме и так появляется только при moneyBack > 0 (не менялось).
+ * оплаты в форме появляется только при moneyBack > 0.
  */
 function RefundForm({
   studentId,
@@ -481,6 +598,8 @@ function RefundForm({
   payoutTiyin,
   isPeriod,
   sources,
+  onDone,
+  onCancel,
 }: {
   studentId: string
   subscriptionId: string
@@ -490,66 +609,51 @@ function RefundForm({
   /** ends_at абонемента задан — возврат посчитан по оставшимся дням, не по занятиям (0054). */
   isPeriod: boolean
   sources: SourceOption[]
+  onDone: Done
+  onCancel: () => void
 }) {
-  const [state, formAction, pending] = useActionState(refundSubscription, initial)
-  const { formRef, submit } = useSubmit(state, formAction)
-  const [confirming, setConfirming] = useState(false)
+  const { state, submit, pending } = useFormAction(refundSubscription, onDone)
   const moneyBack = payoutTiyin
 
-  if (!confirming) {
-    return (
-      <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-        {refundTiyin > 0 ? t('sale', 'refund') : t('sale', 'cancelOnly')}
-      </Button>
-    )
-  }
-
   return (
-    <form ref={formRef} onSubmit={submit} className="space-y-2 rounded-md border border-border p-3">
+    <form onSubmit={submit} className="space-y-3">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedTiyin" value={refundTiyin} />
       <input type="hidden" name="expectedPayoutTiyin" value={payoutTiyin} />
-      <p className="text-sm">
-        {refundTiyin > 0 ? (
-          <>
-            {t('sale', isPeriod ? 'unworkedPeriodCost' : 'unworkedCost', { sum: formatSom(refundTiyin) })}
-            {moneyBack < refundTiyin ? (
-              <>
-                {' '}
-                {t('sale', 'moneyBack', { sum: formatSom(moneyBack) })}
-              </>
-            ) : null}
-            {'. '}
-            {t('sale', 'refundHint')}
-          </>
+      {/* Текст — по выплате (payout), а не по «стоимости неотработанного»: у
+          безлимита без срока refund_calc = 0, а внесённое возвращается целиком
+          — раньше форма писала «возврат не положен» и проводила −8 000 молча
+          (аудит финансов 16.10.2026). */}
+      <div className="space-y-1 text-sm">
+        {moneyBack > 0 ? (
+          <p className="font-medium">{t('sale', 'payoutLine', { sum: formatSom(moneyBack) })}</p>
         ) : (
-          t('sale', 'cancelNoRefund')
+          <p>{t('sale', 'cancelNoRefund')}</p>
         )}
-      </p>
+        {refundTiyin > 0 ? (
+          <p className="text-muted-foreground">
+            {t('sale', isPeriod ? 'unworkedPeriodCost' : 'unworkedCost', { sum: formatSom(refundTiyin) })}
+            {moneyBack < refundTiyin ? ` ${t('sale', 'paidLess')}` : ''}.
+          </p>
+        ) : null}
+        <p className="text-xs text-muted-foreground">{t('sale', 'refundHint')}</p>
+      </div>
       {moneyBack > 0 ? (
         <div className="space-y-1">
-          <Label htmlFor={`refund-source-${subscriptionId}`}>{t('sale', 'source')}</Label>
-          <Select id={`refund-source-${subscriptionId}`} name="sourceId" defaultValue={sources[0]?.id ?? ''}>
-            {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.name}
-              </option>
-            ))}
-          </Select>
+          <Label htmlFor={`refund-source-${subscriptionId}`}>{t('sale', 'refundSource')}</Label>
+          <SourceSelect id={`refund-source-${subscriptionId}`} sources={sources} />
         </div>
       ) : null}
-      <div className="flex gap-2">
+      <FormError message={state.message} />
+      <div className="flex flex-wrap gap-2">
         <SubmitButton pending={pending} variant="destructive">
-          {t('sale', moneyBack > 0 ? 'confirmRefund' : 'confirmCancel')}
+          {moneyBack > 0 ? t('sale', 'confirmRefundSum', { sum: formatSom(moneyBack) }) : t('sale', 'confirmCancel')}
         </SubmitButton>
-        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(false)}>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
           {t('sale', 'cancel')}
         </Button>
       </div>
-      <FormError message={state.message} />
-      <FormNotice message={state.notice} />
     </form>
   )
 }
@@ -558,6 +662,9 @@ function RefundForm({
  * «Принять оплату» по существующему абонементу (0090 Р7): куда ведёт отказ
  * «сначала примите оплату». Остаток к оплате — с сервера
  * (subscription_summary.due_tiyin), сервер же сверяет его и не примет больше.
+ * Раньше после частичной оплаты форма оставалась открытой со старой суммой и
+ * без подтверждения — повторный клик отправлял прежнюю сумму в уже
+ * уменьшившийся остаток. Теперь успех закрывает диалог, итог — над списком.
  */
 function PayForm({
   studentId,
@@ -565,67 +672,47 @@ function PayForm({
   dueTiyin,
   sources,
   today,
+  onDone,
 }: {
   studentId: string
   subscriptionId: string
   dueTiyin: number
   sources: SourceOption[]
   today: string
+  onDone: Done
 }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [state, action, pending] = useActionState(acceptSubscriptionPayment, initial)
+  const { state, submit, pending } = useFormAction(acceptSubscriptionPayment, onDone)
 
+  // Отказ (остаток изменился — 23514) — перечитать страницу, чтобы скрытый
+  // expectedDueTiyin стал свежим, а не уходил повторно устаревшим.
   useEffect(() => {
     if (state.message) router.refresh()
   }, [state, router])
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    startTransition(() => action(formData))
-  }
-
-  if (!open) {
-    return (
-      <div className="space-y-1">
-        <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
-          Принять оплату
-        </Button>
-        <FormNotice message={state.notice} />
-      </div>
-    )
-  }
-
   return (
-    <form onSubmit={submit} className="space-y-2 rounded-md border border-border p-3 text-sm">
+    <form onSubmit={submit} className="space-y-3 text-sm">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="expectedDueTiyin" value={dueTiyin} />
-      <p>Осталось оплатить {formatSom(dueTiyin)}.</p>
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1">
           <Label htmlFor={`pay-amount-${subscriptionId}`}>Сумма, сом</Label>
           <Input
             id={`pay-amount-${subscriptionId}`}
             name="amountSom"
             type="number"
+            inputMode="decimal"
             min="0.01"
             step="0.01"
+            max={dueTiyin / 100}
             required
             defaultValue={String(dueTiyin / 100)}
           />
         </div>
         <div className="space-y-1">
           <Label htmlFor={`pay-source-${subscriptionId}`}>{t('sale', 'source')}</Label>
-          <Select id={`pay-source-${subscriptionId}`} name="sourceId" defaultValue={sources[0]?.id ?? ''}>
-            {sources.length === 0 ? <option value="">{t('sale', 'noSources')}</option> : null}
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.name}
-              </option>
-            ))}
-          </Select>
+          <SourceSelect id={`pay-source-${subscriptionId}`} sources={sources} />
         </div>
         <div className="space-y-1">
           <Label htmlFor={`pay-date-${subscriptionId}`}>Дата</Label>
@@ -633,14 +720,7 @@ function PayForm({
         </div>
       </div>
       <FormError message={state.message} />
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? 'Секунду…' : 'Принять'}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Отмена
-        </Button>
-      </div>
+      <SubmitButton pending={pending}>Принять</SubmitButton>
     </form>
   )
 }
@@ -650,68 +730,38 @@ function PayForm({
  * Владельцу — «Списать недоплату и закрыть» с обязательной причиной; сумму
  * считает база, касса не меняется.
  */
-function ShortfallBlock({
+function WriteOffForm({
   studentId,
   subscriptionId,
   shortfallTiyin,
-  isOwner,
+  onDone,
 }: {
   studentId: string
   subscriptionId: string
   shortfallTiyin: number
-  isOwner: boolean
+  onDone: Done
 }) {
   const router = useRouter()
-  const [confirming, setConfirming] = useState(false)
-  const [state, action, pending] = useActionState(writeOffSubscription, initial)
+  const { state, submit, pending } = useFormAction(writeOffSubscription, onDone)
 
   useEffect(() => {
     if (state.message) router.refresh()
   }, [state, router])
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    startTransition(() => action(formData))
-  }
-
   return (
-    <div className="w-full space-y-2 text-sm">
-      <p className="text-muted-foreground">
-        Закрыть абонемент нельзя: за отработанные занятия не заплачено {formatSom(shortfallTiyin)}. Сначала примите
-        оплату{isOwner ? ' или спишите недоплату' : ''}.
-      </p>
-      {isOwner && !confirming ? (
-        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-          Списать недоплату и закрыть
-        </Button>
-      ) : null}
-      {isOwner && confirming ? (
-        <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
-          <input type="hidden" name="studentId" value={studentId} />
-          <input type="hidden" name="subscriptionId" value={subscriptionId} />
-          <input type="hidden" name="expectedShortfallTiyin" value={shortfallTiyin} />
-          <p>
-            Списать {formatSom(shortfallTiyin)} без денег и закрыть абонемент. В кассе ничего не изменится, отменить
-            списание нельзя.
-          </p>
-          <div className="space-y-1">
-            <Label htmlFor={`writeoff-reason-${subscriptionId}`}>Причина</Label>
-            <Input id={`writeoff-reason-${subscriptionId}`} name="reason" required maxLength={500} />
-          </div>
-          <FormError message={state.message} />
-          <div className="flex gap-2">
-            <Button type="submit" size="sm" variant="destructive" disabled={pending}>
-              {pending ? 'Секунду…' : 'Списать и закрыть'}
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-              Отмена
-            </Button>
-          </div>
-        </form>
-      ) : null}
-      <FormNotice message={state.notice} />
-    </div>
+    <form onSubmit={submit} className="space-y-3 text-sm">
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="subscriptionId" value={subscriptionId} />
+      <input type="hidden" name="expectedShortfallTiyin" value={shortfallTiyin} />
+      <div className="space-y-1">
+        <Label htmlFor={`writeoff-reason-${subscriptionId}`}>Причина</Label>
+        <Input id={`writeoff-reason-${subscriptionId}`} name="reason" required maxLength={500} />
+      </div>
+      <FormError message={state.message} />
+      <SubmitButton pending={pending} variant="destructive">
+        Списать и закрыть
+      </SubmitButton>
+    </form>
   )
 }
 
@@ -719,21 +769,21 @@ function TransferForm({
   studentId,
   subscriptionId,
   siblings,
+  onDone,
 }: {
   studentId: string
   subscriptionId: string
   siblings: SiblingOption[]
+  onDone: Done
 }) {
-  const [state, formAction, pending] = useActionState(transferRemaining, initial)
-  const { formRef, submit } = useSubmit(state, formAction)
-  if (siblings.length === 0) return null
+  const { state, submit, pending } = useFormAction(transferRemaining, onDone)
 
   return (
-    <form ref={formRef} onSubmit={submit} className="flex flex-wrap items-end gap-2">
+    <form onSubmit={submit} className="space-y-3">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <div className="space-y-1">
-        <Label htmlFor={`transfer-to-${subscriptionId}`}>Перенести остаток</Label>
+        <Label htmlFor={`transfer-to-${subscriptionId}`}>Кому</Label>
         <Select id={`transfer-to-${subscriptionId}`} name="toStudentId" required defaultValue="">
           <option value="">Выберите ребёнка</option>
           {siblings.map((sibling) => (
@@ -743,60 +793,41 @@ function TransferForm({
           ))}
         </Select>
       </div>
-      <SubmitButton pending={pending} variant="outline">
-        Перенести
-      </SubmitButton>
-      <p className="w-full text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Внесённые сверх отработанного деньги перейдут вместе с занятиями (только детям того же плательщика).
       </p>
       <FormError message={state.message} />
-      <FormNotice message={state.notice} />
+      <SubmitButton pending={pending}>Перенести</SubmitButton>
     </form>
   )
 }
 
 /**
  * «Покрыть неоплаченные занятия (N)» (0088): занятия списываются с этого
- * абонемента, долг снимается. Два шага — кнопка и подтверждение с суммой:
- * действие тратит занятия абонемента. Отказ (23514 «долг изменился») —
- * перечитать страницу, чтобы предпросмотр и expected стали свежими.
+ * абонемента, долг снимается. Подтверждение с суммой — действие тратит
+ * занятия абонемента. Отказ (23514 «долг изменился») — перечитать страницу,
+ * чтобы предпросмотр и expected стали свежими.
  */
 function CoverDebtForm({
   studentId,
   subscriptionId,
   cover,
+  onDone,
 }: {
   studentId: string
   subscriptionId: string
   cover: NonNullable<SubscriptionView['cover']>
+  onDone: Done
 }) {
   const router = useRouter()
-  const [confirming, setConfirming] = useState(false)
-  const [state, action, pending] = useActionState(coverLessonDebt, initial)
+  const { state, submit, pending } = useFormAction(coverLessonDebt, onDone)
 
   useEffect(() => {
     if (state.message) router.refresh()
   }, [state, router])
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    startTransition(() => action(formData))
-  }
-
-  if (!confirming) {
-    return (
-      <div className="space-y-1">
-        <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-          Покрыть неоплаченные занятия ({cover.canCover})
-        </Button>
-        <FormNotice message={state.notice} />
-      </div>
-    )
-  }
-
   return (
-    <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/50 p-3 text-sm">
+    <form onSubmit={submit} className="space-y-3 text-sm">
       <input type="hidden" name="studentId" value={studentId} />
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
       <input type="hidden" name="count" value={cover.canCover} />
@@ -807,16 +838,36 @@ function CoverDebtForm({
         {cover.creditAfterTiyin > 0 ? ` После покрытия ${formatSom(cover.creditAfterTiyin)} уже внесённых денег станут авансом.` : ''}
       </p>
       <FormError message={state.message} />
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? 'Секунду…' : 'Покрыть'}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-          Отмена
-        </Button>
-      </div>
+      <SubmitButton pending={pending}>Покрыть</SubmitButton>
     </form>
   )
+}
+
+/** «Осталось 5 из 8» с полосой — только у пакета занятий; у срока и безлимита считать нечего. */
+function LessonsProgress({ left, total }: { left: number | null; total: number | null | undefined }) {
+  if (left == null) return <span className="text-sm">без лимита</span>
+  if (!total) return <span className="text-sm">{left} зан.</span>
+  const share = Math.min(Math.max(left / total, 0), 1)
+  return (
+    <div className="min-w-[8rem] space-y-1">
+      <p className={cn('text-sm', left <= 0 && 'text-destructive')}>
+        Осталось {left} из {total}
+      </p>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+        <div
+          className={cn('h-full rounded-full', left <= 2 ? 'bg-warning' : 'bg-primary', left <= 0 && 'bg-destructive')}
+          style={{ width: `${share * 100}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Завершённый абонемент: отменён, либо истёк/исчерпан и по деньгам закрыт — свёрнут под «Завершённые». */
+function isFinished(subscription: SubscriptionView): boolean {
+  if (subscription.state === 'cancelled') return true
+  const done = subscription.state === 'expired' || subscription.state === 'exhausted'
+  return done && subscription.dueTiyin === 0 && subscription.shortfallTiyin === 0 && !(subscription.cover && subscription.cover.canCover > 0)
 }
 
 function SubscriptionCard({
@@ -828,6 +879,8 @@ function SubscriptionCard({
   canManage,
   isOwner,
   today,
+  onDone,
+  onOpen,
 }: {
   studentId: string
   subscription: SubscriptionView
@@ -839,21 +892,24 @@ function SubscriptionCard({
   /** Владелец центра — может списать недоплату (0090). Подсказка интерфейса; право проверяет база. */
   isOwner: boolean
   today: string
+  onDone: Done
+  onOpen: () => void
 }) {
+  const transferTo = siblings.filter((sibling) => sibling.payerId === subscription.payerId)
+  const canFreeze = (subscription.state === 'active' || subscription.state === 'exhausted') && !subscription.freezeFrom
+
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="font-medium">{subscription.typeName}</p>
           <p className="text-sm text-muted-foreground">
             {formatSom(subscription.priceTiyin)} · с {calendarDate(subscription.startsAt, timeZone)}
             {subscription.endsAt ? ` по ${calendarDate(subscription.endsAt, timeZone)}` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm">
-            {subscription.lessonsLeft == null ? 'без лимита' : `${subscription.lessonsLeft} зан.`}
-          </span>
+        <div className="flex items-start gap-3">
+          <LessonsProgress left={subscription.lessonsLeft} total={subscription.lessonsTotal} />
           <span
             className={cn(
               'rounded px-2 py-0.5 text-xs font-medium',
@@ -865,28 +921,33 @@ function SubscriptionCard({
         </div>
       </div>
 
-      <p className="text-sm">
-        {t('subscriptionCard', 'paidOf', {
-          paid: formatSom(subscription.paidTiyin),
-          price: formatSom(subscription.priceTiyin),
-        })}
-        <span className="text-muted-foreground"> · {label('paymentState', subscription.paymentState)}</span>
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span>
+          {t('subscriptionCard', 'paidOf', {
+            paid: formatSom(subscription.paidTiyin),
+            price: formatSom(subscription.priceTiyin),
+          })}
+        </span>
+        {subscription.paymentState ? (
+          <StatusBadge tone={PAYMENT_STATE_TONES[subscription.paymentState] ?? 'neutral'}>
+            {label('paymentState', subscription.paymentState)}
+          </StatusBadge>
+        ) : null}
+        {subscription.dueTiyin > 0 ? (
+          <span className="text-muted-foreground">{t('subscriptionCard', 'due', { sum: formatSom(subscription.dueTiyin) })}</span>
+        ) : null}
+      </div>
       {subscription.installments.length ? (
         <ol className="space-y-1 text-sm">
           {subscription.installments.map((row) => (
-            <li key={row.seq} className={cn('flex justify-between', INSTALLMENT_STATE_CLASSES[row.state])}>
+            <li key={row.seq} className={cn('flex justify-between gap-3', INSTALLMENT_STATE_CLASSES[row.state])}>
               <span>
                 {row.seq}. {calendarDate(row.dueDate, timeZone)} · {label('installmentState', row.state)}
               </span>
-              <span>{formatSom(row.amountTiyin)}</span>
+              <span className="whitespace-nowrap tabular-nums">{formatSom(row.amountTiyin)}</span>
             </li>
           ))}
         </ol>
-      ) : null}
-
-      {canManage && subscription.cover && subscription.cover.canCover > 0 ? (
-        <CoverDebtForm studentId={studentId} subscriptionId={subscription.id} cover={subscription.cover} />
       ) : null}
 
       {/* freezeFrom, не state === 'frozen': subscription_summary отдаёт
@@ -904,69 +965,159 @@ function SubscriptionCard({
         </p>
       ) : null}
 
-      {/* !freezeFrom: пока есть незакрытая заморозка (текущая или ещё не
-          начавшаяся), freeze_subscription всё равно откажет «уже есть
-          незакрытая заморозка» — кнопка не должна предлагать заведомо
-          проигрышное действие. */}
-      {canManage && (subscription.state === 'active' || subscription.state === 'exhausted') && !subscription.freezeFrom ? (
-        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-          <FreezeForm studentId={studentId} subscriptionId={subscription.id} />
-        </div>
-      ) : null}
-      {/* Разморозить можно любую текущую или будущую заморозку: бессрочную
-          и датированную, уже идущую, unfreeze_subscription заканчивает
-          сегодня (0092 — решение 2 из 0015 отменено владельцем 6.10.2026),
-          ещё не начавшуюся отменяет целиком. */}
-      {canManage && subscription.freezeFrom ? (
-        <div className="border-t border-border pt-3">
-          <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} />
-        </div>
+      {canManage && subscription.shortfallTiyin > 0 && subscription.state !== 'cancelled' ? (
+        <p className="text-sm text-muted-foreground">
+          Закрыть абонемент нельзя: за отработанные занятия не заплачено {formatSom(subscription.shortfallTiyin)}. Сначала примите
+          оплату{isOwner ? ' или спишите недоплату' : ''}.
+        </p>
       ) : null}
 
-      {/* Отменить доступно всегда (даже при возврате 0 — истёкший срок,
-          исчерпанный пакет, 0054): RefundForm сама решает, показывать ли
-          источник оплаты. Перенос остатка — отдельное условие: он про
-          lessons_left, а не про деньги, и на period/unlimited/исчерпанном
-          абонементе transfer_remaining откажет «переносить нечего»
-          (Architect-ревью 0054, Р7 — было слито в одно условие с возвратом).
-          canManage: родитель видит те же цифры выше, но без единой кнопки —
+      {/* canManage: родитель видит те же цифры выше, но без единой кнопки —
           продать/заморозить/вернуть/перенести остаются стойке и владельцу
           (Backlog.md, 23.09.2026). */}
       {canManage && subscription.state !== 'cancelled' ? (
         <div className="flex flex-wrap items-start gap-2 border-t border-border pt-3">
           {subscription.dueTiyin > 0 ? (
-            <PayForm
-              studentId={studentId}
-              subscriptionId={subscription.id}
-              dueTiyin={subscription.dueTiyin}
-              sources={sources}
-              today={today}
-            />
+            <ActionDialog
+              variant="default"
+              label={t('subscriptionCard', 'payButton', { sum: formatSom(subscription.dueTiyin) })}
+              title="Принять оплату"
+              description={`${subscription.typeName}: осталось оплатить ${formatSom(subscription.dueTiyin)}. Больше остатка сервер не примет.`}
+              onOpen={onOpen}
+            >
+              {(close) => (
+                <PayForm
+                  studentId={studentId}
+                  subscriptionId={subscription.id}
+                  dueTiyin={subscription.dueTiyin}
+                  sources={sources}
+                  today={today}
+                  onDone={(notice, paymentId) => {
+                    close()
+                    onDone(notice, paymentId)
+                  }}
+                />
+              )}
+            </ActionDialog>
           ) : null}
+
+          {subscription.cover && subscription.cover.canCover > 0 ? (
+            <ActionDialog
+              label={`Покрыть неоплаченные занятия (${subscription.cover.canCover})`}
+              title="Покрыть долг абонементом"
+              onOpen={onOpen}
+            >
+              {(close) => (
+                <CoverDebtForm
+                  studentId={studentId}
+                  subscriptionId={subscription.id}
+                  cover={subscription.cover!}
+                  onDone={(notice, paymentId) => {
+                    close()
+                    onDone(notice, paymentId)
+                  }}
+                />
+              )}
+            </ActionDialog>
+          ) : null}
+
+          {/* !freezeFrom: пока есть незакрытая заморозка (текущая или ещё не
+              начавшаяся), freeze_subscription всё равно откажет «уже есть
+              незакрытая заморозка» — кнопка не должна предлагать заведомо
+              проигрышное действие. */}
+          {canFreeze ? (
+            <ActionDialog label="Заморозить" title="Заморозить абонемент" onOpen={onOpen}>
+              {(close) => (
+                <FreezeForm
+                  studentId={studentId}
+                  subscriptionId={subscription.id}
+                  today={today}
+                  onDone={(notice, paymentId) => {
+                    close()
+                    onDone(notice, paymentId)
+                  }}
+                />
+              )}
+            </ActionDialog>
+          ) : null}
+          {/* Разморозить можно любую текущую или будущую заморозку: бессрочную
+              и датированную, уже идущую, unfreeze_subscription заканчивает
+              сегодня (0092 — решение 2 из 0015 отменено владельцем 6.10.2026),
+              ещё не начавшуюся отменяет целиком. */}
+          {subscription.freezeFrom ? <UnfreezeForm studentId={studentId} subscriptionId={subscription.id} onDone={onDone} /> : null}
+
+          {/* Перенос остатка — про lessons_left, а не про деньги: на period/
+              unlimited/исчерпанном абонементе transfer_remaining откажет
+              «переносить нечего» (Architect-ревью 0054, Р7). */}
+          {subscription.lessonsLeft != null && subscription.lessonsLeft > 0 && transferTo.length > 0 ? (
+            <ActionDialog
+              label="Перенести остаток"
+              title="Перенести остаток"
+              description={`Осталось ${subscription.lessonsLeft} зан. — перейдут другому ребёнку этого плательщика.`}
+              onOpen={onOpen}
+            >
+              {(close) => (
+                <TransferForm
+                  studentId={studentId}
+                  subscriptionId={subscription.id}
+                  siblings={transferTo}
+                  onDone={(notice, paymentId) => {
+                    close()
+                    onDone(notice, paymentId)
+                  }}
+                />
+              )}
+            </ActionDialog>
+          ) : null}
+
+          {/* Отменить доступно всегда (даже при возврате 0 — истёкший срок,
+              исчерпанный пакет, 0054), пока за отработанное заплачено. При
+              недоплате — только владельцу списание (0090). */}
           {subscription.shortfallTiyin > 0 ? (
-            <ShortfallBlock
-              studentId={studentId}
-              subscriptionId={subscription.id}
-              shortfallTiyin={subscription.shortfallTiyin}
-              isOwner={isOwner}
-            />
+            isOwner ? (
+              <ActionDialog
+                label="Списать недоплату и закрыть"
+                title="Списать недоплату"
+                description={`Списать ${formatSom(subscription.shortfallTiyin)} без денег и закрыть абонемент. В кассе ничего не изменится, отменить списание нельзя.`}
+                onOpen={onOpen}
+              >
+                {(close) => (
+                  <WriteOffForm
+                    studentId={studentId}
+                    subscriptionId={subscription.id}
+                    shortfallTiyin={subscription.shortfallTiyin}
+                    onDone={(notice) => {
+                      close()
+                      onDone(notice)
+                    }}
+                  />
+                )}
+              </ActionDialog>
+            ) : null
           ) : (
-            <RefundForm
-              studentId={studentId}
-              subscriptionId={subscription.id}
-              refundTiyin={subscription.refundTiyin}
-              payoutTiyin={subscription.payoutTiyin}
-              isPeriod={subscription.endsAt != null}
-              sources={sources}
-            />
+            <ActionDialog
+              variant="ghost"
+              label={subscription.payoutTiyin > 0 ? t('sale', 'refund') : t('sale', 'cancelOnly')}
+              title={subscription.payoutTiyin > 0 ? 'Вернуть деньги и отменить абонемент' : 'Отменить абонемент'}
+              onOpen={onOpen}
+            >
+              {(close) => (
+                <RefundForm
+                  studentId={studentId}
+                  subscriptionId={subscription.id}
+                  refundTiyin={subscription.refundTiyin}
+                  payoutTiyin={subscription.payoutTiyin}
+                  isPeriod={subscription.endsAt != null}
+                  sources={sources}
+                  onCancel={close}
+                  onDone={(notice, paymentId) => {
+                    close()
+                    onDone(notice, paymentId)
+                  }}
+                />
+              )}
+            </ActionDialog>
           )}
-          {subscription.lessonsLeft != null && subscription.lessonsLeft > 0 ? (
-            <TransferForm
-              studentId={studentId}
-              subscriptionId={subscription.id}
-              siblings={siblings.filter((sibling) => sibling.payerId === subscription.payerId)}
-            />
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -1022,11 +1173,9 @@ export function SubscriptionsPanel({
   attendanceHistory: AttendanceHistoryRow[]
   timeZone: string
   /**
-   * owner/admin — продажа, заморозка, возврат, перенос; родитель — те же
-   * цифры (оплачено/график рассрочки), но без единой кнопки и без вкладки
-   * «Посещения» (attendance закрыта родителю целиком, 0044) — вместо
-   * словесного бейджа, который раньше был единственным, что он видел
-   * (Backlog.md, 23.09.2026).
+   * owner/admin/registrar — продажа, оплата, заморозка, возврат, перенос;
+   * родитель — те же цифры (оплачено/график рассрочки), но без единой кнопки
+   * и без вкладки «Посещения» (attendance закрыта родителю целиком, 0044).
    */
   canManage: boolean
   /** Владелец центра — кнопка «Списать недоплату» (0090); право проверяет база. */
@@ -1035,32 +1184,98 @@ export function SubscriptionsPanel({
   hideBalance?: boolean
 }) {
   const [tab, setTab] = useState<'subscriptions' | 'attendance'>('subscriptions')
+  // Итог последнего действия — над списком: диалог после успеха закрывается,
+  // а карточка перерисовывается по ответу сервера (revalidatePath).
+  // Итог — в провайдер страницы (внизу экрана, один на страницу: e2e ждут
+  // ровно один role=status), без провайдера — над списком.
+  const pageNotice = usePageNotice()
+  const [localNotice, setLocalNotice] = useState<Notice>(null)
+  const setNotice = pageNotice ?? setLocalNotice
+  const done: Done = (text, paymentId) =>
+    setNotice({
+      text,
+      href: paymentId ? receiptHref(paymentId, `/app/students/${studentId}`) : undefined,
+      linkLabel: 'Квитанция',
+    })
+  const [sellOpen, setSellOpen] = useState(false)
+  const [sellRound, setSellRound] = useState(0)
+
+  const live = subscriptions.filter((s) => !isFinished(s))
+  const finished = subscriptions.filter((s) => isFinished(s))
+
+  const card = (subscription: SubscriptionView) => (
+    <SubscriptionCard
+      key={subscription.id}
+      studentId={studentId}
+      subscription={subscription}
+      siblings={siblings}
+      sources={sources}
+      timeZone={timeZone}
+      canManage={canManage}
+      isOwner={isOwner}
+      today={today}
+      onDone={done}
+      onOpen={() => setNotice(null)}
+    />
+  )
 
   const subscriptionsList = (
     <div className="space-y-4">
       {hideBalance ? null : <BalanceStrip balance={balance} timeZone={timeZone} />}
+      {canManage ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setNotice(null)
+              setSellRound((r) => r + 1)
+              setSellOpen(true)
+            }}
+          >
+            {t('sale', 'open')}
+          </Button>
+          <Dialog
+            open={sellOpen}
+            onClose={() => setSellOpen(false)}
+            title={t('sale', 'dialogTitle')}
+            description={t('sale', 'dialogHint')}
+          >
+            <div key={sellRound}>
+              {sellOpen ? (
+                <SellForm
+                  studentId={studentId}
+                  types={types}
+                  sources={sources}
+                  today={today}
+                  timeZone={timeZone}
+                  onDone={(text, paymentId) => {
+                    setSellOpen(false)
+                    done(text, paymentId)
+                  }}
+                />
+              ) : null}
+            </div>
+          </Dialog>
+        </div>
+      ) : null}
+      {pageNotice ? null : <NoticeLine notice={localNotice} />}
       {subscriptions.length === 0 ? (
         <p className="text-sm text-muted-foreground">Абонементов пока нет.</p>
       ) : (
         <div className="space-y-3">
-          {subscriptions.map((subscription) => (
-            <SubscriptionCard
-              key={subscription.id}
-              studentId={studentId}
-              subscription={subscription}
-              siblings={siblings}
-              sources={sources}
-              timeZone={timeZone}
-              canManage={canManage}
-              isOwner={isOwner}
-              today={today}
-            />
-          ))}
+          {live.map(card)}
+          {live.length === 0 ? <p className="text-sm text-muted-foreground">Действующих абонементов нет.</p> : null}
+          {finished.length > 0 ? (
+            <details className="group rounded-md border border-border">
+              <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground">
+                Завершённые абонементы ({finished.length})
+              </summary>
+              <div className="space-y-3 p-3 pt-0">{finished.map(card)}</div>
+            </details>
+          ) : null}
         </div>
       )}
-      {canManage ? (
-        <SellForm studentId={studentId} types={types} sources={sources} today={today} timeZone={timeZone} />
-      ) : null}
     </div>
   )
 

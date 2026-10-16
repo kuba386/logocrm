@@ -31,7 +31,7 @@ function Reason({ id }: { id: string }) {
   return (
     <div className="space-y-1">
       <Label htmlFor={id}>{t('admin', 'reason')}</Label>
-      <Textarea id={id} name="reason" required minLength={3} maxLength={500} rows={2} placeholder={t('admin', 'reasonPlaceholder')} />
+      <Textarea id={id} name="reason" required minLength={3} maxLength={500} rows={2} placeholder={t('admin', 'actionReasonPlaceholder')} />
     </div>
   )
 }

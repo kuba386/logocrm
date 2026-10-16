@@ -93,6 +93,15 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/owner.json' },
     },
     {
+      // Стойка (registrar): продажа и оплата с карточки ученика, квитанция,
+      // «Финансы» без итогов кассы. После admin — нужен тип «Восемь занятий ·
+      // e2e»; ребёнок — «Чужой Ребёнок», его деньги другие файлы не читают.
+      name: 'registrar',
+      testMatch: /registrar\.spec\.ts/,
+      dependencies: ['setup', 'admin'],
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/registrar.json' },
+    },
+    {
       // Регистрация нового центра с нуля — свой пользователь и свой центр,
       // фикстуру не трогает.
       name: 'signup',

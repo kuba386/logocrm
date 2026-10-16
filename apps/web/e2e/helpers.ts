@@ -168,3 +168,22 @@ export async function actAndAwait(page: Page, button: string | RegExp, expectedN
   await page.getByRole('button', { name: button }).click()
   await expectServerReply(page, expectedNotice)
 }
+
+/**
+ * Открывает диалог продажи на карточке ученика и выбирает тип по названию.
+ * Форма продажи живёт в диалоге (пересоздаётся при каждом открытии), поэтому
+ * поля ищутся внутри открытого <dialog>, а не на странице.
+ */
+export async function openSaleDialog(page: Page, typeName: string): Promise<Locator> {
+  await page.getByRole('button', { name: 'Продать абонемент', exact: true }).click()
+  const dialog = page.locator('dialog[open]')
+  const typeSelect = dialog.locator('select#typeId')
+  await expect(typeSelect).toBeVisible()
+  const optionValue = await typeSelect.locator('option', { hasText: typeName }).getAttribute('value')
+  if (!optionValue) throw new Error(`Тип абонемента «${typeName}» не появился в форме продажи`)
+  await typeSelect.selectOption(optionValue)
+  return dialog
+}
+
+/** Кнопка отправки продажи: «Продать и принять N сом» или «Продать без оплаты». */
+export const SELL_SUBMIT = /^Продать (и принять|без оплаты)/

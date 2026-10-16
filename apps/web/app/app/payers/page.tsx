@@ -18,8 +18,11 @@ export default async function PayersPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // Стойка ведёт карточки семей (матрица прав: /app/payers — registrar В;
+  // RLS payers — registrar write, 0028). Бухгалтеру payers закрыты целиком
+  // (0031 Р7): payers_with_stats у него пуст — не пускаем, а не рисуем пустоту.
   const { data: role } = await supabase.rpc('my_role')
-  if (role !== 'owner' && role !== 'admin') redirect('/app')
+  if (role !== 'owner' && role !== 'admin' && role !== 'registrar') redirect('/app')
 
   const { data: payers, error: loadError } = await supabase
     .from('payers_with_stats')

@@ -1,4 +1,5 @@
 export { toTiyin, toSom, lessonPrice, formatSom, TIYIN_IN_SOM } from './money'
+export { amountInWords, somWords } from './amount-words'
 export { normalizeKgPhone, isValidKgPhone, formatKgPhone, whatsappNumber } from './phone'
 export {
   parseDebtSummary,

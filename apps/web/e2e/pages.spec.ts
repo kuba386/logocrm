@@ -26,6 +26,8 @@ const STATIC_ROUTES = [
   '/app/finance?tab=expenses',
   '/app/finance?tab=payments',
   '/app/finance?tab=installments',
+  '/app/finance?tab=periods',
+  '/app/finance?tab=payments&q=%D0%B8%D0%B2&kind=payment',
   '/app/salary',
   '/app/my-salary',
   '/app/reports',
@@ -38,6 +40,8 @@ const STATIC_ROUTES = [
   '/app/settings/services',
   '/app/settings/attendance-statuses',
   '/app/settings/subscription-types',
+  '/app/settings/payment-sources',
+  '/app/settings/expense-categories',
   '/app/settings/teacher-rates',
   '/app/settings/notifications',
   '/app/settings/plan',
@@ -70,6 +74,10 @@ const ROLES = [
   { name: 'администратор', state: 'e2e/.auth/admin.json' },
   { name: 'специалист', state: 'e2e/.auth/teacher.json' },
   { name: 'родитель', state: 'e2e/.auth/parent.json' },
+  { name: 'регистратор', state: 'e2e/.auth/registrar.json' },
+  // Бухгалтер: у него нет клиники и свободного текста (0031) — карточка ученика
+  // падала у стойки и бухгалтера в 500, пока их не было в этом обходе.
+  { name: 'бухгалтер', state: 'e2e/.auth/finance.json' },
 ] as const
 
 // Шум, не относящийся к приложению. Каждая строка — с причиной.

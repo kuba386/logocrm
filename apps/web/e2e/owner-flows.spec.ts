@@ -105,5 +105,7 @@ test('Долги → «Продать абонемент» открывает к
 
   await expect(page).toHaveURL(/\/app\/students\/[0-9a-f-]+#subscriptions$/)
   await expect(page.getByRole('tab', { name: 'Абонементы' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator('select#typeId')).toBeVisible()
+  // Форма продажи — в диалоге: на вкладке видна кнопка, которая его открывает.
+  await page.getByRole('button', { name: 'Продать абонемент', exact: true }).click()
+  await expect(page.locator('dialog[open] select#typeId')).toBeVisible()
 })

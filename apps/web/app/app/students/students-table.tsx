@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { STUDENT_STATUS_TONES, statusLabel, studentAge } from '@/lib/students'
-import { formatKgPhone, normalizeKgPhone } from '@logocrm/core'
+import { formatKgPhone, formatSom, normalizeKgPhone } from '@logocrm/core'
+import { cn } from '@/lib/utils'
 
 export type StudentRowView = {
   id: string
@@ -23,6 +24,46 @@ export type StudentRowView = {
   /** Последнее заключение из student_conclusions() (0059); бухгалтеру не приходит. */
   conclusionCode?: string | null
   conclusionName?: string | null
+  /** Деньги из student_balance — тем, кто принимает оплату; специалисту и родителю не приходят. */
+  money?: {
+    hasActive: boolean
+    /** null при активном — безлимит или срок без счёта занятий. */
+    lessonsLeft: number | null
+    /** Долг за занятия + перерасход. */
+    debtTiyin: number
+    overdueTiyin: number
+    creditTiyin: number
+  }
+}
+
+type MoneyFilter = '' | 'debt' | 'none' | 'ending'
+
+/** «Заканчивается» — как на дашборде: осталось 2 занятия и меньше (subscription.low_balance, этап 4). */
+function matchesMoney(money: StudentRowView['money'], filter: MoneyFilter): boolean {
+  if (!filter) return true
+  if (!money) return false
+  if (filter === 'debt') return money.debtTiyin > 0 || money.overdueTiyin > 0
+  if (filter === 'none') return !money.hasActive
+  return money.hasActive && money.lessonsLeft != null && money.lessonsLeft <= 2
+}
+
+function MoneyCell({ money }: { money: NonNullable<StudentRowView['money']> }) {
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <span
+        className={cn(
+          'text-sm',
+          !money.hasActive && 'text-muted-foreground',
+          money.hasActive && money.lessonsLeft != null && money.lessonsLeft <= 2 && 'text-warning',
+        )}
+      >
+        {!money.hasActive ? 'нет абонемента' : money.lessonsLeft == null ? 'без лимита' : `${money.lessonsLeft} зан.`}
+      </span>
+      {money.debtTiyin > 0 ? <StatusBadge tone="danger">долг {formatSom(money.debtTiyin)}</StatusBadge> : null}
+      {money.overdueTiyin > 0 ? <StatusBadge tone="danger">просрочка {formatSom(money.overdueTiyin)}</StatusBadge> : null}
+      {money.creditTiyin > 0 ? <StatusBadge tone="success">аванс {formatSom(money.creditTiyin)}</StatusBadge> : null}
+    </span>
+  )
 }
 
 export function StudentsTable({
@@ -38,6 +79,8 @@ export function StudentsTable({
   const [status, setStatus] = useState('')
   const [teacherId, setTeacherId] = useState('')
   const [conclusion, setConclusion] = useState('')
+  const [money, setMoney] = useState<MoneyFilter>('')
+  const withMoney = students.some((s) => s.money)
 
   // Варианты фильтра — только те заключения, что реально есть в списке.
   const conclusionOptions = useMemo(() => {
@@ -56,6 +99,7 @@ export function StudentsTable({
       if (status && student.status !== status) return false
       if (teacherId && student.teacherId !== teacherId) return false
       if (conclusion && student.conclusionCode !== conclusion) return false
+      if (!matchesMoney(student.money, money)) return false
       if (!trimmed) return true
 
       if (student.fullName.toLowerCase().includes(trimmed)) return true
@@ -68,7 +112,7 @@ export function StudentsTable({
 
       return false
     })
-  }, [students, query, status, teacherId, conclusion, canSeeContacts])
+  }, [students, query, status, teacherId, conclusion, money, canSeeContacts])
 
   return (
     <div className="space-y-4">
@@ -98,6 +142,19 @@ export function StudentsTable({
                 {teacher.fullName}
               </option>
             ))}
+          </Select>
+        ) : null}
+        {withMoney ? (
+          <Select
+            aria-label="Фильтр: деньги"
+            value={money}
+            onChange={(event) => setMoney(event.target.value as MoneyFilter)}
+            className="max-w-[230px]"
+          >
+            <option value="">Все по деньгам</option>
+            <option value="debt">С долгом или просрочкой</option>
+            <option value="ending">Заканчивается абонемент</option>
+            <option value="none">Без абонемента</option>
           </Select>
         ) : null}
         {conclusionOptions.length > 0 ? (
@@ -131,6 +188,7 @@ export function StudentsTable({
               <TableHead className="hidden sm:table-cell">Специалист</TableHead>
               <TableHead className="hidden lg:table-cell">Плательщик</TableHead>
               <TableHead>Статус</TableHead>
+              {withMoney ? <TableHead className="hidden sm:table-cell">Абонемент и долг</TableHead> : null}
               {conclusionOptions.length > 0 ? <TableHead className="hidden xl:table-cell">Заключение</TableHead> : null}
             </TableRow>
           </TableHeader>
@@ -146,6 +204,11 @@ export function StudentsTable({
                     {studentAge(student.birthDate)}
                     <span className="sm:hidden">{student.teacherName ? `, ${student.teacherName}` : ''}</span>
                   </span>
+                  {student.money ? (
+                    <span className="mt-1 block sm:hidden">
+                      <MoneyCell money={student.money} />
+                    </span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{studentAge(student.birthDate)}</TableCell>
                 <TableCell className="hidden sm:table-cell">{student.teacherName ?? '—'}</TableCell>
@@ -162,6 +225,9 @@ export function StudentsTable({
                     {statusLabel(student.status)}
                   </StatusBadge>
                 </TableCell>
+                {withMoney ? (
+                  <TableCell className="hidden sm:table-cell">{student.money ? <MoneyCell money={student.money} /> : null}</TableCell>
+                ) : null}
                 {conclusionOptions.length > 0 ? (
                   <TableCell className="hidden text-sm text-muted-foreground xl:table-cell">
                     {student.conclusionName ?? '—'}

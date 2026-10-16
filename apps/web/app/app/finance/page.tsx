@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { ReceiptText } from 'lucide-react'
 import { formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { monthBounds, shiftMonth } from '@/lib/month'
@@ -8,13 +9,27 @@ import { canPayments, isFinance } from '@/lib/roles'
 import { label, t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 import { PeriodNav } from '@/components/ui/period-nav'
+import { PageHeader } from '@/components/ui/page-header'
+import { PageNoticeProvider } from '@/components/ui/page-notice'
 import { monthLabel } from '@/lib/timezone'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { loadErrorMessage } from '@/lib/errors'
+import { receiptHref } from '@/lib/receipt'
 import { FormError } from '@/components/ui/alert'
-import { ClosePeriodForm, ExpenseForm, PayInstallmentForm, PaymentForm, ReopenPeriodForm, VoidPaymentForm } from './finance-forms'
+import {
+  ClosePeriodForm,
+  ExpenseDialog,
+  PayInstallmentForm,
+  PaymentDialog,
+  ReopenPeriodForm,
+  VoidPaymentForm,
+  type StudentOption,
+} from './finance-forms'
 
 /** Списки ниже обрезаны до LIST_LIMIT строк. «Всего» — настоящее число из базы
  *  (count: 'exact'), а если строк больше, чем показано, — так и пишем: иначе
@@ -29,19 +44,34 @@ function shownOfTotal(shown: number, total: number | null, which = 'послед
 export const metadata = { title: 'Финансы — LogoCRM' }
 
 type Tab = 'payments' | 'expenses' | 'installments' | 'periods'
+type Kind = 'payment' | 'refund' | 'correction'
 
-
-
-/** «сентябрь 2026 г.» — полдень UTC, чтобы пояс не сдвинул месяц. */
+const UUID = /^[0-9a-f-]{36}$/
 
 function calendarDate(day: string, timeZone: string): string {
   return formatInTimeZone(`${day}T12:00:00Z`, timeZone, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/** Фильтры списка платежей — из адреса, как у «Долгов»: ссылку можно переслать, назад работает. */
+type PaymentFilters = { q: string; source: string; kind: Kind | '' }
+
+function first(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? ''
+}
+
+function pickFilters(params: { q?: string | string[]; source?: string | string[]; kind?: string | string[] }): PaymentFilters {
+  const q = first(params.q).trim().slice(0, 60)
+  const sourceRaw = first(params.source)
+  const kindRaw = first(params.kind)
+  const source = sourceRaw === 'none' || UUID.test(sourceRaw) ? sourceRaw : ''
+  const kind = kindRaw === 'payment' || kindRaw === 'refund' || kindRaw === 'correction' ? kindRaw : ''
+  return { q, source, kind }
+}
+
 export default async function FinancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; month?: string }>
+  searchParams: Promise<{ tab?: string; month?: string; q?: string | string[]; source?: string | string[]; kind?: string | string[]; category?: string }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -77,17 +107,51 @@ export default async function FinancePage({
   const { first, next } = monthBounds(month)
   const fromIso = startOfDayInZone(first, timeZone)
   const toIso = startOfDayInZone(next, timeZone)
+  const filters = pickFilters(params)
+  const categoryFilter = UUID.test(params.category ?? '') ? params.category! : ''
 
-  const [{ data: sourceRows }, { data: cashRows, error: cashLoadError }] = await Promise.all([
-    supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
-    supabase.from('cash_by_source').select('*').eq('month', first),
-  ])
+  // Касса — только can_finance (cash_by_source, 0028): регистратору вью отдаёт
+  // ноль строк без ошибки, и «Итого в кассе 0 сом» читалось бы как настоящая
+  // цифра (аудит финансов 16.10.2026). Ему итоги не запрашиваем и не рисуем.
+  const [{ data: sourceRows }, { data: cashRows, error: cashLoadError }, { data: payerRows }, { data: studentRows }, { data: balanceRows }, { data: categoryRows }] =
+    await Promise.all([
+      supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
+      finance ? supabase.from('cash_by_source').select('*').eq('month', first) : Promise.resolve({ data: [], error: null }),
+      // Имена — из definer-источников без заметок (0031): таблицы students и
+      // payers бухгалтеру закрыты, а экран один на все роли.
+      supabase.rpc('payers_brief').order('full_name'),
+      supabase.rpc('students_brief').order('full_name'),
+      // Долг, аванс и просрочка по ребёнку — для подсказок в форме оплаты (считает база).
+      supabase.from('student_balance').select('student_id, debt_tiyin, overdrawn_tiyin, lesson_credit_tiyin, subscription_overdue_tiyin'),
+      finance
+        ? supabase.from('expense_categories').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort')
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    ])
   const sources = (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name }))
   const sourceName = new Map(sources.map((s) => [s.id, s.name]))
   const cash = cashRows ?? []
   // Касса не загрузилась — не «0 сом»: нули читались бы как настоящие цифры.
   const cashError = cashLoadError ? loadErrorMessage(cashLoadError, t('finance', 'loadCashFailed')) : null
   const sum = (pick: (r: (typeof cash)[number]) => number | null) => cash.reduce((acc, r) => acc + (pick(r) ?? 0), 0)
+
+  const payers = (payerRows ?? []).map((p) => ({ id: p.id, name: p.full_name }))
+  const payerById = new Map((payerRows ?? []).map((p) => [p.id, p]))
+  const balanceByStudent = new Map((balanceRows ?? []).map((b) => [b.student_id, b]))
+  const students: StudentOption[] = (studentRows ?? [])
+    .filter((s) => s.status !== 'archived')
+    .map((s) => {
+      const b = balanceByStudent.get(s.id)
+      return {
+        id: s.id,
+        name: s.full_name,
+        payerId: (s.payer_id as string | null) ?? null,
+        lessonDebtTiyin: (b?.debt_tiyin ?? 0) + (b?.overdrawn_tiyin ?? 0),
+        creditTiyin: b?.lesson_credit_tiyin ?? 0,
+        overdueTiyin: b?.subscription_overdue_tiyin ?? 0,
+      }
+    })
+  const studentName = new Map((studentRows ?? []).map((s) => [s.id, s.full_name]))
+  const categories = (categoryRows ?? []).map((c) => ({ id: c.id, name: c.name }))
 
   const tabs: { key: Tab; title: string }[] = [
     { key: 'payments', title: t('finance', 'tabPayments') },
@@ -98,82 +162,105 @@ export default async function FinancePage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-title">{t('finance', 'title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('finance', 'subtitle')}</p>
-        {/* Выгрузка — только can_finance (0058): регистратор экран видит, файлы не выносит. */}
-        {isFinance(role) ? (
-          <Link href="/app/reports" className="text-sm text-primary underline-offset-4 hover:underline">
-            {t('reports', 'title')} →
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav className="flex gap-2 border-b border-border">
-          {tabs.map((item) => (
-            <Link
-              key={item.key}
-              href={`/app/finance?tab=${item.key}&month=${month}`}
-              className={cn(
-                'inline-flex min-h-11 items-end border-b-2 px-1 pb-2 text-sm font-medium sm:min-h-0',
-                tab === item.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground',
-              )}
-            >
-              {item.title}
-            </Link>
-          ))}
-        </nav>
-        {tab !== 'installments' ? (
-          <PeriodNav
-            label={monthLabel(first)}
-            prev={`/app/finance?tab=${tab}&month=${shiftMonth(month, -1)}`}
-            next={`/app/finance?tab=${tab}&month=${shiftMonth(month, 1)}`}
-            prevLabel="Предыдущий месяц"
-            nextLabel="Следующий месяц"
+      <PageNoticeProvider>
+        <div className="space-y-6">
+          <PageHeader
+            title={t('finance', 'title')}
+            description={
+              <>
+                {t('finance', 'subtitle')}{' '}
+                {/* Выгрузка — только can_finance (0058): регистратор экран видит, файлы не выносит. */}
+                {finance ? (
+                  <Link href="/app/reports" className="whitespace-nowrap text-primary underline-offset-4 hover:underline">
+                    {t('reports', 'title')} →
+                  </Link>
+                ) : null}
+              </>
+            }
+            actions={
+              <>
+                <PaymentDialog payers={payers} students={students} sources={sources} today={today} />
+                {finance ? <ExpenseDialog categories={categories} sources={sources} today={today} /> : null}
+              </>
+            }
           />
-        ) : null}
-      </div>
 
-      {tab === 'payments' ? (
-        <PaymentsTab
-          supabase={supabase}
-          isOwner={isOwner}
-          fromIso={fromIso}
-          toIso={toIso}
-          timeZone={timeZone}
-          today={today}
-          sources={sources}
-          sourceName={sourceName}
-          cashError={cashError}
-          totals={{
-            received: sum((r) => r.received_tiyin),
-            refunded: sum((r) => r.refunded_tiyin),
-            corrections: sum((r) => r.corrections_tiyin),
-            spent: sum((r) => r.spent_tiyin),
-            total: sum((r) => r.total_tiyin),
-          }}
-          bySource={cash.map((r) => ({
-            name: r.source_id ? (sourceName.get(r.source_id) ?? '—') : t('finance', 'noSource'),
-            total: r.total_tiyin ?? 0,
-          }))}
-        />
-      ) : null}
-      {tab === 'expenses' ? (
-        <ExpensesTab
-          supabase={supabase}
-          fromIso={fromIso}
-          toIso={toIso}
-          timeZone={timeZone}
-          today={today}
-          sources={sources}
-          sourceName={sourceName}
-          cashError={cashError}
-          spent={sum((r) => r.spent_tiyin)}
-        />
-      ) : null}
-      {tab === 'installments' ? <InstallmentsTab supabase={supabase} timeZone={timeZone} sources={sources} /> : null}
-      {tab === 'periods' ? <PeriodsTab supabase={supabase} timeZone={timeZone} today={today} isOwner={isOwner} /> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <nav className="flex gap-2 overflow-x-auto border-b border-border">
+              {tabs.map((item) => (
+                <Link
+                  key={item.key}
+                  href={`/app/finance?tab=${item.key}&month=${month}`}
+                  aria-current={tab === item.key ? 'page' : undefined}
+                  className={cn(
+                    'inline-flex min-h-11 shrink-0 items-end border-b-2 px-1 pb-2 text-sm font-medium sm:min-h-0',
+                    tab === item.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground',
+                  )}
+                >
+                  {item.title}
+                </Link>
+              ))}
+            </nav>
+            {tab !== 'installments' ? (
+              <PeriodNav
+                label={monthLabel(first)}
+                prev={`/app/finance?tab=${tab}&month=${shiftMonth(month, -1)}`}
+                next={`/app/finance?tab=${tab}&month=${shiftMonth(month, 1)}`}
+                today={{ href: `/app/finance?tab=${tab}`, label: 'Этот месяц', current: month === today.slice(0, 7) }}
+                prevLabel="Предыдущий месяц"
+                nextLabel="Следующий месяц"
+              />
+            ) : null}
+          </div>
+
+          {tab === 'payments' ? (
+            <PaymentsTab
+              supabase={supabase}
+              finance={finance}
+              isOwner={isOwner}
+              month={month}
+              fromIso={fromIso}
+              toIso={toIso}
+              timeZone={timeZone}
+              sources={sources}
+              sourceName={sourceName}
+              cashError={cashError}
+              filters={filters}
+              payerName={(id) => payerById.get(id)?.full_name ?? '—'}
+              studentName={studentName}
+              totals={{
+                received: sum((r) => r.received_tiyin),
+                refunded: sum((r) => r.refunded_tiyin),
+                corrections: sum((r) => r.corrections_tiyin),
+                spent: sum((r) => r.spent_tiyin),
+                total: sum((r) => r.total_tiyin),
+              }}
+              bySource={cash.map((r) => ({
+                name: r.source_id ? (sourceName.get(r.source_id) ?? '—') : t('finance', 'noSource'),
+                total: r.total_tiyin ?? 0,
+              }))}
+              payers={payerRows ?? []}
+              students={studentRows ?? []}
+            />
+          ) : null}
+          {tab === 'expenses' ? (
+            <ExpensesTab
+              supabase={supabase}
+              month={month}
+              fromIso={fromIso}
+              toIso={toIso}
+              timeZone={timeZone}
+              categories={categories}
+              categoryFilter={categoryFilter}
+              sourceName={sourceName}
+              cashError={cashError}
+              spent={sum((r) => r.spent_tiyin)}
+            />
+          ) : null}
+          {tab === 'installments' ? <InstallmentsTab supabase={supabase} timeZone={timeZone} sources={sources} /> : null}
+          {tab === 'periods' ? <PeriodsTab supabase={supabase} timeZone={timeZone} today={today} isOwner={isOwner} /> : null}
+        </div>
+      </PageNoticeProvider>
     </div>
   )
 }
@@ -182,51 +269,89 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 
 async function PaymentsTab({
   supabase,
+  finance,
   isOwner,
+  month,
   fromIso,
   toIso,
   timeZone,
-  today,
   sources,
   sourceName,
   cashError,
+  filters,
+  payerName,
+  studentName,
   totals,
   bySource,
+  payers,
+  students,
 }: {
   supabase: Supabase
+  /** owner/admin/finance — итоги кассы (cash_by_source); регистратору их нет. */
+  finance: boolean
   /** Владелец — «Отменить» у ошибочного поступления (0093); право проверяет база. */
   isOwner: boolean
+  month: string
   fromIso: string
   toIso: string
   timeZone: string
-  today: string
   sources: { id: string; name: string }[]
   sourceName: Map<string, string>
   cashError: string | null
+  filters: PaymentFilters
+  payerName: (id: string) => string
+  studentName: Map<string, string>
   totals: { received: number; refunded: number; corrections: number; spent: number; total: number }
   bySource: { name: string; total: number }[]
+  payers: { id: string; full_name: string }[]
+  students: { id: string; full_name: string }[]
 }) {
-  const [{ data: payments, error: paymentsError, count: paymentsCount }, { data: payers }, { data: students }] = await Promise.all([
-    supabase
-      .from('payments')
-      .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment, covers_lesson_debt, voids_payment_id', { count: 'exact' })
-      .gte('paid_at', fromIso)
-      .lt('paid_at', toIso)
-      .order('paid_at', { ascending: false })
-      // У отмены та же дата, что у исходного (0093): вторичный порядок держит
-      // пару рядом и не режет её границей limit.
-      .order('created_at', { ascending: false })
-      .limit(LIST_LIMIT),
-    // Имена — из definer-источников без заметок (0031): таблицы students и
-    // payers бухгалтеру закрыты, а экран один на все роли.
-    supabase.rpc('payers_brief').order('full_name'),
-    supabase.rpc('students_brief').neq('status', 'archived').order('full_name'),
-  ])
-  const payerName = new Map((payers ?? []).map((p) => [p.id, p.full_name]))
-  const studentName = new Map((students ?? []).map((s) => [s.id, s.full_name]))
+  // Поиск по имени — через id из уже загруженных списков плательщиков и
+  // детей (имена в payments не хранятся). Ничего не совпало — пустой список,
+  // а не все платежи месяца.
+  const needle = filters.q.toLocaleLowerCase('ru')
+  const payerIds = needle ? payers.filter((p) => p.full_name.toLocaleLowerCase('ru').includes(needle)).map((p) => p.id) : []
+  const studentIds = needle ? students.filter((s) => s.full_name.toLocaleLowerCase('ru').includes(needle)).map((s) => s.id) : []
+  const nameMiss = Boolean(needle) && payerIds.length === 0 && studentIds.length === 0
+  // Сотни uuid в адресе запроса упираются в его длину (тот же урок, что на «Долгах»):
+  // слишком общий запрос («а») — просим уточнить, а не режем молча.
+  const tooBroad = payerIds.length + studentIds.length > 150
+
+  let query = supabase
+    .from('payments')
+    .select('id, payer_id, student_id, subscription_id, amount_tiyin, source_id, paid_at, kind, comment, covers_lesson_debt, voids_payment_id', { count: 'exact' })
+    .gte('paid_at', fromIso)
+    .lt('paid_at', toIso)
+  if (filters.kind) query = query.eq('kind', filters.kind)
+  if (filters.source === 'none') query = query.is('source_id', null)
+  else if (filters.source) query = query.eq('source_id', filters.source)
+  if (needle && !nameMiss && !tooBroad) {
+    const parts = [
+      payerIds.length ? `payer_id.in.(${payerIds.join(',')})` : null,
+      studentIds.length ? `student_id.in.(${studentIds.join(',')})` : null,
+    ].filter(Boolean)
+    query = query.or(parts.join(','))
+  }
+
+  const { data: payments, error: paymentsError, count: paymentsCount } = nameMiss || tooBroad
+    ? { data: [], error: null, count: 0 }
+    : await query
+        .order('paid_at', { ascending: false })
+        // У отмены та же дата, что у исходного (0093): вторичный порядок держит
+        // пару рядом и не режет её границей limit.
+        .order('created_at', { ascending: false })
+        .limit(LIST_LIMIT)
   const rows = payments ?? []
-  // Отменённые (0093): у отмены та же дата, что у исходного, — пара всегда в одном периоде.
-  const voidedIds = new Set(rows.map((p) => p.voids_payment_id).filter((v): v is string => Boolean(v)))
+  // Отменённые (0093) — отдельным запросом по id строк страницы, а не по самим
+  // строкам: отмена — строка kind='correction', и фильтр «Вид = Платёж» её
+  // убирал — отменённый платёж выглядел живым, с кнопкой «Отменить».
+  const pageIds = rows.map((p) => p.id)
+  const { data: voidRows } = pageIds.length
+    ? await supabase.from('payments').select('voids_payment_id').in('voids_payment_id', pageIds)
+    : { data: [] as { voids_payment_id: string | null }[] }
+  const voidedIds = new Set((voidRows ?? []).map((v) => v.voids_payment_id).filter((v): v is string => Boolean(v)))
+  const filtered = Boolean(filters.q || filters.source || filters.kind)
+  const back = `/app/finance?tab=payments&month=${month}`
 
   return (
     <div className="space-y-4">
@@ -234,38 +359,93 @@ async function PaymentsTab({
           строки «Расходы» сумма над итогом не сходилась: получено 5 500,
           итого 5 000, а куда делись 500 — не видно. Знаки как в базе:
           возвраты и расходы отрицательные, строки складываются в итог. */}
-      {cashError ? <FormError message={cashError} /> : null}
-      <dl
-        hidden={Boolean(cashError)}
-        data-testid="cash-totals"
-        className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-5"
-      >
-        <div>
-          <dt className="text-xs text-muted-foreground">{t('finance', 'received')}</dt>
-          <dd className="font-medium">{formatSom(totals.received)}</dd>
+      {finance ? (
+        <>
+          {/* Условный рендер, а не hidden: у Tailwind .grid перебивает [hidden], и при
+              сбое кассы рядом с ошибкой оставались нули «Итого в кассе 0 сом». */}
+          {cashError ? <FormError message={cashError} /> : null}
+          {cashError ? null : (
+          <dl
+            data-testid="cash-totals"
+            className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-5"
+          >
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('finance', 'received')}</dt>
+              <dd className="font-medium tabular-nums">{formatSom(totals.received)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('finance', 'refunded')}</dt>
+              <dd className="font-medium tabular-nums">{formatSom(totals.refunded)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('finance', 'corrections')}</dt>
+              <dd className="font-medium tabular-nums">{formatSom(totals.corrections)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('finance', 'spent')}</dt>
+              <dd className="font-medium tabular-nums">{formatSom(totals.spent)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('finance', 'total')}</dt>
+              <dd className="font-medium tabular-nums">{formatSom(totals.total)}</dd>
+            </div>
+          </dl>
+          )}
+          {bySource.length && !cashError ? (
+            <ul className="flex flex-wrap gap-2 text-sm" aria-label={t('finance', 'bySource')}>
+              {bySource.map((s) => (
+                <li key={s.name} className="rounded-full border border-border px-3 py-1">
+                  <span className="text-muted-foreground">{s.name}</span>{' '}
+                  <span className={cn('font-medium tabular-nums', s.total < 0 && 'text-destructive')}>{formatSom(s.total)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t('finance', 'registrarNoCash')}</p>
+      )}
+
+      {/* GET-форма: фильтры попадают в адрес, как на «Долгах». */}
+      <form action="/app/finance" className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="tab" value="payments" />
+        <input type="hidden" name="month" value={month} />
+        <div className="min-w-[12rem] flex-1 space-y-1 sm:max-w-xs">
+          <Label htmlFor="filter-q">{t('finance', 'filterSearch')}</Label>
+          <Input id="filter-q" name="q" defaultValue={filters.q} placeholder="Например, Иванова" maxLength={60} />
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t('finance', 'refunded')}</dt>
-          <dd className="font-medium">{formatSom(totals.refunded)}</dd>
+        <div className="space-y-1">
+          <Label htmlFor="filter-source">{t('finance', 'filterSource')}</Label>
+          <Select id="filter-source" name="source" defaultValue={filters.source} className="w-auto">
+            <option value="">{t('finance', 'filterAll')}</option>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+            <option value="none">{t('finance', 'noSource')}</option>
+          </Select>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t('finance', 'corrections')}</dt>
-          <dd className="font-medium">{formatSom(totals.corrections)}</dd>
+        <div className="space-y-1">
+          <Label htmlFor="filter-kind">{t('finance', 'filterKind')}</Label>
+          <Select id="filter-kind" name="kind" defaultValue={filters.kind} className="w-auto">
+            <option value="">{t('finance', 'filterAll')}</option>
+            {(['payment', 'refund', 'correction'] as const).map((kind) => (
+              <option key={kind} value={kind}>
+                {label('paymentKind', kind)}
+              </option>
+            ))}
+          </Select>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t('finance', 'spent')}</dt>
-          <dd className="font-medium">{formatSom(totals.spent)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t('finance', 'total')}</dt>
-          <dd className="font-medium">{formatSom(totals.total)}</dd>
-        </div>
-      </dl>
-      {bySource.length && !cashError ? (
-        <p className="text-sm text-muted-foreground">
-          {t('finance', 'bySource')}: {bySource.map((s) => `${s.name} ${formatSom(s.total)}`).join(' · ')}
-        </p>
-      ) : null}
+        <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          {t('finance', 'filterApply')}
+        </button>
+        {filtered ? (
+          <Link href={back} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            {t('finance', 'filterReset')}
+          </Link>
+        ) : null}
+      </form>
 
       <Card>
         <CardHeader>
@@ -276,7 +456,9 @@ async function PaymentsTab({
           {paymentsError ? (
             <FormError message={loadErrorMessage(paymentsError, t('finance', 'loadPaymentsFailed'))} />
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('finance', 'paymentsEmpty')}</p>
+            <p className="text-sm text-muted-foreground">
+              {tooBroad ? t('finance', 'searchTooBroad') : filtered ? t('finance', 'paymentsFilteredEmpty') : t('finance', 'paymentsEmpty')}
+            </p>
           ) : (
             <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(7)]:hidden">
               <TableHeader>
@@ -294,28 +476,44 @@ async function PaymentsTab({
                 {rows.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="whitespace-nowrap">{dayInZone(p.paid_at, timeZone)}</TableCell>
-                    <TableCell>{payerName.get(p.payer_id) ?? '—'}</TableCell>
+                    <TableCell>{payerName(p.payer_id)}</TableCell>
                     <TableCell>
                       {p.student_id ? (
                         <Link href={`/app/students/${p.student_id}`} className="hover:underline">
                           {studentName.get(p.student_id) ?? '—'}
                         </Link>
                       ) : (
-                        <span className="sm:hidden">{payerName.get(p.payer_id) ?? '—'}</span>
+                        <span className="sm:hidden">{payerName(p.payer_id)}</span>
                       )}
                       {p.student_id ? null : <span className="hidden sm:inline">—</span>}
                       {/* На телефоне колонки «Вид» и «Плательщик» скрыты — без этой строки
                           корректировку не отличить от оплаты (UX-аудит, UX71). */}
-                      <span className="block text-xs text-muted-foreground sm:hidden">{label('paymentKind', p.kind)}</span>
+                      <span className="block text-xs text-muted-foreground sm:hidden">
+                        {label('paymentKind', p.kind)} ·{' '}
+                        <Link href={receiptHref(p.id, back)} className="text-primary underline-offset-4 hover:underline">
+                          {t('finance', 'receipt').toLowerCase()}
+                        </Link>
+                      </span>
                     </TableCell>
                     <TableCell>{label('paymentKind', p.kind)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {p.source_id ? (sourceName.get(p.source_id) ?? '—') : t('finance', 'noSource')}
                     </TableCell>
-                    {/* Метка «отменён» и кнопка — в колонке суммы: она видна и на
-                        телефоне, где комментарий скрыт (0093). */}
-                    <TableCell className={cn('text-right font-medium', p.amount_tiyin < 0 && 'text-destructive')}>
-                      {formatSom(p.amount_tiyin)}
+                    {/* Метка «отменён», квитанция и кнопка отмены — в колонке суммы: она видна
+                        и на телефоне, где комментарий скрыт (0093). */}
+                    <TableCell className={cn('text-right font-medium tabular-nums', p.amount_tiyin < 0 && 'text-destructive')}>
+                      <span className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {formatSom(p.amount_tiyin)}
+                        {/* На телефоне ссылка — словом под именем ученика: иконка раздвигала таблицу. */}
+                        <Link
+                          href={receiptHref(p.id, back)}
+                          aria-label={`${t('finance', 'receipt')}: ${formatSom(p.amount_tiyin)}`}
+                          title={t('finance', 'receipt')}
+                          className="hidden rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
+                        >
+                          <ReceiptText className="size-4" aria-hidden="true" />
+                        </Link>
+                      </span>
                       {voidedIds.has(p.id) ? <span className="block text-xs font-normal text-destructive">отменён</span> : null}
                       {isOwner &&
                       p.kind === 'payment' &&
@@ -335,50 +533,48 @@ async function PaymentsTab({
           )}
         </CardContent>
       </Card>
-
-      <PaymentForm
-        payers={(payers ?? []).map((p) => ({ id: p.id, name: p.full_name }))}
-        students={(students ?? []).map((s) => ({ id: s.id, name: s.full_name }))}
-        sources={sources}
-        today={today}
-      />
     </div>
   )
 }
 
 async function ExpensesTab({
   supabase,
+  month,
   fromIso,
   toIso,
   timeZone,
-  today,
-  sources,
+  categories,
+  categoryFilter,
   sourceName,
   cashError,
   spent,
 }: {
   supabase: Supabase
+  month: string
   fromIso: string
   toIso: string
   timeZone: string
-  today: string
-  sources: { id: string; name: string }[]
+  categories: { id: string; name: string }[]
+  categoryFilter: string
   sourceName: Map<string, string>
   cashError: string | null
   spent: number
 }) {
-  const [{ data: expenses, error: expensesError, count: expensesCount }, { data: categories }] = await Promise.all([
-    supabase
-      .from('expenses')
-      .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment', { count: 'exact' })
-      .gte('paid_at', fromIso)
-      .lt('paid_at', toIso)
-      .order('paid_at', { ascending: false })
-      .limit(LIST_LIMIT),
-    supabase.from('expense_categories').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
+  let query = supabase
+    .from('expenses')
+    .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment', { count: 'exact' })
+    .gte('paid_at', fromIso)
+    .lt('paid_at', toIso)
+  if (categoryFilter) query = query.eq('category_id', categoryFilter)
+  // Имена статей — со всеми, включая скрытые и архивные: у прошлых расходов
+  // название не должно пропадать (read_archived, 0028).
+  const [{ data: expenses, error: expensesError, count: expensesCount }, { data: allCategories }] = await Promise.all([
+    query.order('paid_at', { ascending: false }).limit(LIST_LIMIT),
+    supabase.from('expense_categories').select('id, name'),
   ])
-  const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
+  const categoryName = new Map((allCategories ?? []).map((c) => [c.id, c.name]))
   const rows = expenses ?? []
+  const back = `/app/finance?tab=expenses&month=${month}`
 
   return (
     <div className="space-y-4">
@@ -386,9 +582,33 @@ async function ExpensesTab({
         <FormError message={cashError} />
       ) : (
         <p className="text-sm">
-          {t('finance', 'spent')}: <strong>{formatSom(Math.abs(spent))}</strong>
+          {t('finance', 'spent')}: <strong className="tabular-nums">{formatSom(Math.abs(spent))}</strong>
+          {categoryFilter ? <span className="text-muted-foreground"> — за месяц, все статьи</span> : null}
         </p>
       )}
+      <form action="/app/finance" className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="tab" value="expenses" />
+        <input type="hidden" name="month" value={month} />
+        <div className="space-y-1">
+          <Label htmlFor="filter-category">{t('finance', 'filterCategory')}</Label>
+          <Select id="filter-category" name="category" defaultValue={categoryFilter} className="w-auto">
+            <option value="">{t('finance', 'filterAll')}</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          {t('finance', 'filterApply')}
+        </button>
+        {categoryFilter ? (
+          <Link href={back} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            {t('finance', 'filterReset')}
+          </Link>
+        ) : null}
+      </form>
       <Card>
         <CardHeader>
           <CardTitle>{t('finance', 'tabExpenses')}</CardTitle>
@@ -398,7 +618,7 @@ async function ExpensesTab({
           {expensesError ? (
             <FormError message={loadErrorMessage(expensesError, t('finance', 'loadExpensesFailed'))} />
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('finance', 'expensesEmpty')}</p>
+            <p className="text-sm text-muted-foreground">{categoryFilter ? t('finance', 'paymentsFilteredEmpty') : t('finance', 'expensesEmpty')}</p>
           ) : (
             <Table className="max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(4)]:hidden max-sm:[&_tr>*:nth-child(6)]:hidden">
               <TableHeader>
@@ -420,7 +640,7 @@ async function ExpensesTab({
                     <TableCell className="text-muted-foreground">
                       {e.source_id ? (sourceName.get(e.source_id) ?? '—') : t('finance', 'noSource')}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{formatSom(e.amount_tiyin)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatSom(e.amount_tiyin)}</TableCell>
                     <TableCell className="max-w-[16rem] truncate text-muted-foreground">{e.comment ?? ''}</TableCell>
                   </TableRow>
                 ))}
@@ -429,7 +649,6 @@ async function ExpensesTab({
           )}
         </CardContent>
       </Card>
-      <ExpenseForm categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name }))} sources={sources} today={today} />
     </div>
   )
 }
@@ -537,7 +756,7 @@ async function InstallmentsTab({
                     <TableCell className={cn(r.state === 'overdue' && 'text-destructive')}>
                       {label('installmentState', r.state ?? '')}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{formatSom(r.amount_tiyin as number)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatSom(r.amount_tiyin as number)}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {wa ? (
