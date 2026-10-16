@@ -44,7 +44,10 @@ select set_eq(
     ('teachers:tenant_finance_select'), ('student_payers:tenant_finance_select'),
     ('subscriptions:tenant_finance_select'),
     ('subscription_freezes:tenant_finance_select'), ('subscription_types:tenant_finance_select'),
-    ('installment_plans:tenant_finance_select'), ('installments:tenant_finance_select')
+    ('installment_plans:tenant_finance_select'), ('installments:tenant_finance_select'),
+    -- 0101: причины скидок — стойка читает (форма продажи), бухгалтер ведёт справочник.
+    ('discount_reasons:tenant_registrar_select'),
+    ('discount_reasons:tenant_finance_select'), ('discount_reasons:tenant_finance_insert'), ('discount_reasons:tenant_finance_update')
   $$,
   'Политики новых ролей — ровно ожидаемый набор: у finance нет students/lessons/attendance/payers (0031), остальное как в 0028'
 );
