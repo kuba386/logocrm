@@ -16,12 +16,13 @@
 --       lesson_advance_block_unchecked (код причины): её зовут RPC под
 --       блокировкой и предпросмотр lesson_advance_preview для кнопки на
 --       карточке — браузер не повторяет арифметику (CLAUDE.md, правило денег).
---       Причины: архив, нет плательщика, долг (его гасит оплата долга),
+--       Причины: архив, долг (его гасит оплата долга),
 --       списание (paid < accrued + overdrawn_gross — аванс съелся бы списанием:
 --       credit по 0087 Р2 «сначала деньги, потом списание»; отказ постоянный,
 --       пока не изменятся начисления), недоплаченный живой абонемент (аванс
 --       легко принять за оплату абонемента — деньги легли бы не туда; строго,
---       и при рассрочке по графику). Формула кредита 0087 не меняется.
+--       и при рассрочке по графику). «Нет плательщика» — страховка:
+--       students.payer_id not null (0005). Формула кредита 0087 не меняется.
 --   Р3. Аванс принадлежит счёту ребёнка, не плательщику: при смене плательщика
 --       остаётся у ребёнка, вернуть — текущему плательщику (так устроен
 --       refund_lesson_debt_credit). Ошибочный аванс — «Вернуть аванс»:
@@ -45,7 +46,9 @@
 --       родитель, ни специалист, а строку отмены триггер делает неизменяемой.
 --   Р8. Границы expenses — триггер expenses_links_guard: отмена зеркалит
 --       исходную (nullable-колонки через is distinct from), пара не меняется,
---       специалист/месяц/ссылка неизменяемы, выплата — только в статье salary.
+--       специалист/месяц/ссылка неизменяемы, выплата — только в статье salary
+--       и её деньги (сумма, вид, дата, касса, статья) не меняются и на UPDATE:
+--       у service_role полный DML на expenses (0079 её не закрывала).
 --       CHECK: корректировка со специалистом — только отмена.
 --   Р9. cash_transfers — перевод между кассами (откуда, куда, сумма > 0),
 --       неизменяем триггером, чтение — только can_finance (select-политика без
@@ -82,6 +85,10 @@
 --   «нечего выплачивать» отдельным текстом, auth.uid() в sell_subscription,
 --   длины текстов — 22023 из функций, чужой id — 42704, гранты триггерных
 --   функций, явные гранты вью.
+--
+-- Ревью написанного SQL: UPDATE выплаты держит деньги (Р8); причина скидки —
+-- только активная; отчёт не показывает имена удалённых; сид причин — и
+-- удалённым центрам (восстановление); insert в discount_reasons — по колонкам.
 -- =============================================================================
 
 
@@ -142,7 +149,7 @@ begin
 end;
 $$;
 comment on function public.lesson_advance_block_unchecked(uuid, uuid) is
-  'Почему нельзя принять аванс за занятия (0101 Р2): not_found | archived | no_payer | debt | writeoff | unpaid_subscription | null. Без проверки сессии и без грантов — зовут accept_lesson_advance (под lesson_debt_lock) и lesson_advance_preview.';
+  'Почему нельзя принять аванс за занятия (0101 Р2): not_found | archived | no_payer (страховка: payer_id not null) | debt | writeoff | unpaid_subscription | null. Без проверки сессии и без грантов — зовут accept_lesson_advance (под lesson_debt_lock) и lesson_advance_preview.';
 
 revoke all on function public.lesson_advance_block_unchecked(uuid, uuid) from public, anon, authenticated, service_role;
 
@@ -252,8 +259,12 @@ begin
          and s.paid_tiyin < s.price_tiyin
        order by s.created_at
        limit 1;
-      raise exception 'Не доплачен абонемент «%»: % — примите оплату абонемента', v_type, public.format_som(v_unpaid)
-        using errcode = '22023';
+      -- Оплата абонемента lesson_debt_lock не берёт: если его доплатили между
+      -- стейтментами, отказывать не в чем — идём дальше.
+      if found then
+        raise exception 'Не доплачен абонемент «%»: % — примите оплату абонемента', v_type, public.format_som(v_unpaid)
+          using errcode = '22023';
+      end if;
     else
       null;
   end case;
@@ -409,6 +420,13 @@ begin
     if old.voids_expense_id is not null then
       raise exception 'Отмену расхода менять нельзя' using errcode = '22023';
     end if;
+    -- Выплата зарплаты: деньги и статья не меняются — иначе «выплачено» в
+    -- salary_summary разошлось бы с кассой и статьёй. Ошибку исправляет отмена.
+    if old.teacher_id is not null
+       and (new.amount_tiyin, new.kind, new.paid_at, new.source_id, new.category_id)
+           is distinct from (old.amount_tiyin, old.kind, old.paid_at, old.source_id, old.category_id) then
+      raise exception 'Выплату зарплаты менять нельзя — ошибку исправляет отмена' using errcode = '22023';
+    end if;
     if exists (select 1 from public.expenses e where e.voids_expense_id = old.id)
        and (new.amount_tiyin, new.kind, new.paid_at, new.source_id, new.category_id)
            is distinct from (old.amount_tiyin, old.kind, old.paid_at, old.source_id, old.category_id) then
@@ -453,7 +471,7 @@ begin
 end;
 $$;
 comment on function public.expenses_links_guard() is
-  'Граница 0101 Р8: отмена зеркалит исходный расход (сумма с минусом, дата, статья, источник, специалист, месяц); пара и отмена не меняются; специалист, месяц и ссылка неизменяемы; выплата — только по статье salary.';
+  'Граница 0101 Р8: отмена зеркалит исходный расход (сумма с минусом, дата, статья, источник, специалист, месяц); пара и отмена не меняются; специалист, месяц и ссылка неизменяемы; выплата — только по статье salary, её деньги и статья не меняются и на UPDATE.';
 revoke all on function public.expenses_links_guard() from public, anon, authenticated, service_role;
 
 drop trigger if exists expenses_links_guard on public.expenses;
@@ -1176,7 +1194,8 @@ create table if not exists public.discount_reasons (
   deleted_at  timestamptz,
 
   constraint discount_reasons_id_center_key unique (id, center_id),
-  constraint discount_reasons_name_length check (length(btrim(name)) between 2 and 60)
+  constraint discount_reasons_name_length check (length(btrim(name)) between 2 and 60),
+  constraint discount_reasons_code_length check (length(code) between 1 and 40)
 );
 comment on table public.discount_reasons is
   'Причины скидок центра (0101 Р11): справочник, как статьи расходов. На абонементе — ссылка discount_reason_id; родителю справочник не виден. Пишут owner/admin/finance, читают ещё и стойка (форма продажи).';
@@ -1206,9 +1225,11 @@ create policy discount_reasons_read_archived on public.discount_reasons
   );
 
 -- Supabase выдаёт authenticated полный набор прав по умолчанию, включая DELETE.
--- Прямая запись — справочные поля; code — только при создании, deleted_at — RPC.
+-- Прямая запись — справочные поля: code — только при создании, created_by и
+-- deleted_at клиент не задаёт (default и RPC архива).
 revoke all on public.discount_reasons from anon, authenticated, service_role;
-grant select, insert on public.discount_reasons to authenticated;
+grant select on public.discount_reasons to authenticated;
+grant insert (code, name, is_active, sort) on public.discount_reasons to authenticated;
 grant update (name, is_active, sort) on public.discount_reasons to authenticated;
 
 call public.apply_audit('discount_reasons');
@@ -1255,11 +1276,13 @@ create trigger centers_seed_discount_reasons
   after insert on public.centers
   for each row execute function public.centers_seed_discount_reasons();
 
--- Существующим центрам — тоже (без сессии readonly-guard не мешает).
+-- Существующим центрам — тоже, и помеченным на удаление: отмена удаления
+-- (cancel_center_deletion) вернула бы центр без причин, и скидку было бы не
+-- продать. Без сессии readonly-guard не мешает.
 do $$
 declare v_id uuid;
 begin
-  for v_id in select id from public.centers where deleted_at is null loop
+  for v_id in select id from public.centers loop
     perform public.seed_discount_reasons(v_id);
   end loop;
 end $$;
@@ -1417,11 +1440,13 @@ begin
         public.format_som(v_price), public.format_som(v_type.price_tiyin)
         using errcode = '22023';
     end if;
+    -- Только живая и не скрытая причина: форма скрытые не предлагает — база держит то же.
     if not exists (
          select 1 from public.discount_reasons dr
-          where dr.id = p_discount_reason_id and dr.center_id = v_center and dr.deleted_at is null
+          where dr.id = p_discount_reason_id and dr.center_id = v_center
+            and dr.deleted_at is null and dr.is_active
        ) then
-      raise exception 'Причина скидки не найдена или в архиве' using errcode = '22023';
+      raise exception 'Причина скидки не найдена, скрыта или в архиве' using errcode = '22023';
     end if;
     v_reason := p_discount_reason_id;
   end if;
@@ -1622,11 +1647,11 @@ begin
            s.status,
            s.deleted_at is not null
       from public.subscriptions s
-      left join public.students st            on st.id = s.student_id
+      left join public.students st            on st.id = s.student_id and st.deleted_at is null
       left join public.subscription_types sty on sty.id = s.type_id
       left join public.discount_reasons dr    on dr.id = s.discount_reason_id
       left join public.memberships m          on m.user_id = s.created_by and m.center_id = s.center_id
-      left join public.teachers tch           on tch.id = m.teacher_id
+      left join public.teachers tch           on tch.id = m.teacher_id and tch.deleted_at is null
      where s.center_id = v_center
        and s.list_price_tiyin is not null
        and s.price_tiyin < s.list_price_tiyin

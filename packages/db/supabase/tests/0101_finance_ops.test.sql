@@ -17,7 +17,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(85);
+select plan(99);
 
 
 -- 1. Фикстура -------------------------------------------------------------------------------------
@@ -43,7 +43,13 @@ insert into public.centers (id, name, slug, plan, subscription_until, settings) 
 insert into public.teachers (id, center_id, full_name) values
   ('01010000-0000-0000-0000-0000000000b1', '01010000-0000-0000-0000-0000000000c1', 'Специалист 0101'),
   ('01010000-0000-0000-0000-0000000000b2', '01010000-0000-0000-0000-0000000000c1', 'Без начислений 0101'),
-  ('01010000-0000-0000-0000-0000000000bb', '01010000-0000-0000-0000-0000000000c2', 'Специалист Б');
+  ('01010000-0000-0000-0000-0000000000bb', '01010000-0000-0000-0000-0000000000c2', 'Специалист Б'),
+  ('01010000-0000-0000-0000-0000000000bc', '01010000-0000-0000-0000-0000000000c3', 'Специалист В');
+
+-- Бонус специалисту центра В — до любой сессии: от имени пользователя readonly-guard его не пустил бы.
+insert into public.salary_adjustments (center_id, teacher_id, month, amount_tiyin, reason) values
+  ('01010000-0000-0000-0000-0000000000c3', '01010000-0000-0000-0000-0000000000bc',
+   date_trunc('month', public.center_today('01010000-0000-0000-0000-0000000000c3'))::date, 100000, 'бонус В');
 
 insert into public.payers (id, center_id, full_name, phone) values
   ('01010000-0000-0000-0000-0000000000d1', '01010000-0000-0000-0000-0000000000c1', 'П1', '+996700020001'),
@@ -231,9 +237,26 @@ select is(
 -- 14
 select is(
   (select comment from public.payments
-    where student_id = '01010000-0000-0000-0000-000000000e01' and covers_lesson_debt order by created_at limit 1),
+    where student_id = '01010000-0000-0000-0000-000000000e01' and covers_lesson_debt and amount_tiyin = 100000),
   'Аванс за занятия',
-  'Пустой комментарий — «Аванс за занятия» (nullif(btrim))');
+  'Комментарий из пробелов — «Аванс за занятия» (nullif(btrim))');
+
+select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 15
+select lives_ok(
+  $q$ select public.refund_lesson_debt_credit('01010000-0000-0000-0000-000000000e01', 50000, (select id from t_src),
+                                              (select today from t_src), 400000) $q$,
+  'Аванс возвращается «Вернуть аванс» со свежей сверкой');
+
+reset role;
+
+-- 16
+select is(
+  (select credit_tiyin from public.lesson_debt_accounts_unchecked('01010000-0000-0000-0000-0000000000c1', '01010000-0000-0000-0000-000000000e01')),
+  350000,
+  'После возврата 500 сом аванс — ровно 3 500');
 
 -- K3: начисления уменьшились (перерасход 2 → 0 занятий) — теперь деньги покрывают
 -- всё, аванс отражается целиком.
@@ -242,7 +265,7 @@ update public.subscriptions set lessons_used = 2 where id = '01010000-0000-0000-
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 15
+-- 17
 select lives_ok(
   $q$ select public.accept_lesson_advance('01010000-0000-0000-0000-000000000e03', 10000, (select id from t_src),
                                           (select today from t_src), 30000) $q$,
@@ -250,7 +273,7 @@ select lives_ok(
 
 reset role;
 
--- 16
+-- 18
 select is(
   (select credit_tiyin from public.lesson_debt_accounts_unchecked('01010000-0000-0000-0000-0000000000c1', '01010000-0000-0000-0000-000000000e03')),
   40000,
@@ -259,7 +282,7 @@ select is(
 select public.tests_claims('01010000-0000-0000-0000-0000000000a4', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 17
+-- 19
 select throws_ok(
   $q$ select public.accept_lesson_advance('01010000-0000-0000-0000-000000000e01', 100000, (select id from t_src),
                                           (select today from t_src), 400000) $q$,
@@ -270,7 +293,7 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a5', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 18
+-- 20
 select throws_ok(
   $q$ select * from public.lesson_advance_preview('01010000-0000-0000-0000-000000000e01') $q$,
   '42501', null,
@@ -278,7 +301,7 @@ select throws_ok(
 
 reset role;
 
--- 19
+-- 21
 select ok(
   not has_function_privilege('anon', 'public.accept_lesson_advance(uuid,integer,uuid,date,integer,text)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.lesson_advance_block_unchecked(uuid,uuid)', 'EXECUTE'),
@@ -288,7 +311,7 @@ select ok(
 select public.tests_claims('01010000-0000-0000-0000-0000000000a8', '01010000-0000-0000-0000-0000000000c3');
 set local role authenticated;
 
--- 20
+-- 22
 select throws_ok(
   $q$ select public.accept_lesson_advance('01010000-0000-0000-0000-000000000e0c', 100000, (select c_id from t_src),
                                           public.center_today('01010000-0000-0000-0000-0000000000c3'), 0) $q$,
@@ -303,62 +326,62 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a3', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 21
+-- 23
 select is(
   (select array[total_tiyin, paid_tiyin, due_tiyin] from public.salary_summary((select month from t_src))
     where teacher_id = '01010000-0000-0000-0000-0000000000b1'),
   array[300000, 0, 300000],
   'Без выплат «выплачено» 0, «к выплате» = итог — не NULL (А3)');
 
--- 22
+-- 24
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 400000,
                                (select id from t_src), (select today from t_src), 300000) $q$,
   '22023', 'Больше, чем к выплате: 3000,00 сом',
   'Первая выплата сверх начисленного — отказ (раньше NULL пропускал любую)');
 
--- 23
+-- 25
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 1) $q$,
   '23514', null,
   'Первая выплата с неверным «к выплате» — 23514 со свежей суммой');
 
--- 24
-select throws_ok(
+-- 26
+select throws_like(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b2', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 0) $q$,
-  '22023', null,
+  'Нечего выплачивать: за % начислено 0,00 сом',
   'Ничего не начислено — «нечего выплачивать», не «уже выплачена»');
 
--- 25
+-- 27
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', ((select month from t_src) + interval '1 month')::date, 100000,
                                (select id from t_src), (select today from t_src), 0) $q$,
   '22023', 'За будущий месяц зарплату не выплачивают',
   'Будущий месяц — отказ');
 
--- 26
+-- 28
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select month from t_src) - 1, 300000) $q$,
   '22023', 'Дата выплаты раньше месяца зарплаты — проверьте месяц и дату',
   'Выплата датой раньше месяца — отказ');
 
--- 27
+-- 29
 select lives_ok(
   $q$ insert into t_ids values ('payout1', public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 300000, 'аванс')) $q$,
   'Бухгалтер выплачивает 1 000 сом из 3 000');
 
--- 28
+-- 30
 select is(
   (select array[paid_tiyin, due_tiyin] from public.salary_summary((select month from t_src))
     where teacher_id = '01010000-0000-0000-0000-0000000000b1'),
   array[100000, 200000],
   'Выплачено 1 000, к выплате 2 000');
 
--- 29
+-- 31
 select is(
   (select array[c.code, e.kind, e.salary_month::text, e.amount_tiyin::text]
      from public.expenses e join public.expense_categories c on c.id = e.category_id
@@ -370,7 +393,7 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 30
+-- 32
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 200000) $q$,
@@ -381,19 +404,19 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a4', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 31
+-- 33
 select is(
   (select array_agg(array[teacher_id::text, paid_tiyin::text, due_tiyin::text]) from public.salary_summary((select month from t_src))),
   array[array['01010000-0000-0000-0000-0000000000b1', '100000', '200000']],
   'Специалист видит свою строку с выплаченным — и только её');
 
--- 32
+-- 34
 select is(
   (select count(*)::integer from public.expenses),
   0,
   'Таблицу расходов специалист не читает — сумма только через salary_summary');
 
--- 33
+-- 35
 select throws_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 200000) $q$,
@@ -404,33 +427,33 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a3', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 34
+-- 36
 select lives_ok(
-  $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 200000,
-                               (select id from t_src), (select today from t_src), 200000) $q$,
+  $q$ insert into t_ids values ('payout2', public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 200000,
+                               (select id from t_src), (select today from t_src), 200000)) $q$,
   'Остаток 2 000 выплачен');
 
--- 35
-select throws_ok(
+-- 37
+select throws_like(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
                                (select id from t_src), (select today from t_src), 0) $q$,
-  '22023', null,
-  'Месяц выплачен — повтор отбит');
+  'Зарплата за % уже выплачена',
+  'Месяц выплачен — повтор отбит текстом «уже выплачена»');
 
--- 36
+-- 38
 select is(
   (select array[total_tiyin, due_tiyin] from public.salary_summary((select prev_month from t_src))
     where teacher_id = '01010000-0000-0000-0000-0000000000b1'),
   array[500000, 500000],
   'Утверждённый снимок прошлого месяца — итог из снимка, к выплате весь');
 
--- 37
+-- 39
 select lives_ok(
   $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select prev_month from t_src), 500000,
                                (select id from t_src), (select today from t_src), 500000) $q$,
   'Выплата по снимку прошлого месяца сегодняшним днём');
 
--- 38
+-- 40
 select throws_ok(
   $q$ select public.void_expense((select id from t_ids where name = 'payout1'), 'ошибка') $q$,
   '42501', 'Отменить расход может только владелец центра',
@@ -440,7 +463,7 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a6', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 39
+-- 41
 select throws_ok(
   $q$ select public.void_expense((select id from t_ids where name = 'payout1'), 'ошибка') $q$,
   '42501', null,
@@ -450,18 +473,18 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a1', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 40
+-- 42
 select throws_ok(
   $q$ select public.void_expense((select id from t_ids where name = 'payout1'), '   ') $q$,
   '22023', 'Укажите причину отмены',
   'Без причины — отказ');
 
--- 41
+-- 43
 select lives_ok(
   $q$ insert into t_ids values ('void1', public.void_expense((select id from t_ids where name = 'payout1'), 'не тому специалисту')) $q$,
   'Владелец отменяет выплату 1 000');
 
--- 42
+-- 44
 select is(
   (select array[v.amount_tiyin::text, v.kind, v.comment, (v.teacher_id = o.teacher_id)::text,
                 (v.salary_month = o.salary_month)::text, (v.paid_at = o.paid_at)::text,
@@ -471,38 +494,38 @@ select is(
   array['-100000', 'correction', 'Отмена: не тому специалисту', 'true', 'true', 'true', 'true', 'true'],
   'Отмена зеркалит выплату: минус, та же дата, касса, статья, специалист, месяц');
 
--- 43
+-- 45
 select is(
   (select due_tiyin from public.salary_summary((select month from t_src))
     where teacher_id = '01010000-0000-0000-0000-0000000000b1'),
   100000,
   'После отмены «к выплате» снова 1 000');
 
--- 44
+-- 46
 select throws_ok(
   $q$ select public.void_expense((select id from t_ids where name = 'payout1'), 'ещё раз') $q$,
   '22023', 'Расход уже отменён',
   'Повторная отмена — отказ');
 
--- 45
+-- 47
 select throws_ok(
   $q$ select public.void_expense((select id from t_ids where name = 'void1'), 'отмена отмены') $q$,
   '22023', 'Отмену расхода отменить нельзя',
   'Отмену не отменить');
 
--- 46
+-- 48
 select throws_ok(
   $q$ update public.expenses set comment = 'переписал причину' where id = (select id from t_ids where name = 'void1') $q$,
   '22023', 'Отмену расхода менять нельзя',
   'Причину в отмене владелец не перепишет — строка отмены неизменяема');
 
--- 47
+-- 49
 select throws_ok(
   $q$ update public.expense_categories set code = 'salary' where id = (select rent_id from t_src) $q$,
   '22023', null,
   'Код статьи не меняется: «Аренда» не станет «Зарплатой» для выплат');
 
--- 48: расход без кассы — для проверки зеркала с NULL ниже.
+-- 50: расход без кассы — для проверки зеркала с NULL ниже.
 select lives_ok(
   $q$ insert into t_ids values ('nosource', public.record_expense((select rent_id from t_src), 50000, 'expense', null,
                                 (select today from t_src), 'аренда без кассы')) $q$,
@@ -510,7 +533,7 @@ select lives_ok(
 
 reset role;
 
--- 49
+-- 51
 select throws_ok(
   $q$ insert into public.expenses (center_id, category_id, source_id, amount_tiyin, paid_at, kind, voids_expense_id)
       select e.center_id, e.category_id, (select id from t_src), -e.amount_tiyin, e.paid_at, 'correction', e.id
@@ -518,7 +541,7 @@ select throws_ok(
   '22023', 'Отмена должна зеркалить исходный расход',
   'Отмена с кассой при исходной без кассы — отказ (is distinct from, А8)');
 
--- 50
+-- 52
 select throws_ok(
   $q$ insert into public.expenses (center_id, category_id, amount_tiyin, paid_at, kind, teacher_id, salary_month)
       values ('01010000-0000-0000-0000-0000000000c1',
@@ -527,7 +550,7 @@ select throws_ok(
   '23514', null,
   'Корректировка со специалистом без ссылки на отмену — CHECK (А8)');
 
--- 51
+-- 53
 select throws_ok(
   $q$ insert into public.expenses (center_id, category_id, amount_tiyin, paid_at, kind, teacher_id, salary_month)
       values ('01010000-0000-0000-0000-0000000000c1', (select rent_id from t_src),
@@ -535,18 +558,12 @@ select throws_ok(
   '23514', 'Выплата зарплаты проводится только по статье «Зарплата»',
   'Выплата в чужой статье — отказ триггера и от postgres');
 
-select public.tests_claims('01010000-0000-0000-0000-0000000000a1', '01010000-0000-0000-0000-0000000000c1');
-set local role authenticated;
-
--- 52
+-- 54
 select throws_ok(
-  $q$ select public.void_expense((select e.id from public.expenses e
-                                    join public.expense_categories c on c.id = e.category_id
-                                   where c.center_id = '01010000-0000-0000-0000-0000000000c2' limit 1), 'чужой') $q$,
-  '42704', null,
-  'Чужой или несуществующий расход — 42704');
-
-reset role;
+  $q$ update public.expenses set category_id = (select rent_id from t_src)
+       where id = (select id from t_ids where name = 'payout2') $q$,
+  '22023', 'Выплату зарплаты менять нельзя — ошибку исправляет отмена',
+  'Выплата не уезжает в другую статью и на UPDATE — даже от postgres');
 
 -- Центр Б без статьи «Зарплата»: выплата создаёт её одну.
 delete from public.expense_categories
@@ -555,20 +572,31 @@ delete from public.expense_categories
 select public.tests_claims('01010000-0000-0000-0000-0000000000a7', '01010000-0000-0000-0000-0000000000c2');
 set local role authenticated;
 
--- 53
+-- 55
 select lives_ok(
-  $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000bb', (select month from t_src), 50000,
-                               (select b_id from t_src), (select today from t_src), 200000) $q$,
+  $q$ insert into t_ids values ('payoutB', public.pay_salary('01010000-0000-0000-0000-0000000000bb', (select month from t_src), 50000,
+                               (select b_id from t_src), (select today from t_src), 200000)) $q$,
   'Центр без статьи «Зарплата»: выплата проходит');
 
 reset role;
 
--- 54
+-- 56
 select is(
   (select count(*)::integer from public.expense_categories
     where center_id = '01010000-0000-0000-0000-0000000000c2' and code = 'salary' and deleted_at is null),
   1,
   'Статья создана ровно одна');
+
+select public.tests_claims('01010000-0000-0000-0000-0000000000a1', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 57
+select throws_ok(
+  $q$ select public.void_expense((select id from t_ids where name = 'payoutB'), 'чужой') $q$,
+  '42704', 'Расход не найден',
+  'Настоящий расход другого центра — 42704, а не его отмена');
+
+reset role;
 
 
 -- 4. Р9–Р10: переводы между кассами --------------------------------------------------------------
@@ -582,68 +610,68 @@ set local role authenticated;
 
 update t_cash_before set dummy = (select coalesce(sum(total_tiyin), 0) from public.cash_by_source where month = (select month from t_src));
 
--- 55
+-- 58
 select lives_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 150000,
                                          '01010000-0000-0000-0000-00000000aaa1', (select today from t_src), 'инкассация') $q$,
   'Бухгалтер переводит 1 500 сом между кассами');
 
--- 56
+-- 59
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 150000,
                                          '01010000-0000-0000-0000-00000000aaa1', (select today from t_src)) $q$,
   '22023', 'Этот перевод уже проведён — обновите страницу',
   'Повтор с тем же ключом — отказ, второго перевода нет (А11)');
 
--- 57
+-- 60
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id from t_src), 100,
                                          '01010000-0000-0000-0000-00000000aaa2') $q$,
   '22023', 'Откуда и куда — разные кассы',
   'Перевод в ту же кассу — отказ');
 
--- 58
+-- 61
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 0,
                                          '01010000-0000-0000-0000-00000000aaa3') $q$,
   '22023', 'Сумма должна быть больше нуля',
   'Нулевая сумма — отказ');
 
--- 59
+-- 62
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select b_id from t_src), 100,
                                          '01010000-0000-0000-0000-00000000aaa4') $q$,
   '42704', 'Касса не найдена',
   'Касса чужого центра — 42704');
 
--- 60
+-- 63
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 100,
                                          '01010000-0000-0000-0000-00000000aaa5', (select today from t_src) + 1) $q$,
   '22023', 'Дата перевода не может быть в будущем',
   'Перевод завтрашним днём — отказ');
 
--- 61
+-- 64
 select is(
   (select array[transfers_out_tiyin, transfers_in_tiyin] from public.cash_by_source
     where month = (select month from t_src) and source_id = (select id from t_src)),
   array[-150000::bigint, 0::bigint],
   'Касса «откуда»: переводы из кассы −1 500');
 
--- 62
+-- 65
 select is(
   (select transfers_in_tiyin from public.cash_by_source
     where month = (select month from t_src) and source_id = (select id2 from t_src)),
   150000::bigint,
   'Касса «куда»: переводы в кассу +1 500');
 
--- 63
+-- 66
 select is(
   (select coalesce(sum(total_tiyin), 0) from public.cash_by_source where month = (select month from t_src)),
   (select dummy from t_cash_before),
   'Итог центра за месяц перевод не меняет');
 
--- 64
+-- 67
 select ok(
   (select bool_and(total_tiyin = received_tiyin + refunded_tiyin + corrections_tiyin + spent_tiyin + other_tiyin
                                  + transfers_in_tiyin + transfers_out_tiyin)
@@ -652,26 +680,26 @@ select ok(
 
 reset role;
 
--- 65: забор на порядок колонок — следующий create or replace с колонкой не в конце упадёт здесь.
+-- 68: забор на порядок колонок — следующий create or replace с колонкой не в конце упадёт здесь.
 select is(
   (select array_agg(column_name::text order by ordinal_position) from information_schema.columns
     where table_schema = 'public' and table_name = 'cash_by_source' and ordinal_position > 9),
   array['transfers_in_tiyin', 'transfers_out_tiyin'],
   'cash_by_source: переводы — последние колонки');
 
--- 66
+-- 69
 select throws_ok(
   $q$ update public.cash_transfers set amount_tiyin = 1 $q$,
   '22023', null,
   'Перевод не меняется — даже от postgres (А7)');
 
--- 67
+-- 70
 select throws_ok(
   $q$ delete from public.cash_transfers $q$,
   '22023', null,
   'Перевод не удаляется');
 
--- 68
+-- 71
 select ok(
   not has_table_privilege('service_role', 'public.cash_transfers', 'SELECT')
   and not has_table_privilege('service_role', 'public.cash_transfers', 'UPDATE')
@@ -681,14 +709,14 @@ select ok(
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 69
+-- 72
 select throws_ok(
   $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 100,
                                          '01010000-0000-0000-0000-00000000aaa6') $q$,
   '42501', null,
   'Стойка переводы не проводит');
 
--- 70
+-- 73
 select is(
   (select count(*)::integer from public.cash_transfers),
   0,
@@ -698,40 +726,70 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a8', '01010000-0000-0000-0000-0000000000c3');
 set local role authenticated;
 
--- 71
+-- 74
 select throws_ok(
   $q$ select public.record_cash_transfer((select c_id from t_src), (select c_id2 from t_src), 100,
                                          '01010000-0000-0000-0000-00000000aaa7') $q$,
   'PT402', null,
   'Центр только для чтения — перевод не проводится (А1)');
 
+-- 75
+select throws_ok(
+  $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000bc',
+                               date_trunc('month', public.center_today('01010000-0000-0000-0000-0000000000c3'))::date, 100000,
+                               (select c_id from t_src), public.center_today('01010000-0000-0000-0000-0000000000c3'), 100000) $q$,
+  'PT402', null,
+  'Центр только для чтения — выплата не проводится');
+
+-- 76
+select throws_ok(
+  $q$ insert into public.discount_reasons (code, name) values ('ro_check', 'Проверка') $q$,
+  'PT402', null,
+  'Центр только для чтения — справочник причин не пишется');
+
 reset role;
 
 
 -- 5. Р11–Р12: скидки ------------------------------------------------------------------------------
 
+insert into t_ids values ('reasonB', (select id from public.discount_reasons
+                                       where center_id = '01010000-0000-0000-0000-0000000000c2' and code = 'second_child'));
+
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 72
+-- 77
 select is(
   (select count(*)::integer from public.discount_reasons where deleted_at is null),
   5,
   'Стойка видит пять типовых причин центра (сид при создании центра)');
 
--- 73
+-- 78
+select throws_ok(
+  $q$ insert into public.discount_reasons (code, name) values ('x_reg', 'Своя причина') $q$,
+  '42501', null,
+  'Стойка справочник причин не пополняет — только выбирает');
+
+-- 79
+select throws_ok(
+  $q$ select public.sell_subscription('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07', 300000, null,
+        (select id from t_ids where name = 'reasonB')) $q$,
+  '22023', 'Причина скидки не найдена, скрыта или в архиве',
+  'Причина другого центра — отказ');
+
+-- 80
 select throws_ok(
   $q$ select public.sell_subscription('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07', 300000) $q$,
   '22023', 'Укажите причину скидки: цена 3000,00 сом ниже цены типа 4000,00 сом',
   'Скидка без причины — отказ прямо в sell_subscription (А4)');
 
--- 74
+-- 81
 select lives_ok(
   $q$ insert into t_ids values ('disc', public.sell_subscription('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07', 300000, null,
         (select id from public.discount_reasons where code = 'second_child'))) $q$,
   'Скидка с причиной из справочника проходит');
 
--- 75
+-- 82
 select lives_ok(
   $q$ insert into t_ids values ('full', public.sell_subscription('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07', null, null,
         (select id from public.discount_reasons where code = 'promo'))) $q$,
@@ -739,7 +797,7 @@ select lives_ok(
 
 reset role;
 
--- 76
+-- 83
 select is(
   (select array_agg(array[coalesce(list_price_tiyin, -1)::text, price_tiyin::text, coalesce(discount_reason_id::text, '-')] order by price_tiyin)
      from public.subscriptions where id in (select id from t_ids where name in ('disc', 'full'))),
@@ -747,7 +805,7 @@ select is(
         array['400000', '400000', '-']],
   'Цена типа пишется всегда, причина — только при скидке');
 
--- 77
+-- 84
 select throws_ok(
   $q$ insert into public.subscriptions (center_id, student_id, payer_id, type_id, lessons_total, price_tiyin, lesson_price_tiyin,
                                         starts_at, list_price_tiyin)
@@ -759,21 +817,21 @@ select throws_ok(
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 78
+-- 85
 select throws_ok(
   $q$ select * from public.sell_subscription_paid('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07',
         '01010000-0000-0000-0000-00000000bbb1', 350000, null, 0) $q$,
   '22023', null,
   'Продажа с оплатой: скидка без причины — отказ');
 
--- 79
+-- 86
 select lives_ok(
   $q$ select * from public.sell_subscription_paid('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07',
         '01010000-0000-0000-0000-00000000bbb2', 350000, null, 350000, (select id from t_src), (select today from t_src),
         null, null, 1::smallint, 0, (select id from public.discount_reasons where code = 'regular')) $q$,
   'Продажа с оплатой и причиной скидки проходит');
 
--- 80
+-- 87
 select throws_ok(
   $q$ select * from public.subscription_discounts((select month from t_src), (select today from t_src)) $q$,
   '42501', null,
@@ -783,7 +841,7 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a5', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 81
+-- 88
 select is(
   (select count(*)::integer from public.discount_reasons),
   0,
@@ -793,14 +851,14 @@ reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a3', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 82
+-- 89
 select is(
   (select array_agg(array[discount_tiyin::text, reason_name, coalesce(sold_by_role, '-')] order by discount_tiyin)
      from public.subscription_discounts((select month from t_src), (select today from t_src))),
   array[array['50000', 'Постоянный клиент', 'registrar'], array['100000', 'Второй ребёнок', 'registrar']],
   'Бухгалтер видит продажи со скидкой: сумма, причина, роль продавца (А6)');
 
--- 83
+-- 90
 select is(
   (select array_agg(array[is_total::text, coalesce(reason_name, 'итог'), sales::text, discount_tiyin::text] order by is_total, discount_tiyin desc)
      from public.subscription_discount_totals((select month from t_src), (select today from t_src))),
@@ -809,21 +867,91 @@ select is(
         array['true', 'итог', '2', '150000']],
   'Итоги по причинам и строка итога — из базы, итог различается по is_total');
 
--- 84
+-- 91
 select lives_ok(
   $q$ select public.archive_discount_reason((select id from public.discount_reasons where code = 'promo' and deleted_at is null)) $q$,
   'Бухгалтер убирает причину в архив');
+
+-- 92
+select throws_ok(
+  $q$ update public.discount_reasons set code = 'zzz' where code = 'other' $q$,
+  '42501', null,
+  'Код причины бухгалтер не меняет — колоночный грант');
 
 reset role;
 select public.tests_claims('01010000-0000-0000-0000-0000000000a2', '01010000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 85
+-- 93
 select throws_ok(
   $q$ select public.sell_subscription('01010000-0000-0000-0000-0000000000f1', '01010000-0000-0000-0000-000000000e07', 390000, null,
         (select id from public.discount_reasons where code = 'promo')) $q$,
-  '22023', 'Причина скидки не найдена или в архиве',
+  '22023', 'Причина скидки не найдена, скрыта или в архиве',
   'Архивная причина в продаже не принимается');
+
+reset role;
+select public.tests_claims('01010000-0000-0000-0000-0000000000a3', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 94
+select lives_ok(
+  $q$ select public.restore_discount_reason((select id from public.discount_reasons where code = 'promo')) $q$,
+  'Бухгалтер возвращает причину из архива');
+
+reset role;
+select public.tests_claims('01010000-0000-0000-0000-0000000000a4', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 95
+select throws_ok(
+  $q$ select * from public.subscription_discounts((select month from t_src), (select today from t_src)) $q$,
+  '42501', null,
+  'Специалисту отчёт по скидкам закрыт');
+
+reset role;
+select public.tests_claims('01010000-0000-0000-0000-0000000000a5', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 96
+select throws_ok(
+  $q$ select * from public.subscription_discount_totals((select month from t_src), (select today from t_src)) $q$,
+  '42501', null,
+  'Родителю итоги скидок закрыты');
+
+reset role;
+
+
+-- 6. Закрытый месяц — последним: замок не должен мешать проверкам выше ----------------------------
+
+insert into public.financial_periods (center_id, month, closed_at)
+values ('01010000-0000-0000-0000-0000000000c1', (select month from t_src), now());
+
+select public.tests_claims('01010000-0000-0000-0000-0000000000a3', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 97
+select throws_like(
+  $q$ select public.pay_salary('01010000-0000-0000-0000-0000000000b1', (select month from t_src), 100000,
+                               (select id from t_src), (select today from t_src), 100000) $q$,
+  'Месяц % закрыт — операции с этой датой запрещены',
+  'Выплата датой в закрытом месяце — отказ замка');
+
+-- 98
+select throws_like(
+  $q$ select public.record_cash_transfer((select id from t_src), (select id2 from t_src), 100,
+                                         '01010000-0000-0000-0000-00000000aaa9', (select today from t_src)) $q$,
+  'Месяц % закрыт — операции с этой датой запрещены',
+  'Перевод датой в закрытом месяце — ветка замка по transferred_at');
+
+reset role;
+select public.tests_claims('01010000-0000-0000-0000-0000000000a1', '01010000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 99
+select throws_like(
+  $q$ select public.void_expense((select id from t_ids where name = 'payout2'), 'поздно') $q$,
+  'Месяц расхода (%) закрыт — переоткройте его во вкладке «Периоды», затем отмените расход',
+  'Отмена в закрытом месяце — свой текст с подсказкой, до вставки');
 
 reset role;
 
