@@ -4816,12 +4816,14 @@ export type Database = {
           cumulative_tiyin: number | null
           due_date: string | null
           due_notified_at: string | null
+          due_through_tiyin: number | null
           id: string | null
           overdue_notified_at: string | null
           paid_tiyin: number | null
           payer_id: string | null
           plan_id: string | null
           price_tiyin: number | null
+          row_remaining_tiyin: number | null
           seq: number | null
           state: string | null
           student_id: string | null
@@ -6086,13 +6088,26 @@ export type Database = {
       pay_installment: {
         Args: {
           p_comment?: string
+          p_expected_amount_tiyin: number
           p_installment_id: string
-          p_paid_at?: string
-          p_source_id?: string
+          p_paid_on?: string
+          p_source_id: string
         }
         Returns: string
       }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      payer_money_summary: {
+        Args: { p_payer_id: string }
+        Returns: {
+          credit_tiyin: number
+          lesson_debt_tiyin: number
+          next_due_date: string
+          next_due_tiyin: number
+          overdue_tiyin: number
+          student_id: string
+          unpaid_tiyin: number
+        }[]
+      }
       payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
       payer_telegram_status: { Args: { p_payer_id: string }; Returns: Json }
       payers_brief: {
@@ -6108,6 +6123,7 @@ export type Database = {
           relation: string
         }[]
       }
+      payments_day_summary: { Args: { p_day: string }; Returns: Json }
       period_subscription_reminders_at: {
         Args: { p_now: string }
         Returns: number
@@ -6830,6 +6846,15 @@ export type Database = {
       subscription_lessons_left: {
         Args: { p_subscription_id: string }
         Returns: number
+      }
+      subscription_overdue_unchecked: {
+        Args: { p_center: string }
+        Returns: {
+          overdue_tiyin: number
+          payer_id: string
+          student_id: string
+          subscription_id: string
+        }[]
       }
       subscription_payment_summary: {
         Args: { p_subscription_id: string }

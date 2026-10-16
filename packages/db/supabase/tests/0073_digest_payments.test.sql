@@ -135,11 +135,17 @@ select public.record_payment('73000000-0000-0000-0000-00000000dd01', -1000, 'cor
 select public.record_payment('73000000-0000-0000-0000-00000000dd01', -3000, 'refund', null, null, (select cash_id from t_src), '2026-06-10 12:00:00+06', 'день только с возвратом');
 select public.record_payment('73000000-0000-0000-0000-00000000dd01', 10000, 'payment', null, null, (select cash_id from t_src), '2026-06-05 10:00:00+06', 'плюс X');
 select public.record_payment('73000000-0000-0000-0000-00000000dd01', -10000, 'refund', null, null, (select cash_id from t_src), '2026-06-05 11:00:00+06', 'минус X');
-select public.record_expense((select id from t_cat), 40000, 'expense', (select cash_id from t_src), '2026-06-14', 'расход вчера');
 
 select public.tests_claims('73000000-0000-0000-0000-000000000005','73000000-0000-0000-0000-0000000000c2');
 select public.record_payment('73000000-0000-0000-0000-00000000dd02', 88800, 'payment', null, null, (select cash_b_id from t_src), '2026-06-14 10:00:00+06', 'чужой центр в те же сутки');
 reset role;
+-- Расход вчера — сырой вставкой: record_expense (0100 Р4) не принимает дату
+-- старше года, а дата сводки здесь фиксированная (D = 2026-06-15); через год
+-- вызов RPC уронил бы файл. Расход нужен, чтобы проверить: в «поступления»
+-- он не входит.
+insert into public.expenses (center_id, category_id, source_id, amount_tiyin, paid_at, kind, comment)
+values ('73000000-0000-0000-0000-0000000000c1', (select id from t_cat), (select cash_id from t_src),
+        40000, '2026-06-14 12:00:00+06', 'expense', 'расход вчера');
 select public.tests_claims(null, null);
 
 create temporary table t_ev (name text primary key, id bigint);

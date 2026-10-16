@@ -157,7 +157,9 @@ from unnest(array[
   'public.saved_filter_params_ok(text,jsonb)',
   'public.platform_day_end(uuid,date)',
   'public.platform_reason(text)',
-  'public.center_deleted_by_platform(uuid)'
+  'public.center_deleted_by_platform(uuid)',
+  -- 0100: просрочка по абонементам центра — только для definer-обёрток.
+  'public.subscription_overdue_unchecked(uuid)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -332,7 +334,7 @@ select set_eq(
     ('approve_salary(uuid,date)'),
     ('salary_summary(date)'),
     ('create_installment_plan(uuid,integer,date,smallint,integer)'),
-    ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
+    ('pay_installment(uuid,integer,uuid,date,text)'),
     ('cancel_installment_plan(uuid)'),
     ('subscription_payment_summary(uuid)'),
     ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)'),
@@ -461,7 +463,10 @@ select set_eq(
     ('platform_restore_center(uuid,text)'),
     ('platform_deleted_centers()'),
     ('platform_center_actions_recent(integer)'),
-    ('platform_gifted_since_payment(uuid)')
+    ('platform_gifted_since_payment(uuid)'),
+    -- 0100: деньги семьи на карточке плательщика, поступления за день в вебе.
+    ('payer_money_summary(uuid)'),
+    ('payments_day_summary(date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

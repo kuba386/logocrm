@@ -98,10 +98,16 @@ export async function recordExpense(_prev: FinanceState, formData: FormData): Pr
   return { message: '', notice: t('finance', 'expenseRecorded'), done: Date.now() }
 }
 
-/** Сумма строки рассрочки считается в pay_installment — форма её не передаёт. */
+/**
+ * Платёж по строке рассрочки (0100): проводится накопительно — всё по эту
+ * строку включительно. expected — сумма, которую показали на кнопке
+ * (installments_view.due_through_tiyin); изменилась — база ответит 23514 со
+ * свежей суммой, и ничего не запишет.
+ */
 export async function payInstallment(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
   const parsed = payInstallmentSchema.safeParse({
     installmentId: String(formData.get('installmentId') ?? ''),
+    expectedAmountTiyin: Number(formData.get('expectedAmountTiyin') ?? ''),
     sourceId: String(formData.get('sourceId') ?? ''),
     comment: optional(formData, 'comment') ?? '',
   })
@@ -111,6 +117,7 @@ export async function payInstallment(_prev: FinanceState, formData: FormData): P
   const supabase = await createClient()
   const { data: paymentId, error } = await supabase.rpc('pay_installment', {
     p_installment_id: input.installmentId,
+    p_expected_amount_tiyin: input.expectedAmountTiyin,
     p_source_id: input.sourceId,
     p_comment: input.comment || undefined,
   })

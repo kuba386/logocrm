@@ -57,6 +57,8 @@ export type InstallmentRow = {
   seq: number
   dueDate: string
   amountTiyin: number
+  /** Остаток строки (installments_view.row_remaining_tiyin, 0100): после частичной оплаты меньше плановой. */
+  remainingTiyin: number
   /** upcoming | due | overdue | paid — из installments_view, не считается на клиенте. */
   state: string
 }
@@ -944,7 +946,11 @@ function SubscriptionCard({
               <span>
                 {row.seq}. {calendarDate(row.dueDate, timeZone)} · {label('installmentState', row.state)}
               </span>
-              <span className="whitespace-nowrap tabular-nums">{formatSom(row.amountTiyin)}</span>
+              <span className="whitespace-nowrap tabular-nums">
+                {row.state !== 'paid' && row.remainingTiyin < row.amountTiyin
+                  ? `${formatSom(row.remainingTiyin)} из ${formatSom(row.amountTiyin)}`
+                  : formatSom(row.amountTiyin)}
+              </span>
             </li>
           ))}
         </ol>

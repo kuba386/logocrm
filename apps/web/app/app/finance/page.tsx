@@ -55,14 +55,14 @@ function calendarDate(day: string, timeZone: string): string {
 /** Фильтры списка платежей — из адреса, как у «Долгов»: ссылку можно переслать, назад работает. */
 type PaymentFilters = { q: string; source: string; kind: Kind | '' }
 
-function first(value: string | string[] | undefined): string {
+function firstParam(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? ''
 }
 
 function pickFilters(params: { q?: string | string[]; source?: string | string[]; kind?: string | string[] }): PaymentFilters {
-  const q = first(params.q).trim().slice(0, 60)
-  const sourceRaw = first(params.source)
-  const kindRaw = first(params.kind)
+  const q = firstParam(params.q).trim().slice(0, 60)
+  const sourceRaw = firstParam(params.source)
+  const kindRaw = firstParam(params.kind)
   const source = sourceRaw === 'none' || UUID.test(sourceRaw) ? sourceRaw : ''
   const kind = kindRaw === 'payment' || kindRaw === 'refund' || kindRaw === 'correction' ? kindRaw : ''
   return { q, source, kind }
@@ -71,7 +71,15 @@ function pickFilters(params: { q?: string | string[]; source?: string | string[]
 export default async function FinancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; month?: string; q?: string | string[]; source?: string | string[]; kind?: string | string[]; category?: string }>
+  searchParams: Promise<{
+    tab?: string
+    month?: string
+    q?: string | string[]
+    source?: string | string[]
+    kind?: string | string[]
+    category?: string
+    day?: string | string[]
+  }>
 }) {
   const params = await searchParams
   const supabase = await createClient()
@@ -108,6 +116,9 @@ export default async function FinancePage({
   const fromIso = startOfDayInZone(first, timeZone)
   const toIso = startOfDayInZone(next, timeZone)
   const filters = pickFilters(params)
+  // День для «Поступлений за день» — не позже сегодняшнего дня центра.
+  const dayRaw = firstParam(params.day)
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) && dayRaw <= today ? dayRaw : today
   const categoryFilter = UUID.test(params.category ?? '') ? params.category! : ''
 
   // Касса — только can_finance (cash_by_source, 0028): регистратору вью отдаёт
@@ -226,6 +237,8 @@ export default async function FinancePage({
               sourceName={sourceName}
               cashError={cashError}
               filters={filters}
+              day={day}
+              today={today}
               payerName={(id) => payerById.get(id)?.full_name ?? '—'}
               studentName={studentName}
               totals={{
@@ -269,6 +282,8 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
 
 async function PaymentsTab({
   supabase,
+  day,
+  today,
   finance,
   isOwner,
   month,
@@ -287,6 +302,9 @@ async function PaymentsTab({
   students,
 }: {
   supabase: Supabase
+  /** День «Поступлений за день» (ГГГГ-ММ-ДД, не позже сегодня по центру). */
+  day: string
+  today: string
   /** owner/admin/finance — итоги кассы (cash_by_source); регистратору их нет. */
   finance: boolean
   /** Владелец — «Отменить» у ошибочного поступления (0093); право проверяет база. */
@@ -405,6 +423,9 @@ async function PaymentsTab({
       ) : (
         <p className="text-sm text-muted-foreground">{t('finance', 'registrarNoCash')}</p>
       )}
+
+      {/* Поступления за день — всем, кто принимает оплату (0100: решение владельца — стойке тоже, сдать кассу вечером). */}
+      <DaySummary supabase={supabase} day={day} today={today} month={month} timeZone={timeZone} />
 
       {/* GET-форма: фильтры попадают в адрес, как на «Долгах». */}
       <form action="/app/finance" className="flex flex-wrap items-end gap-2">
@@ -664,12 +685,16 @@ async function InstallmentsTab({
 }) {
   const { data: rows, error: installmentsError, count: installmentsCount } = await supabase
     .from('installments_view')
-    .select('id, subscription_id, student_id, payer_id, seq, due_date, amount_tiyin, state, cancelled_at', { count: 'exact' })
+    .select('id, subscription_id, student_id, payer_id, seq, due_date, amount_tiyin, state, cancelled_at, due_through_tiyin, row_remaining_tiyin', {
+      count: 'exact',
+    })
     .is('cancelled_at', null)
     .neq('state', 'paid')
     .order('due_date')
     .limit(LIST_LIMIT)
-  const live = (rows ?? []).filter((r) => r.id && r.due_date && r.amount_tiyin != null)
+  const live = (rows ?? []).filter(
+    (r) => r.id && r.due_date && r.amount_tiyin != null && r.due_through_tiyin != null && r.row_remaining_tiyin != null,
+  )
   const studentIds = [...new Set(live.map((r) => r.student_id).filter((v): v is string => Boolean(v)))]
   const payerIds = [...new Set(live.map((r) => r.payer_id).filter((v): v is string => Boolean(v)))]
   const [{ data: students }, { data: payers }] = await Promise.all([
@@ -732,9 +757,11 @@ async function InstallmentsTab({
                 const wa = payer?.phone ? whatsappNumber(payer.phone) : null
                 const student = r.student_id ? (studentName.get(r.student_id) ?? '—') : '—'
                 const due = calendarDate(r.due_date as string, timeZone)
+                // Остаток строки (0100): после частичной оплаты родителю не напомним плановую сумму.
+                const remaining = r.row_remaining_tiyin as number
                 const message = t('finance', 'whatsappReminder', {
                   student,
-                  amount: formatSom(r.amount_tiyin as number),
+                  amount: formatSom(remaining),
                   due,
                 })
                 return (
@@ -756,7 +783,14 @@ async function InstallmentsTab({
                     <TableCell className={cn(r.state === 'overdue' && 'text-destructive')}>
                       {label('installmentState', r.state ?? '')}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatSom(r.amount_tiyin as number)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatSom(remaining)}
+                      {remaining < (r.amount_tiyin as number) ? (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {t('finance', 'partOf', { sum: formatSom(r.amount_tiyin as number) })}
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {wa ? (
@@ -771,7 +805,8 @@ async function InstallmentsTab({
                         ) : null}
                         <PayInstallmentForm
                           installmentId={r.id as string}
-                          amountTiyin={r.amount_tiyin as number}
+                          dueThroughTiyin={r.due_through_tiyin as number}
+                          rowRemainingTiyin={remaining}
                           sources={sources}
                           defaultSourceId={r.subscription_id ? lastSourceBySubscription.get(r.subscription_id) : undefined}
                         />
@@ -884,5 +919,75 @@ async function PeriodsTab({
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+type DayJson = { total_tiyin?: number; ops?: number; by_source?: { name: string; total_tiyin: number; ops: number }[] }
+
+/**
+ * Поступления за день (0100 Р6) — то же, что /cash в боте: платежи дня центра
+ * по способам оплаты, расходы не входят. Только can_finance — как /cash и
+ * cash_by_source; регистратору блок не рисуется (база ответила бы 42501).
+ */
+async function DaySummary({
+  supabase,
+  day,
+  today,
+  month,
+  timeZone,
+}: {
+  supabase: Supabase
+  day: string
+  today: string
+  month: string
+  timeZone: string
+}) {
+  const { data, error } = await supabase.rpc('payments_day_summary', { p_day: day })
+  const summary = (data ?? {}) as DayJson
+  const label = calendarDate(day, timeZone)
+  return (
+    <Card>
+      <CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between sm:space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>{t('finance', 'dayTitle')}</CardTitle>
+          <CardDescription>{t('finance', 'dayHint')}</CardDescription>
+        </div>
+        <form action="/app/finance" className="flex items-end gap-2">
+          <input type="hidden" name="tab" value="payments" />
+          <input type="hidden" name="month" value={month} />
+          <div className="space-y-1">
+            <Label htmlFor="day-pick">{t('finance', 'dayPick')}</Label>
+            <Input id="day-pick" name="day" type="date" defaultValue={day} max={today} className="w-auto" />
+          </div>
+          <button type="submit" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            {t('finance', 'filterApply')}
+          </button>
+        </form>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <FormError message={loadErrorMessage(error, t('finance', 'dayLoadFailed'))} />
+        ) : (summary.ops ?? 0) === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('finance', 'dayEmpty', { day: label })}</p>
+        ) : (
+          <div className="space-y-3 text-sm">
+            <p>
+              {label}: <strong className="tabular-nums">{formatSom(Number(summary.total_tiyin ?? 0))}</strong>
+              <span className="text-muted-foreground"> · {t('finance', 'dayOps', { n: Number(summary.ops ?? 0) })}</span>
+            </p>
+            <ul className="flex flex-wrap gap-2">
+              {(summary.by_source ?? []).map((row) => (
+                <li key={row.name} className="rounded-full border border-border px-3 py-1">
+                  <span className="text-muted-foreground">{row.name}</span>{' '}
+                  <span className={cn('font-medium tabular-nums', row.total_tiyin < 0 && 'text-destructive')}>
+                    {formatSom(Number(row.total_tiyin))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

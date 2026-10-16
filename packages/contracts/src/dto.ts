@@ -293,6 +293,8 @@ export type RecordExpenseInput = z.infer<typeof recordExpenseSchema>
 
 export const payInstallmentSchema = z.object({
   installmentId: z.string().uuid('Некорректный платёж рассрочки'),
+  /** Сумма, которую показали на кнопке (installments_view.due_through_tiyin): иначе — 23514 (0100). */
+  expectedAmountTiyin: z.number().int().positive('Обновите страницу: сумма к оплате не передана'),
   sourceId: z.string().uuid('Укажите источник оплаты'),
   comment: commentSchema,
 })

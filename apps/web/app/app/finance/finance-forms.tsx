@@ -292,9 +292,7 @@ function PaymentForm({
           <legend className="px-1 font-medium">{t('finance', 'purposeTitle')}</legend>
           <label className="flex items-start gap-2">
             <input type="radio" name="purpose" value="debt" checked={purpose === 'debt'} onChange={() => setPurpose('debt')} className="mt-1" />
-            <span>
-              {t('finance', 'purposeDebt', { sum: formatSom(student.lessonDebtTiyin) })}
-            </span>
+            <span>{t('finance', 'purposeDebt', { sum: formatSom(student.lessonDebtTiyin) })}</span>
           </label>
           <label className="flex items-start gap-2">
             <input type="radio" name="purpose" value="other" checked={purpose === 'other'} onChange={() => setPurpose('other')} className="mt-1" />
@@ -455,17 +453,22 @@ function ExpenseForm({
 
 export function PayInstallmentForm({
   installmentId,
-  amountTiyin,
+  dueThroughTiyin,
+  rowRemainingTiyin,
   sources,
   defaultSourceId,
 }: {
   installmentId: string
-  amountTiyin: number
+  /** Сколько проведёт pay_installment — всё по эту строку включительно (installments_view, 0100). */
+  dueThroughTiyin: number
+  /** Остаток самой строки — для подсказки «вместе с предыдущими». */
+  rowRemainingTiyin: number
   sources: Option[]
   /** Источник последнего платежа по этому абонементу — если он ещё активен. */
   defaultSourceId?: string
 }) {
   const notice = usePageNotice()
+  const router = useRouter()
   const [state, formAction] = useResultAction(payInstallment, initial, (next) =>
     notice?.({
       text: next.notice ?? t('finance', 'installmentPaid'),
@@ -474,10 +477,15 @@ export function PayInstallmentForm({
     }),
   )
   const [source, setSource] = useLastSource(sources, defaultSourceId)
+  // Сумма изменилась (23514) — перечитать страницу: на кнопке станет свежая.
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
 
   return (
     <form action={formAction} className="flex flex-wrap items-center justify-end gap-2">
       <input type="hidden" name="installmentId" value={installmentId} />
+      <input type="hidden" name="expectedAmountTiyin" value={dueThroughTiyin} />
       <Select name="sourceId" aria-label={t('finance', 'source')} value={source} onChange={(e) => setSource(e.target.value)} className="w-auto">
         {sources.map((s) => (
           <option key={s.id} value={s.id}>
@@ -486,8 +494,11 @@ export function PayInstallmentForm({
         ))}
       </Select>
       <SubmitButton variant="outline">
-        {t('finance', 'markPaid')} · {formatSom(amountTiyin)}
+        {t('finance', 'markPaid')} · {formatSom(dueThroughTiyin)}
       </SubmitButton>
+      {dueThroughTiyin > rowRemainingTiyin ? (
+        <span className="w-full text-right text-xs text-muted-foreground">{t('finance', 'withPrevious')}</span>
+      ) : null}
       <FormError message={state.message} />
       {notice ? null : <FormNotice message={state.notice} />}
     </form>
