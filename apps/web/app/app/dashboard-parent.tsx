@@ -113,13 +113,15 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
       .order('paid_at', { ascending: false }),
     supabase
       .from('installments_view')
-      .select('id, student_id, due_date, amount_tiyin, state, cancelled_at')
+      // row_remaining (0100): после частичной оплаты — остаток строки, как в
+      // просрочке на той же странице, а не плановая сумма.
+      .select('id, student_id, due_date, amount_tiyin, row_remaining_tiyin, state, cancelled_at')
       .is('cancelled_at', null)
       .neq('state', 'paid')
       .order('due_date'),
   ])
   const payments = paymentRows ?? []
-  const installments = (installmentRows ?? []).filter((r) => r.due_date && r.amount_tiyin != null)
+  const installments = (installmentRows ?? []).filter((r) => r.due_date && r.row_remaining_tiyin != null)
   const childName = new Map((children ?? []).map((c) => [c.id ?? '', c.full_name ?? '']))
 
   return (
@@ -203,7 +205,7 @@ export async function ParentDashboard({ timeZone }: { timeZone: string }) {
                   <span className="truncate">{childName.get(row.student_id ?? '') || '—'}</span>
                   <span className="shrink-0">
                     {t('dashboard', row.state === 'overdue' ? 'parentInstallmentOverdue' : 'parentInstallmentDue', {
-                      amount: formatSom(row.amount_tiyin as number),
+                      amount: formatSom(row.row_remaining_tiyin as number),
                       due: calendarDate(row.due_date as string, timeZone),
                     })}
                   </span>

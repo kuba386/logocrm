@@ -535,6 +535,7 @@ const installmentPayload = z.object({
   payer_id: z.string().uuid(),
   seq: z.number().int().positive(),
   due_date: z.string(),
+  /** Остаток этой строки на момент уведомления (installments_view.row_remaining_tiyin, 0100), не плановая сумма. */
   amount_tiyin: z.number().int().positive(),
 })
 

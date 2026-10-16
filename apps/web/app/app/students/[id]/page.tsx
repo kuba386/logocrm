@@ -260,11 +260,11 @@ export default async function StudentPage({
       subscriptionIds.length
         ? supabase
             .from('installments_view')
-            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .select('subscription_id, seq, due_date, amount_tiyin, row_remaining_tiyin, state, cancelled_at')
             .in('subscription_id', subscriptionIds)
             .is('cancelled_at', null)
             .order('seq')
-        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; row_remaining_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
     ])
 
     // Границы текущей заморозки — из subscription_summary (freeze_from/
@@ -323,6 +323,7 @@ export default async function StudentPage({
             seq: r.seq as number,
             dueDate: r.due_date as string,
             amountTiyin: r.amount_tiyin as number,
+            remainingTiyin: r.row_remaining_tiyin ?? (r.amount_tiyin as number),
             state: r.state ?? '',
           })),
         cover: cover
@@ -450,11 +451,11 @@ export default async function StudentPage({
       subscriptionIds.length
         ? supabase
             .from('installments_view')
-            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .select('subscription_id, seq, due_date, amount_tiyin, row_remaining_tiyin, state, cancelled_at')
             .in('subscription_id', subscriptionIds)
             .is('cancelled_at', null)
             .order('seq')
-        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; row_remaining_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
       Promise.all((subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id }))),
     ])
 
@@ -484,6 +485,7 @@ export default async function StudentPage({
             seq: r.seq as number,
             dueDate: r.due_date as string,
             amountTiyin: r.amount_tiyin as number,
+            remainingTiyin: r.row_remaining_tiyin ?? (r.amount_tiyin as number),
             state: r.state ?? '',
           })),
       }

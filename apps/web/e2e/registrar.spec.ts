@@ -59,5 +59,11 @@ test('Стойка: в «Финансах» нет итогов кассы, но
   await expect(page.getByRole('link', { name: 'Расходы' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Добавить расход' })).toHaveCount(0)
 
+  // «Поступления за день» стойке видны (0100, решение владельца — сдать кассу вечером).
+  // Итог дня здесь не сверяем: сегодня платят и другие проекты e2e — сумма плавает;
+  // сверку с ботом держит pgTAP 0100. Достаточно, что блок есть и не пустой.
+  await expect(page.getByText('Поступления за день', { exact: true })).toBeVisible()
+  await expect(page.getByText(/операций: \d+/)).toBeVisible()
+
   await expect(page.getByRole('link', { name: 'Плательщики' }).first()).toBeVisible()
 })
