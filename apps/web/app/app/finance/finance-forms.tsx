@@ -6,8 +6,18 @@ import { useRouter } from 'next/navigation'
 import { useFormStatus } from 'react-dom'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { formatSom } from '@logocrm/core'
-import { closeMonth, payInstallment, recordExpense, recordPayment, reopenMonth, voidPayment, type FinanceState } from './finance-actions'
-import { acceptDebtPayment, type DebtActionState } from '../debts/debt-actions'
+import {
+  closeMonth,
+  payInstallment,
+  recordCashTransfer,
+  recordExpense,
+  recordPayment,
+  reopenMonth,
+  voidExpense,
+  voidPayment,
+  type FinanceState,
+} from './finance-actions'
+import { acceptDebtPayment, acceptLessonAdvance, type DebtActionState } from '../debts/debt-actions'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -192,20 +202,27 @@ function PaymentForm({
   const [debtState, debtAction, debtPending] = useResultAction(acceptDebtPayment, initialDebt, (next) =>
     onDone(next.notice ?? 'Оплата принята', next.paymentId),
   )
+  const [advanceState, advanceAction, advancePending] = useResultAction(acceptLessonAdvance, initialDebt, (next) =>
+    onDone(next.notice ?? 'Аванс принят', next.paymentId),
+  )
   const [payerId, setPayerId] = useState('')
   const [studentId, setStudentId] = useState('')
   const [kind, setKind] = useState<'payment' | 'refund' | 'correction'>('payment')
-  const [purpose, setPurpose] = useState<'debt' | 'other'>('debt')
+  // У ребёнка без долга назначение не выбрано заранее: «аванс» и «прочее» по-разному
+  // ложатся в счёт (0087 Р1 — флаг долга ставит только явное действие).
+  const [purpose, setPurpose] = useState<'debt' | 'advance' | 'other' | ''>('debt')
   const [amountSom, setAmountSom] = useState('')
 
   const ownStudents = payerId ? students.filter((s) => s.payerId === payerId) : students
   const student = students.find((s) => s.id === studentId)
   const debtMode = kind === 'payment' && Boolean(student && student.lessonDebtTiyin > 0) && purpose === 'debt'
+  const advanceMode = kind === 'payment' && Boolean(student && student.lessonDebtTiyin === 0) && purpose === 'advance'
+  const accountMode = debtMode || advanceMode
 
-  // Долг изменился, пока открывали форму (23514), — свежие суммы с сервера.
+  // Долг или аванс изменились, пока открывали форму (23514), — свежие суммы с сервера.
   useEffect(() => {
-    if (debtState.message) router.refresh()
-  }, [debtState, router])
+    if (debtState.message || advanceState.message) router.refresh()
+  }, [debtState, advanceState, router])
 
   function onPayer(id: string) {
     setPayerId(id)
@@ -219,13 +236,15 @@ function PaymentForm({
     if (picked && picked.lessonDebtTiyin > 0 && kind === 'payment') {
       setPurpose('debt')
       setAmountSom(String(picked.lessonDebtTiyin / 100))
+    } else if (picked) {
+      setPurpose('')
     }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
-    startTransition(() => (debtMode ? debtAction(formData) : formAction(formData)))
+    startTransition(() => (debtMode ? debtAction(formData) : advanceMode ? advanceAction(formData) : formAction(formData)))
   }
 
   const extraTiyin = debtMode && student ? somToTiyin(amountSom) - student.lessonDebtTiyin : 0
@@ -233,6 +252,7 @@ function PaymentForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       {debtMode && student ? <input type="hidden" name="expectedTiyin" value={student.lessonDebtTiyin} /> : null}
+      {advanceMode && student ? <input type="hidden" name="expectedCreditTiyin" value={student.creditTiyin} /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="payment-payer">{t('finance', 'payer')}</Label>
@@ -247,7 +267,7 @@ function PaymentForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor="payment-student">{t('finance', 'student')}</Label>
-          <Select id="payment-student" name="studentId" value={studentId} onChange={(e) => onStudent(e.target.value)} required={debtMode}>
+          <Select id="payment-student" name="studentId" value={studentId} onChange={(e) => onStudent(e.target.value)} required={accountMode}>
             <option value="">{t('finance', 'noStudent')}</option>
             {ownStudents.map((s) => (
               <option key={s.id} value={s.id}>
@@ -292,15 +312,38 @@ function PaymentForm({
           <legend className="px-1 font-medium">{t('finance', 'purposeTitle')}</legend>
           <label className="flex items-start gap-2">
             <input type="radio" name="purpose" value="debt" checked={purpose === 'debt'} onChange={() => setPurpose('debt')} className="mt-1" />
-            <span>
-              {t('finance', 'purposeDebt', { sum: formatSom(student.lessonDebtTiyin) })}
-            </span>
+            <span>{t('finance', 'purposeDebt', { sum: formatSom(student.lessonDebtTiyin) })}</span>
           </label>
           <label className="flex items-start gap-2">
             <input type="radio" name="purpose" value="other" checked={purpose === 'other'} onChange={() => setPurpose('other')} className="mt-1" />
             <span>{t('finance', 'purposeOther')}</span>
           </label>
           {extraTiyin > 0 ? <p className="text-info">{t('finance', 'purposeExtra', { sum: formatSom(extraTiyin) })}</p> : null}
+        </fieldset>
+      ) : null}
+      {kind === 'payment' && student && student.lessonDebtTiyin === 0 ? (
+        <fieldset className="space-y-2 rounded-md border border-border p-3 text-sm">
+          <legend className="px-1 font-medium">{t('finance', 'purposeTitle')}</legend>
+          <label className="flex items-start gap-2">
+            <input
+              type="radio"
+              name="purpose"
+              value="advance"
+              required
+              checked={purpose === 'advance'}
+              onChange={() => setPurpose('advance')}
+              className="mt-1"
+            />
+            <span>
+              {t('finance', 'purposeAdvance', {
+                credit: student.creditTiyin > 0 ? t('finance', 'purposeAdvanceCredit', { sum: formatSom(student.creditTiyin) }) : '',
+              })}
+            </span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="radio" name="purpose" value="other" required checked={purpose === 'other'} onChange={() => setPurpose('other')} className="mt-1" />
+            <span>{t('finance', 'purposeOtherNoDebt')}</span>
+          </label>
         </fieldset>
       ) : null}
       {kind === 'payment' && student && student.overdueTiyin > 0 ? (
@@ -323,8 +366,8 @@ function PaymentForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="payment-source">{t('finance', 'source')}</Label>
-          {/* Оплате долга источник обязателен (0087); прочему платежу — по желанию, как раньше. */}
-          <SourceSelect id="payment-source" sources={sources} allowEmpty={!debtMode} />
+          {/* Оплате долга и авансу источник обязателен (0087, 0101); прочему платежу — по желанию, как раньше. */}
+          <SourceSelect id="payment-source" sources={sources} allowEmpty={!accountMode} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="payment-date">{t('finance', 'date')}</Label>
@@ -332,19 +375,35 @@ function PaymentForm({
         </div>
         <div className="space-y-1 sm:col-span-2">
           <Label htmlFor="payment-comment">{t('finance', 'comment')}</Label>
-          <Input id="payment-comment" name="comment" maxLength={500} placeholder={debtMode ? 'Оплата долга за занятия' : undefined} />
+          <Input
+            id="payment-comment"
+            name="comment"
+            maxLength={500}
+            placeholder={debtMode ? 'Оплата долга за занятия' : advanceMode ? 'Аванс за занятия' : undefined}
+          />
         </div>
       </div>
-      <FormError message={debtMode ? debtState.message : state.message} />
-      <PendingButton pending={debtMode ? debtPending : pending}>
-        {debtMode ? t('finance', 'submitDebtPayment') : t('finance', 'submitPayment')}
+      <FormError message={debtMode ? debtState.message : advanceMode ? advanceState.message : state.message} />
+      <PendingButton pending={debtMode ? debtPending : advanceMode ? advancePending : pending}>
+        {debtMode ? t('finance', 'submitDebtPayment') : advanceMode ? t('finance', 'submitAdvance') : t('finance', 'submitPayment')}
       </PendingButton>
     </form>
   )
 }
 
 /** «Добавить расход» в шапке — диалог; итог и квитанции у расхода нет, только строка в списке. */
-export function ExpenseDialog({ categories, sources, today }: { categories: Option[]; sources: Option[]; today: string }) {
+export function ExpenseDialog({
+  categories,
+  sources,
+  today,
+  salaryCategoryId,
+}: {
+  categories: Option[]
+  sources: Option[]
+  today: string
+  /** Статья «Зарплата» (код salary) — при её выборе подсказка про выплату в «Зарплате» (0101). */
+  salaryCategoryId?: string
+}) {
   const [open, setOpen] = useState(false)
   const [round, setRound] = useState(0)
   const notice = usePageNotice()
@@ -368,6 +427,7 @@ export function ExpenseDialog({ categories, sources, today }: { categories: Opti
             categories={categories}
             sources={sources}
             today={today}
+            salaryCategoryId={salaryCategoryId}
             onDone={(text) => {
               setOpen(false)
               notice?.({ text })
@@ -383,16 +443,19 @@ function ExpenseForm({
   categories,
   sources,
   today,
+  salaryCategoryId,
   onDone,
 }: {
   categories: Option[]
   sources: Option[]
   today: string
+  salaryCategoryId?: string
   onDone: (text: string) => void
 }) {
   const [state, formAction, pending] = useResultAction(recordExpense, initial, (next) =>
     onDone(next.notice ?? t('finance', 'expenseRecorded')),
   )
+  const [categoryId, setCategoryId] = useState('')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -405,7 +468,7 @@ function ExpenseForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="expense-category">{t('finance', 'category')}</Label>
-          <Select id="expense-category" name="categoryId" required defaultValue="">
+          <Select id="expense-category" name="categoryId" required value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">{t('finance', 'chooseCategory')}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -441,6 +504,16 @@ function ExpenseForm({
           <Input id="expense-comment" name="comment" maxLength={500} />
         </div>
       </div>
+      {/* Выплата специалисту из «Расходов» не попала бы в «Выплачено» на странице зарплаты (0101).
+          Не запрет: зарплату сотрудникам без карточки специалиста проводят здесь. */}
+      {salaryCategoryId && categoryId === salaryCategoryId ? (
+        <p className="rounded-md bg-info-bg px-3 py-2 text-sm text-info">
+          {t('finance', 'salaryCategoryHint')}{' '}
+          <Link href="/app/salary" className="font-medium underline underline-offset-4">
+            {t('finance', 'salaryCategoryLink')}
+          </Link>
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         {t('finance', 'categoriesHint')}{' '}
         <Link href="/app/settings/expense-categories" className="underline underline-offset-4">
@@ -455,17 +528,22 @@ function ExpenseForm({
 
 export function PayInstallmentForm({
   installmentId,
-  amountTiyin,
+  dueThroughTiyin,
+  rowRemainingTiyin,
   sources,
   defaultSourceId,
 }: {
   installmentId: string
-  amountTiyin: number
+  /** Сколько проведёт pay_installment — всё по эту строку включительно (installments_view, 0100). */
+  dueThroughTiyin: number
+  /** Остаток самой строки — для подсказки «вместе с предыдущими». */
+  rowRemainingTiyin: number
   sources: Option[]
   /** Источник последнего платежа по этому абонементу — если он ещё активен. */
   defaultSourceId?: string
 }) {
   const notice = usePageNotice()
+  const router = useRouter()
   const [state, formAction] = useResultAction(payInstallment, initial, (next) =>
     notice?.({
       text: next.notice ?? t('finance', 'installmentPaid'),
@@ -474,10 +552,15 @@ export function PayInstallmentForm({
     }),
   )
   const [source, setSource] = useLastSource(sources, defaultSourceId)
+  // Сумма изменилась (23514) — перечитать страницу: на кнопке станет свежая.
+  useEffect(() => {
+    if (state.message) router.refresh()
+  }, [state, router])
 
   return (
     <form action={formAction} className="flex flex-wrap items-center justify-end gap-2">
       <input type="hidden" name="installmentId" value={installmentId} />
+      <input type="hidden" name="expectedAmountTiyin" value={dueThroughTiyin} />
       <Select name="sourceId" aria-label={t('finance', 'source')} value={source} onChange={(e) => setSource(e.target.value)} className="w-auto">
         {sources.map((s) => (
           <option key={s.id} value={s.id}>
@@ -486,8 +569,11 @@ export function PayInstallmentForm({
         ))}
       </Select>
       <SubmitButton variant="outline">
-        {t('finance', 'markPaid')} · {formatSom(amountTiyin)}
+        {t('finance', 'markPaid')} · {formatSom(dueThroughTiyin)}
       </SubmitButton>
+      {dueThroughTiyin > rowRemainingTiyin ? (
+        <span className="w-full text-right text-xs text-muted-foreground">{t('finance', 'withPrevious')}</span>
+      ) : null}
       <FormError message={state.message} />
       {notice ? null : <FormNotice message={state.notice} />}
     </form>
@@ -579,6 +665,201 @@ export function VoidPaymentForm({ paymentId, amountTiyin }: { paymentId: string;
       </div>
       <FormError message={state.message} />
       <FormNotice message={state.notice} />
+    </form>
+  )
+}
+
+type TransferPrefill = { fromSourceId: string; toSourceId: string; amountSom: string }
+
+function TransferForm({
+  sources,
+  today,
+  prefill,
+  onDone,
+}: {
+  sources: Option[]
+  today: string
+  prefill?: TransferPrefill
+  onDone: (text: string) => void
+}) {
+  const [state, formAction, pending] = useResultAction(recordCashTransfer, initial, (next) =>
+    onDone(next.notice ?? t('finance', 'transferRecorded')),
+  )
+  const [from, setFrom] = useState(prefill?.fromSourceId ?? sources[0]?.id ?? '')
+  const [to, setTo] = useState(prefill?.toSourceId ?? sources.find((s) => s.id !== (prefill?.fromSourceId ?? sources[0]?.id))?.id ?? '')
+  // Ключ идемпотентности (0101 А11): не при инициализации — случайный uuid на
+  // сервере и клиенте разошёлся бы в гидратации. Новый — на каждый ответ сервера.
+  const [transferKey, setTransferKey] = useState('')
+  useEffect(() => {
+    setTransferKey(crypto.randomUUID())
+  }, [state])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => formAction(formData))
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <input type="hidden" name="transferKey" value={transferKey} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="transfer-from">{t('finance', 'transferFrom')}</Label>
+          <Select id="transfer-from" name="fromSourceId" required value={from} onChange={(e) => setFrom(e.target.value)}>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="transfer-to">{t('finance', 'transferTo')}</Label>
+          <Select id="transfer-to" name="toSourceId" required value={to} onChange={(e) => setTo(e.target.value)}>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id} disabled={s.id === from}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="transfer-amount">{t('finance', 'amountSom')}</Label>
+          <Input
+            id="transfer-amount"
+            name="amountSom"
+            type="number"
+            inputMode="decimal"
+            min="0.01"
+            step="0.01"
+            required
+            defaultValue={prefill?.amountSom}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="transfer-date">{t('finance', 'date')}</Label>
+          <Input id="transfer-date" name="transferredOn" type="date" defaultValue={today} max={today} required />
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="transfer-comment">{t('finance', 'comment')}</Label>
+          <Input id="transfer-comment" name="comment" maxLength={500} placeholder={t('finance', 'transferCommentPlaceholder')} />
+        </div>
+      </div>
+      {from && from === to ? <p className="text-sm text-destructive">{t('finance', 'transferSameSource')}</p> : null}
+      <FormError message={state.message} />
+      <PendingButton pending={pending || !transferKey}>{t('finance', 'transferSubmit')}</PendingButton>
+    </form>
+  )
+}
+
+/**
+ * «Перевод между кассами» (0101): наличные сдали в банк, терминал перечислил
+ * на расчётный счёт. Итог центра за месяц не меняется — меняются итоги касс.
+ * prefill — «Обратный перевод» у строки списка: исправить ошибочный перевод.
+ */
+export function TransferDialog({
+  sources,
+  today,
+  prefill,
+  label: buttonLabel,
+}: {
+  sources: Option[]
+  today: string
+  prefill?: TransferPrefill
+  label?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [round, setRound] = useState(0)
+  const notice = usePageNotice()
+  if (sources.length < 2) return null
+  return (
+    <>
+      <Button
+        type="button"
+        variant={prefill ? 'ghost' : 'outline'}
+        size={prefill ? 'sm' : 'default'}
+        onClick={() => {
+          notice?.(null)
+          setRound((r) => r + 1)
+          setOpen(true)
+        }}
+      >
+        {buttonLabel ?? t('finance', 'transfer')}
+      </Button>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={prefill ? t('finance', 'transferReverseTitle') : t('finance', 'transfer')}
+        description={t('finance', 'transferHint')}
+      >
+        {open ? (
+          <TransferForm
+            key={round}
+            sources={sources}
+            today={today}
+            prefill={prefill}
+            onDone={(text) => {
+              setOpen(false)
+              notice?.({ text })
+            }}
+          />
+        ) : null}
+      </Dialog>
+    </>
+  )
+}
+
+/**
+ * «Отменить» у ошибочного расхода (0101) — только владелец, причина обязательна.
+ * Отмена — корректировка с минусом той же датой; у выплаты зарплаты уменьшится
+ * «Выплачено» специалиста. Итог — в уведомление страницы из обёртки действия:
+ * после отмены строка перерисовывается без этой формы, и её собственное
+ * уведомление пропало бы вместе с ней.
+ */
+export function VoidExpenseForm({ expenseId, amountTiyin }: { expenseId: string; amountTiyin: number }) {
+  const notice = usePageNotice()
+  const [local, setLocal] = useState<string | undefined>(undefined)
+  const [state, formAction] = useResultAction(voidExpense, initial, (next) => {
+    const text = next.notice ?? 'Расход отменён'
+    if (notice) notice({ text })
+    else setLocal(text)
+  })
+  const [open, setOpen] = useState(false)
+  // Управляемое поле: <form action> React 19 сбрасывает форму и при отказе — причина не должна пропадать.
+  const [reason, setReason] = useState('')
+
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Отменить
+      </Button>
+    )
+  }
+
+  return (
+    <form action={formAction} className="space-y-2">
+      <input type="hidden" name="expenseId" value={expenseId} />
+      <Input
+        name="reason"
+        required
+        maxLength={500}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Причина, например «внесли дважды»"
+        aria-label="Причина отмены"
+      />
+      <div className="flex gap-2">
+        <ConfirmSubmit
+          label="Отменить расход"
+          question={`Отменить расход ${formatSom(amountTiyin)}? Рядом появится отмена на ту же сумму, в кассе станет на ${formatSom(amountTiyin)} больше.`}
+        />
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Не отменять
+        </Button>
+      </div>
+      <FormError message={state.message} />
+      <FormNotice message={local} />
     </form>
   )
 }

@@ -57,6 +57,8 @@ export type InstallmentRow = {
   seq: number
   dueDate: string
   amountTiyin: number
+  /** Остаток строки (installments_view.row_remaining_tiyin, 0100): после частичной оплаты меньше плановой. */
+  remainingTiyin: number
   /** upcoming | due | overdue | paid — из installments_view, не считается на клиенте. */
   state: string
 }
@@ -67,6 +69,10 @@ export type SubscriptionView = {
   /** Плательщик абонемента — перенос остатка только его детям (0091). */
   payerId?: string | null
   priceTiyin: number
+  /** Цена типа на момент продажи (0101); null — продан до 0101 или создан переносом остатка. */
+  listPriceTiyin?: number | null
+  /** Название причины скидки из справочника (0101) — только сотрудникам: родителю справочник закрыт. */
+  discountReason?: string | null
   startsAt: string
   endsAt: string | null
   /** Сколько занятий в пакете (subscriptions.lessons_total); null — срок или безлимит. */
@@ -306,6 +312,7 @@ function SellForm({
   studentId,
   types,
   sources,
+  discountReasons,
   today,
   timeZone,
   onDone,
@@ -313,6 +320,7 @@ function SellForm({
   studentId: string
   types: SubscriptionTypeOption[]
   sources: SourceOption[]
+  discountReasons: { id: string; name: string }[]
   today: string
   timeZone: string
   onDone: Done
@@ -410,6 +418,22 @@ function SellForm({
           ) : null}
         </div>
       </div>
+      {/* Причина скидки (0101) — из справочника центра, для отчёта «Скидки за месяц»;
+          без неё база продажу со скидкой не проведёт. */}
+      {discountTiyin > 0 ? (
+        <div className="space-y-1">
+          <Label htmlFor="discountReasonId">{t('sale', 'discountReason')}</Label>
+          <Select id="discountReasonId" name="discountReasonId" required defaultValue="" className="sm:max-w-xs">
+            <option value="">{t('sale', 'discountReasonPlaceholder')}</option>
+            {discountReasons.map((reason) => (
+              <option key={reason.id} value={reason.id}>
+                {reason.name}
+              </option>
+            ))}
+          </Select>
+          {discountReasons.length === 0 ? <p className="text-xs text-muted-foreground">{t('sale', 'discountReasonsEmpty')}</p> : null}
+        </div>
+      ) : null}
       <div className="space-y-1">
         <Label htmlFor="startsAt">Дата начала</Label>
         <Input id="startsAt" name="startsAt" type="date" defaultValue={today} className="max-w-[200px]" />
@@ -907,6 +931,12 @@ function SubscriptionCard({
             {formatSom(subscription.priceTiyin)} · с {calendarDate(subscription.startsAt, timeZone)}
             {subscription.endsAt ? ` по ${calendarDate(subscription.endsAt, timeZone)}` : ''}
           </p>
+          {/* Скидка (0101): цена типа на момент продажи и причина — разницу считает отчёт в базе. */}
+          {subscription.discountReason && subscription.listPriceTiyin != null ? (
+            <p className="text-xs text-muted-foreground">
+              {t('subscriptionCard', 'discount', { list: formatSom(subscription.listPriceTiyin), reason: subscription.discountReason })}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-start gap-3">
           <LessonsProgress left={subscription.lessonsLeft} total={subscription.lessonsTotal} />
@@ -944,7 +974,11 @@ function SubscriptionCard({
               <span>
                 {row.seq}. {calendarDate(row.dueDate, timeZone)} · {label('installmentState', row.state)}
               </span>
-              <span className="whitespace-nowrap tabular-nums">{formatSom(row.amountTiyin)}</span>
+              <span className="whitespace-nowrap tabular-nums">
+                {row.state !== 'paid' && row.remainingTiyin < row.amountTiyin
+                  ? `${formatSom(row.remainingTiyin)} из ${formatSom(row.amountTiyin)}`
+                  : formatSom(row.amountTiyin)}
+              </span>
             </li>
           ))}
         </ol>
@@ -1161,6 +1195,7 @@ export function SubscriptionsPanel({
   canManage,
   isOwner = false,
   hideBalance = false,
+  discountReasons = [],
 }: {
   studentId: string
   balance: BalanceView
@@ -1182,6 +1217,8 @@ export function SubscriptionsPanel({
   isOwner?: boolean
   /** Остаток и долг уже показаны в шапке карточки (StudentSummary) — второй раз не рисуем. */
   hideBalance?: boolean
+  /** Причины скидок центра — справочник (0101), живые и не скрытые. */
+  discountReasons?: { id: string; name: string }[]
 }) {
   const [tab, setTab] = useState<'subscriptions' | 'attendance'>('subscriptions')
   // Итог последнего действия — над списком: диалог после успеха закрывается,
@@ -1247,6 +1284,7 @@ export function SubscriptionsPanel({
                   studentId={studentId}
                   types={types}
                   sources={sources}
+                  discountReasons={discountReasons}
                   today={today}
                   timeZone={timeZone}
                   onDone={(text, paymentId) => {

@@ -565,6 +565,70 @@ export type Database = {
           },
         ]
       }
+      cash_transfers: {
+        Row: {
+          amount_tiyin: number
+          center_id: string
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          from_source_id: string
+          id: string
+          to_source_id: string
+          transfer_key: string
+          transferred_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount_tiyin: number
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          from_source_id: string
+          id?: string
+          to_source_id: string
+          transfer_key: string
+          transferred_at: string
+          updated_at?: string
+        }
+        Update: {
+          amount_tiyin?: number
+          center_id?: string
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          from_source_id?: string
+          id?: string
+          to_source_id?: string
+          transfer_key?: string
+          transferred_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_transfers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_transfers_from_fk"
+            columns: ["from_source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "cash_transfers_to_fk"
+            columns: ["to_source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       center_digest_runs: {
         Row: {
           center_id: string
@@ -877,6 +941,53 @@ export type Database = {
           },
         ]
       }
+      discount_reasons: {
+        Row: {
+          center_id: string
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_reasons_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           attempts: number
@@ -1036,8 +1147,11 @@ export type Database = {
           id: string
           kind: string
           paid_at: string
+          salary_month: string | null
           source_id: string | null
+          teacher_id: string | null
           updated_at: string
+          voids_expense_id: string | null
         }
         Insert: {
           amount_tiyin: number
@@ -1049,8 +1163,11 @@ export type Database = {
           id?: string
           kind?: string
           paid_at?: string
+          salary_month?: string | null
           source_id?: string | null
+          teacher_id?: string | null
           updated_at?: string
+          voids_expense_id?: string | null
         }
         Update: {
           amount_tiyin?: number
@@ -1062,8 +1179,11 @@ export type Database = {
           id?: string
           kind?: string
           paid_at?: string
+          salary_month?: string | null
           source_id?: string | null
+          teacher_id?: string | null
           updated_at?: string
+          voids_expense_id?: string | null
         }
         Relationships: [
           {
@@ -1085,6 +1205,20 @@ export type Database = {
             columns: ["source_id", "center_id"]
             isOneToOne: false
             referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "expenses_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "expenses_void_fk"
+            columns: ["voids_expense_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -4404,12 +4538,14 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          discount_reason_id: string | null
           ends_at: string | null
           id: string
           lesson_price_tiyin: number | null
           lessons_total: number | null
           lessons_used: number
           lessons_written_off: number
+          list_price_tiyin: number | null
           notes: string | null
           paid_tiyin: number
           payer_id: string
@@ -4429,12 +4565,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          discount_reason_id?: string | null
           ends_at?: string | null
           id?: string
           lesson_price_tiyin?: number | null
           lessons_total?: number | null
           lessons_used?: number
           lessons_written_off?: number
+          list_price_tiyin?: number | null
           notes?: string | null
           paid_tiyin?: number
           payer_id: string
@@ -4454,12 +4592,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          discount_reason_id?: string | null
           ends_at?: string | null
           id?: string
           lesson_price_tiyin?: number | null
           lessons_total?: number | null
           lessons_used?: number
           lessons_written_off?: number
+          list_price_tiyin?: number | null
           notes?: string | null
           paid_tiyin?: number
           payer_id?: string
@@ -4480,6 +4620,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "centers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_discount_reason_fk"
+            columns: ["discount_reason_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "discount_reasons"
+            referencedColumns: ["id", "center_id"]
           },
           {
             foreignKeyName: "subscriptions_payer_fk"
@@ -4803,6 +4950,8 @@ export type Database = {
           source_id: string | null
           spent_tiyin: number | null
           total_tiyin: number | null
+          transfers_in_tiyin: number | null
+          transfers_out_tiyin: number | null
         }
         Relationships: []
       }
@@ -4816,12 +4965,14 @@ export type Database = {
           cumulative_tiyin: number | null
           due_date: string | null
           due_notified_at: string | null
+          due_through_tiyin: number | null
           id: string | null
           overdue_notified_at: string | null
           paid_tiyin: number | null
           payer_id: string | null
           plan_id: string | null
           price_tiyin: number | null
+          row_remaining_tiyin: number | null
           seq: number | null
           state: string | null
           student_id: string | null
@@ -5119,6 +5270,17 @@ export type Database = {
     }
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
+      accept_lesson_advance: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment?: string
+          p_expected_credit_tiyin: number
+          p_paid_on: string
+          p_source_id: string
+          p_student_id: string
+        }
+        Returns: string
+      }
       accept_lesson_debt_payment: {
         Args: {
           p_amount_tiyin: number
@@ -5193,6 +5355,7 @@ export type Database = {
       }
       archive_attendance_status: { Args: { p_id: string }; Returns: undefined }
       archive_diagnostic: { Args: { p_id: string }; Returns: boolean }
+      archive_discount_reason: { Args: { p_id: string }; Returns: undefined }
       archive_expense_category: { Args: { p_id: string }; Returns: undefined }
       archive_goal: { Args: { p_id: string }; Returns: boolean }
       archive_goal_progress: { Args: { p_id: string }; Returns: boolean }
@@ -5878,6 +6041,17 @@ export type Database = {
       }
       is_member: { Args: { p_center_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      lesson_advance_block_unchecked: {
+        Args: { p_center_id: string; p_student_id: string }
+        Returns: string
+      }
+      lesson_advance_preview: {
+        Args: { p_student_id: string }
+        Returns: {
+          block_reason: string
+          credit_tiyin: number
+        }[]
+      }
       lesson_debt_account: {
         Args: never
         Returns: {
@@ -6086,13 +6260,38 @@ export type Database = {
       pay_installment: {
         Args: {
           p_comment?: string
+          p_expected_amount_tiyin: number
           p_installment_id: string
-          p_paid_at?: string
-          p_source_id?: string
+          p_paid_on?: string
+          p_source_id: string
+        }
+        Returns: string
+      }
+      pay_salary: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment?: string
+          p_expected_due_tiyin: number
+          p_month: string
+          p_paid_on: string
+          p_source_id: string
+          p_teacher_id: string
         }
         Returns: string
       }
       payer_display_name: { Args: { p_payer_id: string }; Returns: string }
+      payer_money_summary: {
+        Args: { p_payer_id: string }
+        Returns: {
+          credit_tiyin: number
+          lesson_debt_tiyin: number
+          next_due_date: string
+          next_due_tiyin: number
+          overdue_tiyin: number
+          student_id: string
+          unpaid_tiyin: number
+        }[]
+      }
       payer_telegram_linked: { Args: { p_payer_id: string }; Returns: boolean }
       payer_telegram_status: { Args: { p_payer_id: string }; Returns: Json }
       payers_brief: {
@@ -6108,6 +6307,7 @@ export type Database = {
           relation: string
         }[]
       }
+      payments_day_summary: { Args: { p_day: string }; Returns: Json }
       period_subscription_reminders_at: {
         Args: { p_now: string }
         Returns: number
@@ -6301,6 +6501,17 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: undefined
       }
+      record_cash_transfer: {
+        Args: {
+          p_amount_tiyin: number
+          p_comment?: string
+          p_from_source_id: string
+          p_to_source_id: string
+          p_transfer_key: string
+          p_transferred_on?: string
+        }
+        Returns: string
+      }
       record_center_export: { Args: never; Returns: number }
       record_diagnostic: {
         Args: {
@@ -6481,6 +6692,7 @@ export type Database = {
         }[]
       }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
+      restore_discount_reason: { Args: { p_id: string }; Returns: undefined }
       restore_expense_category: { Args: { p_id: string }; Returns: undefined }
       restore_payment_source: { Args: { p_id: string }; Returns: undefined }
       restore_student: { Args: { p_id: string }; Returns: undefined }
@@ -6505,6 +6717,10 @@ export type Database = {
       revoke_membership: { Args: { p_user_id: string }; Returns: undefined }
       role_in: { Args: { p_center_id: string }; Returns: string }
       ru_month_year: { Args: { p_date: string }; Returns: string }
+      salary_expense_category_unchecked: {
+        Args: { p_center_id: string }
+        Returns: string
+      }
       salary_summary: {
         Args: { p_month: string }
         Returns: {
@@ -6513,6 +6729,22 @@ export type Database = {
           approved_run_id: string
           calc_tiyin: number
           cancelled_runs: number
+          due_tiyin: number
+          paid_tiyin: number
+          teacher_id: string
+          total_tiyin: number
+        }[]
+      }
+      salary_totals_unchecked: {
+        Args: { p_center_id: string; p_month: string; p_teacher_id?: string }
+        Returns: {
+          adjustments_tiyin: number
+          approved_at: string
+          approved_run_id: string
+          calc_tiyin: number
+          cancelled_runs: number
+          due_tiyin: number
+          paid_tiyin: number
           teacher_id: string
           total_tiyin: number
         }[]
@@ -6546,6 +6778,10 @@ export type Database = {
         Args: { p_center_id: string }
         Returns: undefined
       }
+      seed_discount_reasons: {
+        Args: { p_center_id: string }
+        Returns: undefined
+      }
       seed_expense_categories: {
         Args: { p_center_id: string }
         Returns: undefined
@@ -6557,6 +6793,7 @@ export type Database = {
       }
       sell_subscription: {
         Args: {
+          p_discount_reason_id?: string
           p_price_tiyin?: number
           p_starts_at?: string
           p_student_id: string
@@ -6566,6 +6803,7 @@ export type Database = {
       }
       sell_subscription_paid: {
         Args: {
+          p_discount_reason_id?: string
           p_expected_remaining_tiyin?: number
           p_first_due?: string
           p_installments?: number
@@ -6819,6 +7057,36 @@ export type Database = {
         Args: { p_on_date?: string; p_subscription_id: string }
         Returns: unknown
       }
+      subscription_discount_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          discount_tiyin: number
+          is_total: boolean
+          reason_id: string
+          reason_name: string
+          sales: number
+        }[]
+      }
+      subscription_discounts: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          archived: boolean
+          discount_tiyin: number
+          list_price_tiyin: number
+          price_tiyin: number
+          reason_id: string
+          reason_name: string
+          sold_by: string
+          sold_by_name: string
+          sold_by_role: string
+          sold_on: string
+          status: string
+          student_id: string
+          student_name: string
+          subscription_id: string
+          type_name: string
+        }[]
+      }
       subscription_freeze_days: {
         Args: { p_subscription_id: string }
         Returns: number
@@ -6830,6 +7098,15 @@ export type Database = {
       subscription_lessons_left: {
         Args: { p_subscription_id: string }
         Returns: number
+      }
+      subscription_overdue_unchecked: {
+        Args: { p_center: string }
+        Returns: {
+          overdue_tiyin: number
+          payer_id: string
+          student_id: string
+          subscription_id: string
+        }[]
       }
       subscription_payment_summary: {
         Args: { p_subscription_id: string }
@@ -7009,6 +7286,10 @@ export type Database = {
         Returns: string
       }
       user_email: { Args: { p_user_id: string }; Returns: string }
+      void_expense: {
+        Args: { p_expense_id: string; p_reason: string }
+        Returns: string
+      }
       void_payment: {
         Args: { p_payment_id: string; p_reason: string }
         Returns: string

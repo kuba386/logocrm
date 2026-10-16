@@ -13,7 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { toAppError } from '@/lib/errors'
 import { FormError } from '@/components/ui/alert'
-import { AdjustmentForm, ApproveForm, CancelRunForm } from './salary-forms'
+import { PageNoticeProvider } from '@/components/ui/page-notice'
+import { AdjustmentForm, ApproveForm, CancelRunForm, PayoutAction } from './salary-forms'
+import { VoidExpenseForm } from '../finance/finance-forms'
 
 export const metadata = { title: 'Зарплата — LogoCRM' }
 
@@ -56,9 +58,11 @@ export default async function SalaryPage({
   const first = `${month}-01`
   // approve_salary — только за полностью прошедший месяц.
   const isPastMonth = month < today.slice(0, 7)
+  // pay_salary — за текущий и прошлые месяцы (аванс — не больше заработанного на сегодня).
+  const canPayMonth = month <= today.slice(0, 7)
   const expanded = params.teacher && /^[0-9a-f-]{36}$/.test(params.teacher) ? params.teacher : null
 
-  const [{ data: summary, error: summaryError }, { data: teachers }, { data: adjustments }] = await Promise.all([
+  const [{ data: summary, error: summaryError }, { data: teachers }, { data: adjustments }, { data: sourceRows }] = await Promise.all([
     supabase.rpc('salary_summary', { p_month: first }),
     supabase.from('teachers').select('id, full_name').is('deleted_at', null).order('full_name'),
     supabase
@@ -66,13 +70,30 @@ export default async function SalaryPage({
       .select('id, teacher_id, amount_tiyin, reason, created_at')
       .eq('month', first)
       .order('created_at'),
+    // Кассы для выплаты — живые, как в формах платежей.
+    supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort'),
   ])
+  const sources = (sourceRows ?? []).map((src) => ({ id: src.id, name: src.name }))
   const teacherName = new Map((teachers ?? []).map((tr) => [tr.id, tr.full_name]))
   const rows = summary ?? []
 
-  const { data: details } = expanded ? await supabase.rpc('calc_salary', { p_teacher_id: expanded, p_month: first }) : { data: null }
+  const [{ data: details }, { data: payouts }, { data: allSources }] = expanded
+    ? await Promise.all([
+        supabase.rpc('calc_salary', { p_teacher_id: expanded, p_month: first }),
+        // Выплаты за месяц (0101) — строки expenses со специалистом и месяцем, отмены с минусом.
+        supabase
+          .from('expenses')
+          .select('id, amount_tiyin, paid_at, source_id, kind, comment, voids_expense_id')
+          .eq('teacher_id', expanded)
+          .eq('salary_month', first)
+          .order('paid_at'),
+        supabase.from('payment_sources').select('id, name'),
+      ])
+    : [{ data: null }, { data: null }, { data: null }]
+  const sourceName = new Map((allSources ?? []).map((src) => [src.id, src.name]))
 
   return (
+    <PageNoticeProvider>
     <div className="space-y-6">
       <div>
         <h1 className="page-title">{t('salary', 'title')}</h1>
@@ -103,13 +124,15 @@ export default async function SalaryPage({
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('salary', 'empty')}</p>
           ) : (
-            <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(3)]:hidden">
+            <Table className="max-sm:[&_tr>*:nth-child(2)]:hidden max-sm:[&_tr>*:nth-child(3)]:hidden max-sm:[&_tr>*:nth-child(5)]:hidden max-sm:[&_tr>*:nth-child(7)]:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('salary', 'colTeacher')}</TableHead>
                   <TableHead className="text-right">{t('salary', 'colCalc')}</TableHead>
                   <TableHead className="text-right">{t('salary', 'colAdjustments')}</TableHead>
                   <TableHead className="text-right">{t('salary', 'colTotal')}</TableHead>
+                  <TableHead className="text-right">{t('salary', 'colPaid')}</TableHead>
+                  <TableHead className="text-right">{t('salary', 'colDue')}</TableHead>
                   <TableHead>{t('salary', 'colApproved')}</TableHead>
                   <TableHead className="text-right"> </TableHead>
                 </TableRow>
@@ -136,6 +159,12 @@ export default async function SalaryPage({
                               </ul>
                             ) : null}
                             {!r.approved_run_id ? <AdjustmentForm teacherId={r.teacher_id} month={first} /> : null}
+                            <PayoutsList
+                              rows={payouts ?? []}
+                              sourceName={sourceName}
+                              timeZone={timeZone}
+                              isOwner={isOwner}
+                            />
                           </div>
                         ) : null}
                       </TableCell>
@@ -144,6 +173,10 @@ export default async function SalaryPage({
                         {formatSom(r.adjustments_tiyin)}
                       </TableCell>
                       <TableCell className="text-right font-medium">{formatSom(r.total_tiyin)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatSom(r.paid_tiyin)}</TableCell>
+                      <TableCell className={cn('text-right font-medium tabular-nums', r.due_tiyin < 0 && 'text-destructive')}>
+                        {r.due_tiyin < 0 ? t('salary', 'overpaid', { sum: formatSom(-r.due_tiyin) }) : formatSom(r.due_tiyin)}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {r.approved_run_id && r.approved_at
                           ? t('salary', 'approvedAt', { at: dayInZone(r.approved_at, timeZone) })
@@ -162,6 +195,17 @@ export default async function SalaryPage({
                           >
                             {isExpanded ? t('salary', 'hideDetails') : t('salary', 'details')}
                           </Link>
+                          {canPayMonth && r.due_tiyin > 0 && sources.length ? (
+                            <PayoutAction
+                              teacherId={r.teacher_id}
+                              teacherName={name}
+                              month={first}
+                              monthLabel={monthLabel(first)}
+                              dueTiyin={r.due_tiyin}
+                              sources={sources}
+                              today={today}
+                            />
+                          ) : null}
                           {!r.approved_run_id && isPastMonth ? (
                             <ApproveForm teacherId={r.teacher_id} month={first} monthLabel={monthLabel(first)} teacherName={name} totalLabel={formatSom(r.total_tiyin)} />
                           ) : null}
@@ -183,6 +227,7 @@ export default async function SalaryPage({
         </CardContent>
       </Card>
     </div>
+    </PageNoticeProvider>
   )
 }
 
@@ -219,5 +264,48 @@ function DetailsTable({
         ))}
       </TableBody>
     </Table>
+  )
+}
+
+/**
+ * Выплаты специалисту за месяц (0101): строки expenses со специалистом и
+ * месяцем. Отменённая выплата остаётся в списке зачёркнутой, рядом — её
+ * отмена с минусом; «Выплачено» в строке выше уже за вычетом отмен.
+ */
+function PayoutsList({
+  rows,
+  sourceName,
+  timeZone,
+  isOwner,
+}: {
+  rows: { id: string; amount_tiyin: number; paid_at: string; source_id: string | null; kind: string; comment: string | null; voids_expense_id: string | null }[]
+  sourceName: Map<string, string>
+  timeZone: string
+  isOwner: boolean
+}) {
+  const voided = new Set(rows.map((r) => r.voids_expense_id).filter((v): v is string => Boolean(v)))
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{t('salary', 'payoutsTitle')}</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('salary', 'payoutsEmpty')}</p>
+      ) : (
+        <ul className="space-y-2 text-sm">
+          {rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-start justify-between gap-2">
+              <span className={cn(voided.has(r.id) && 'text-muted-foreground line-through')}>
+                {dayInZone(r.paid_at, timeZone)} · {r.source_id ? (sourceName.get(r.source_id) ?? '—') : '—'}
+                {r.comment ? ` · ${r.comment}` : ''}
+                {voided.has(r.id) ? ` · ${t('salary', 'payoutVoided')}` : ''}
+              </span>
+              <span className="flex items-start gap-2">
+                <span className={cn('tabular-nums font-medium', r.amount_tiyin < 0 && 'text-destructive')}>{formatSom(r.amount_tiyin)}</span>
+                {isOwner && r.kind === 'expense' && !voided.has(r.id) ? <VoidExpenseForm expenseId={r.id} amountTiyin={r.amount_tiyin} /> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

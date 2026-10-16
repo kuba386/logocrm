@@ -13,7 +13,7 @@ import { FormError } from '@/components/ui/alert'
 import { NoticeLine, usePageNotice, type Notice } from '@/components/ui/page-notice'
 import { useLastSource } from '@/lib/use-last-source'
 import { receiptHref } from '@/lib/receipt'
-import { acceptDebtPayment, refundLessonCredit, writeOffDebt, type DebtActionState } from './debt-actions'
+import { acceptDebtPayment, acceptLessonAdvance, refundLessonCredit, writeOffDebt, type DebtActionState } from './debt-actions'
 
 const initial: DebtActionState = { message: '' }
 
@@ -329,6 +329,126 @@ export function DebtActions({
           ) : null}
         </Dialog>
       ) : null}
+    </>
+  )
+}
+
+function AdvanceForm({
+  studentId,
+  creditTiyin,
+  sources,
+  today,
+  onDone,
+  onCancel,
+}: {
+  studentId: string
+  creditTiyin: number
+  sources: { id: string; name: string }[]
+  today: string
+  onDone: (state: DebtActionState) => void
+  onCancel: () => void
+}) {
+  const { state, submit, pending } = useDebtAction(acceptLessonAdvance, onDone)
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <input type="hidden" name="studentId" value={studentId} />
+      <input type="hidden" name="expectedCreditTiyin" value={creditTiyin} />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor={`advance-amount-${studentId}`}>Сумма, сом</Label>
+          <Input id={`advance-amount-${studentId}`} name="amountSom" type="number" min="0.01" step="0.01" inputMode="decimal" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`advance-source-${studentId}`}>Источник</Label>
+          <SourceSelect id={`advance-source-${studentId}`} sources={sources} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`advance-date-${studentId}`}>Дата оплаты</Label>
+          <Input id={`advance-date-${studentId}`} name="paidOn" type="date" max={today} defaultValue={today} required />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`advance-comment-${studentId}`}>Комментарий (необязательно)</Label>
+        <Input id={`advance-comment-${studentId}`} name="comment" maxLength={500} placeholder="Аванс за занятия" />
+      </div>
+      <FormError message={state.message} />
+      <div className="flex gap-2">
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Секунду…' : 'Принять аванс'}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Отмена
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * «Внести аванс» (0101): деньги вперёд за занятия без абонемента, когда долга
+ * нет, — как пополнение баланса клиента в топовых CRM. Аванс лежит на счёте
+ * ребёнка и списывается следующими занятиями; вернуть — «Вернуть аванс».
+ * creditTiyin — текущий аванс из базы, уходит в RPC как expected.
+ */
+export function AdvanceAction({
+  studentId,
+  studentName,
+  creditTiyin,
+  sources,
+  today,
+  back,
+}: {
+  studentId: string
+  studentName: string
+  creditTiyin: number
+  sources: { id: string; name: string }[]
+  today: string
+  back: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [round, setRound] = useState(0)
+  const { show, local } = useNotice(back)
+
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          show(null)
+          setRound((r) => r + 1)
+          setOpen(true)
+        }}
+      >
+        Внести аванс
+      </Button>
+      {local ? (
+        <div className="w-full">
+          <NoticeLine notice={local} />
+        </div>
+      ) : null}
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Внести аванс"
+        description={`${studentName}: деньги вперёд за занятия без абонемента — спишутся следующими занятиями.${creditTiyin > 0 ? ` Сейчас аванс ${formatSom(creditTiyin)}.` : ''}`}
+      >
+        {open ? (
+          <AdvanceForm
+            key={round}
+            studentId={studentId}
+            creditTiyin={creditTiyin}
+            sources={sources}
+            today={today}
+            onCancel={() => setOpen(false)}
+            onDone={(state) => {
+              setOpen(false)
+              show(state.notice ?? 'Аванс принят', state.paymentId)
+            }}
+          />
+        ) : null}
+      </Dialog>
     </>
   )
 }

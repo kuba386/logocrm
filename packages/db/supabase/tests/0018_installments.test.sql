@@ -221,8 +221,12 @@ insert into t_ins (name, id)
 select 'sub1_r2', id from public.installments
  where subscription_id = '88880000-0000-0000-0000-000000000001' and seq = 2;
 
+-- 0100: сумма к оплате и источник обязательны; сумма — из installments_view.due_through_tiyin.
 insert into t_ins (name, id)
-select 'p_r1', public.pay_installment((select id from t_ins where name = 'sub1_r1'));
+select 'p_r1', public.pay_installment(
+  (select id from t_ins where name = 'sub1_r1'),
+  (select v.due_through_tiyin from public.installments_view v where v.id = (select id from t_ins where name = 'sub1_r1')),
+  (select ps.id from public.payment_sources ps where ps.center_id = 'cccccccc-0000-0000-0000-00000000000a' order by ps.sort limit 1));
 
 select is(
   (select paid_tiyin from public.subscriptions where id = '88880000-0000-0000-0000-000000000001'),
@@ -243,9 +247,10 @@ select is(
 );
 
 select throws_ok(
-  format($q$ select public.pay_installment(%L) $q$, (select id from t_ins where name = 'sub1_r1')),
+  format($q$ select public.pay_installment(%L, 100000, %L) $q$,
+    (select id from t_ins where name = 'sub1_r1'), (select ps.id from public.payment_sources ps where ps.center_id = 'cccccccc-0000-0000-0000-00000000000a' order by ps.sort limit 1)),
   '22023', null,
-  'Повторный pay_installment той же строки — 22023, второго платежа нет'
+  'Повторный pay_installment той же строки — 22023 «уже оплачен» раньше сверки суммы, второго платежа нет'
 );
 
 select is(
@@ -260,9 +265,11 @@ select lives_ok(
 );
 
 select throws_like(
-  format($q$ select public.pay_installment(%L, null, %L) $q$,
+  format($q$ select public.pay_installment(%L, %s, %L, %L) $q$,
     (select id from t_ins where name = 'sub1_r2'),
-    ((date_trunc('month', now() - interval '2 months'))::date + 5)::timestamptz),
+    (select v.due_through_tiyin from public.installments_view v where v.id = (select id from t_ins where name = 'sub1_r2')),
+    (select ps.id from public.payment_sources ps where ps.center_id = 'cccccccc-0000-0000-0000-00000000000a' order by ps.sort limit 1),
+    (date_trunc('month', now() - interval '2 months'))::date + 5),
   '%закрыт%',
   'pay_installment датой в закрытом M1 — замок месяца на payments срабатывает штатно'
 );
@@ -465,9 +472,12 @@ select throws_ok(
 
 -- null вместо даты платежа — сегодня, а не 23502.
 select lives_ok(
-  format($q$ select public.pay_installment(%L, null, null) $q$,
-    (select id from public.installments where subscription_id = '88880000-0000-0000-0000-000000000006' and seq = 2)),
-  'pay_installment(p_paid_at => null) — дата подставляется, не 23502'
+  format($q$ select public.pay_installment(%L, %s, %L, null) $q$,
+    (select id from public.installments where subscription_id = '88880000-0000-0000-0000-000000000006' and seq = 2),
+    (select v.due_through_tiyin from public.installments_view v
+      where v.subscription_id = '88880000-0000-0000-0000-000000000006' and v.seq = 2 and v.cancelled_at is null),
+    (select ps.id from public.payment_sources ps where ps.center_id = 'cccccccc-0000-0000-0000-00000000000a' order by ps.sort limit 1)),
+  'pay_installment(p_paid_on => null) — дата подставляется, не 23502'
 );
 select is(
   (select paid_tiyin from public.subscriptions where id = '88880000-0000-0000-0000-000000000006'),
@@ -587,8 +597,9 @@ select is(
 
 insert into t_ins (name, id)
 select 'p_b1', public.pay_installment(
-  (select v.id from public.installments_view v
-    where v.subscription_id = '88880000-0000-0000-0000-000000000004' and v.state <> 'cancelled' and v.seq = 1));
+  v.id, v.due_through_tiyin, (select ps.id from public.payment_sources ps where ps.center_id = 'cccccccc-0000-0000-0000-00000000000a' order by ps.sort limit 1))
+  from public.installments_view v
+ where v.subscription_id = '88880000-0000-0000-0000-000000000004' and v.state <> 'cancelled' and v.seq = 1;
 
 select is(
   public.cancel_installment_plan('88880000-0000-0000-0000-000000000004'), 1,

@@ -1,7 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { monthSchema, payInstallmentSchema, recordExpenseSchema, recordPaymentSchema } from '@logocrm/contracts'
+import {
+  cashTransferSchema,
+  monthSchema,
+  payInstallmentSchema,
+  recordExpenseSchema,
+  recordPaymentSchema,
+  voidExpenseSchema,
+} from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
@@ -98,10 +105,16 @@ export async function recordExpense(_prev: FinanceState, formData: FormData): Pr
   return { message: '', notice: t('finance', 'expenseRecorded'), done: Date.now() }
 }
 
-/** Сумма строки рассрочки считается в pay_installment — форма её не передаёт. */
+/**
+ * Платёж по строке рассрочки (0100): проводится накопительно — всё по эту
+ * строку включительно. expected — сумма, которую показали на кнопке
+ * (installments_view.due_through_tiyin); изменилась — база ответит 23514 со
+ * свежей суммой, и ничего не запишет.
+ */
 export async function payInstallment(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
   const parsed = payInstallmentSchema.safeParse({
     installmentId: String(formData.get('installmentId') ?? ''),
+    expectedAmountTiyin: Number(formData.get('expectedAmountTiyin') ?? ''),
     sourceId: String(formData.get('sourceId') ?? ''),
     comment: optional(formData, 'comment') ?? '',
   })
@@ -111,6 +124,7 @@ export async function payInstallment(_prev: FinanceState, formData: FormData): P
   const supabase = await createClient()
   const { data: paymentId, error } = await supabase.rpc('pay_installment', {
     p_installment_id: input.installmentId,
+    p_expected_amount_tiyin: input.expectedAmountTiyin,
     p_source_id: input.sourceId,
     p_comment: input.comment || undefined,
   })
@@ -163,4 +177,60 @@ export async function voidPayment(_prev: FinanceState, formData: FormData): Prom
   revalidatePath('/app/finance')
   revalidatePath('/app/payers')
   return { message: '', notice: 'Платёж отменён' }
+}
+
+/**
+ * Отменить ошибочный расход (void_expense, 0101) — только владелец, с причиной.
+ * Как у платежей (0093): база пишет корректировку на ту же сумму с минусом той
+ * же датой, исходная строка остаётся. Выплата зарплаты отменяется так же —
+ * «Выплачено» у специалиста уменьшится.
+ */
+export async function voidExpense(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const parsed = voidExpenseSchema.safeParse({
+    expenseId: String(formData.get('expenseId') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+  })
+  if (!parsed.success) return firstIssue(parsed.error, t('finance', 'checkForm'))
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('void_expense', { p_expense_id: parsed.data.expenseId, p_reason: parsed.data.reason })
+  if (error) return toAppError(error, 'Не удалось отменить расход')
+
+  revalidatePath('/app/finance')
+  revalidatePath('/app/salary')
+  revalidatePath('/app/reports')
+  return { message: '', notice: 'Расход отменён', done: Date.now() }
+}
+
+/**
+ * Перевод между кассами (record_cash_transfer, 0101): наличные сдали в банк,
+ * терминал перечислил на счёт. Итог центра не меняется, меняются итоги касс.
+ * Ошибочный перевод исправляется обратным переводом.
+ */
+export async function recordCashTransfer(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const parsed = cashTransferSchema.safeParse({
+    fromSourceId: String(formData.get('fromSourceId') ?? ''),
+    toSourceId: String(formData.get('toSourceId') ?? ''),
+    amountTiyin: signedTiyin(formData, 'amountSom', false),
+    transferredOn: String(formData.get('transferredOn') ?? ''),
+    comment: optional(formData, 'comment') ?? '',
+    transferKey: String(formData.get('transferKey') ?? ''),
+  })
+  if (!parsed.success) return firstIssue(parsed.error, t('finance', 'checkForm'))
+  const input = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('record_cash_transfer', {
+    p_from_source_id: input.fromSourceId,
+    p_to_source_id: input.toSourceId,
+    p_amount_tiyin: input.amountTiyin,
+    p_transfer_key: input.transferKey,
+    p_transferred_on: input.transferredOn,
+    p_comment: input.comment || undefined,
+  })
+  if (error) return toAppError(error, 'Не удалось провести перевод')
+
+  revalidatePath('/app/finance')
+  revalidatePath('/app/reports')
+  return { message: '', notice: t('finance', 'transferRecorded'), done: Date.now() }
 }

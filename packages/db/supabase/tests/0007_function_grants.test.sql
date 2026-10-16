@@ -157,7 +157,18 @@ from unnest(array[
   'public.saved_filter_params_ok(text,jsonb)',
   'public.platform_day_end(uuid,date)',
   'public.platform_reason(text)',
-  'public.center_deleted_by_platform(uuid)'
+  'public.center_deleted_by_platform(uuid)',
+  -- 0100: просрочка по абонементам центра — только для definer-обёрток.
+  'public.subscription_overdue_unchecked(uuid)',
+  -- 0101: помощники и триггеры денег центра — без грантов.
+  'public.lesson_advance_block_unchecked(uuid,uuid)',
+  'public.salary_totals_unchecked(uuid,date,uuid)',
+  'public.salary_expense_category_unchecked(uuid)',
+  'public.expense_categories_code_immutable()',
+  'public.expenses_links_guard()',
+  'public.cash_transfers_immutable()',
+  'public.seed_discount_reasons(uuid)',
+  'public.centers_seed_discount_reasons()'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -315,7 +326,7 @@ select set_eq(
     ('mark_attendance_bulk(uuid,jsonb)'),
     ('refund_calc(uuid)'),
     ('refund_subscription(uuid,integer,integer,uuid)'),
-    ('sell_subscription(uuid,uuid,integer,date)'),
+    ('sell_subscription(uuid,uuid,integer,date,uuid)'),
     ('student_subscription_badge(uuid)'),
     ('student_balance_pick(uuid)'),
     ('subscription_current_freeze(uuid,date)'),
@@ -332,10 +343,10 @@ select set_eq(
     ('approve_salary(uuid,date)'),
     ('salary_summary(date)'),
     ('create_installment_plan(uuid,integer,date,smallint,integer)'),
-    ('pay_installment(uuid,uuid,timestamp with time zone,text)'),
+    ('pay_installment(uuid,integer,uuid,date,text)'),
     ('cancel_installment_plan(uuid)'),
     ('subscription_payment_summary(uuid)'),
-    ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)'),
+    ('sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer,uuid)'),
     ('can_front_desk(uuid)'),
     ('can_finance(uuid)'),
     ('can_payments(uuid)'),
@@ -461,7 +472,20 @@ select set_eq(
     ('platform_restore_center(uuid,text)'),
     ('platform_deleted_centers()'),
     ('platform_center_actions_recent(integer)'),
-    ('platform_gifted_since_payment(uuid)')
+    ('platform_gifted_since_payment(uuid)'),
+    -- 0100: деньги семьи на карточке плательщика, поступления за день в вебе.
+    ('payer_money_summary(uuid)'),
+    ('payments_day_summary(date)'),
+    -- 0101: аванс, выплата зарплаты, отмена расхода, переводы, причины и отчёт по скидкам.
+    ('lesson_advance_preview(uuid)'),
+    ('accept_lesson_advance(uuid,integer,uuid,date,integer,text)'),
+    ('pay_salary(uuid,date,integer,uuid,date,integer,text)'),
+    ('void_expense(uuid,text)'),
+    ('record_cash_transfer(uuid,uuid,integer,uuid,date,text)'),
+    ('archive_discount_reason(uuid)'),
+    ('restore_discount_reason(uuid)'),
+    ('subscription_discounts(date,date)'),
+    ('subscription_discount_totals(date,date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

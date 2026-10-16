@@ -218,6 +218,8 @@ export const sellSubscriptionPaidSchema = z
     /** Ключ идемпотентности: форма генерирует при открытии, повтор с тем же ключом сервер отбивает. */
     saleKey: z.string().uuid('Обновите страницу и повторите продажу'),
     priceTiyin: z.number().int().min(0, 'Цена не может быть отрицательной').optional(),
+    /** Причина скидки из справочника центра (0101): обязательна, если цена ниже цены типа, — проверяет sell_subscription. */
+    discountReasonId: z.string().uuid('Выберите причину скидки').optional(),
     startsAt: isoDateSchema.optional(),
     paidTiyin: z.number().int('Сумма — в сомах, до тыйына').min(0, 'Внесённая сумма не может быть отрицательной'),
     sourceId: z.string().uuid('Укажите источник оплаты').optional(),
@@ -293,10 +295,33 @@ export type RecordExpenseInput = z.infer<typeof recordExpenseSchema>
 
 export const payInstallmentSchema = z.object({
   installmentId: z.string().uuid('Некорректный платёж рассрочки'),
+  /** Сумма, которую показали на кнопке (installments_view.due_through_tiyin): иначе — 23514 (0100). */
+  expectedAmountTiyin: z.number().int().positive('Обновите страницу: сумма к оплате не передана'),
   sourceId: z.string().uuid('Укажите источник оплаты'),
   comment: commentSchema,
 })
 export type PayInstallmentInput = z.infer<typeof payInstallmentSchema>
+
+/** void_expense (0101): отмена ошибочного расхода — только владелец, причина обязательна. */
+export const voidExpenseSchema = z.object({
+  expenseId: z.string().uuid('Некорректный расход'),
+  reason: z.string().trim().min(1, 'Укажите причину отмены').max(500, 'Причина — не длиннее 500 символов'),
+})
+export type VoidExpenseInput = z.infer<typeof voidExpenseSchema>
+
+/** record_cash_transfer (0101): деньги из одной кассы в другую, сумма > 0, кассы разные. */
+export const cashTransferSchema = z
+  .object({
+    fromSourceId: z.string().uuid('Укажите, откуда переводите'),
+    toSourceId: z.string().uuid('Укажите, куда переводите'),
+    amountTiyin: z.number().int('Сумма — в сомах, до тыйына').positive('Сумма должна быть больше нуля'),
+    transferredOn: isoDateSchema,
+    comment: commentSchema,
+    /** Ключ идемпотентности: форма генерирует при открытии, повтор с тем же ключом база отбивает (0101 А11). */
+    transferKey: z.string().uuid('Обновите страницу и повторите перевод'),
+  })
+  .refine((i) => i.fromSourceId !== i.toSourceId, { message: 'Откуда и куда — разные кассы', path: ['toSourceId'] })
+export type CashTransferInput = z.infer<typeof cashTransferSchema>
 
 /** Первое число месяца — как salary_runs_month_is_first_of_month и close_month. */
 export const monthSchema = z.object({
@@ -317,6 +342,19 @@ export const salaryAdjustmentSchema = teacherMonthSchema.extend({
   reason: z.string().trim().min(2, 'Укажите причину').max(200, 'Причина — не длиннее 200 символов'),
 })
 export type SalaryAdjustmentInput = z.infer<typeof salaryAdjustmentSchema>
+
+/**
+ * pay_salary (0101): выплата из кассы. expectedDueTiyin — «к выплате», которое
+ * показали в форме (salary_summary.due_tiyin): изменилось — 23514 со свежей суммой.
+ */
+export const paySalarySchema = teacherMonthSchema.extend({
+  amountTiyin: z.number().int('Сумма — в сомах, до тыйына').positive('Сумма должна быть больше нуля'),
+  sourceId: z.string().uuid('Укажите, из какой кассы выплачиваете'),
+  paidOn: isoDateSchema,
+  expectedDueTiyin: z.number().int('Обновите страницу: сумма к выплате не передана'),
+  comment: commentSchema,
+})
+export type PaySalaryInput = z.infer<typeof paySalarySchema>
 
 /** Совпадает с teacher_rates_model_known (0017). */
 export const rateModelSchema = z.enum(['per_lesson', 'per_hour', 'percent_payment', 'per_student'])

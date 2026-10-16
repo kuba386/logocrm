@@ -171,6 +171,8 @@ export default async function StudentPage({
     timeZone: string
     /** owner/admin — продажа/заморозка/возврат/перенос; родитель — только чтение. */
     canManage: boolean
+    /** Причины скидок центра для формы продажи (0101). */
+    discountReasons?: { id: string; name: string }[]
   } | null = null
 
   // Шапка со сводкой — только owner/admin: у них есть и баланс, и посещения,
@@ -179,6 +181,8 @@ export default async function StudentPage({
   let summary: {
     lastMark: { startsAt: string; statusName: string } | null
     nextLessonAt: string | null
+    /** Почему нельзя принять аванс (lesson_advance_preview, 0101); null — можно, undefined — не спрашивали. */
+    advanceBlock?: string | null
   } | null = null
 
   // Стойка (registrar) продаёт, принимает оплату, замораживает, переносит и
@@ -196,10 +200,11 @@ export default async function StudentPage({
       { data: attendanceRows },
       { data: center },
       { data: sourceRows },
+      { data: reasonRows },
     ] = await Promise.all([
         supabase
           .from('subscriptions')
-          .select('id, type_id, price_tiyin, starts_at, ends_at, payer_id, lessons_total')
+          .select('id, type_id, price_tiyin, starts_at, ends_at, payer_id, lessons_total, list_price_tiyin, discount_reason_id')
           .eq('student_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
@@ -231,6 +236,9 @@ export default async function StudentPage({
           .eq('is_active', true)
           .is('deleted_at', null)
           .order('sort'),
+        // Причины скидок — справочник центра (0101). Со всеми, включая архивные:
+        // у проданного абонемента название причины не должно пропадать.
+        supabase.from('discount_reasons').select('id, name, is_active, deleted_at').order('sort').order('name'),
       ])
 
     // Кому можно перенести остаток: дети ПЛАТЕЛЬЩИКА АБОНЕМЕНТА (так проверяет
@@ -247,6 +255,7 @@ export default async function StudentPage({
       : { data: [] as { id: string; full_name: string; payer_id: string | null }[] }
 
     const typeNameById = new Map((typeRows ?? []).map((t) => [t.id, t.name]))
+    const reasonNameById = new Map((reasonRows ?? []).map((r) => [r.id, r.name]))
     const subscriptionIds = (subsRows ?? []).map((row) => row.id)
 
     // Оплата и рассрочка — с сервера (subscription_payment_summary,
@@ -260,11 +269,11 @@ export default async function StudentPage({
       subscriptionIds.length
         ? supabase
             .from('installments_view')
-            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .select('subscription_id, seq, due_date, amount_tiyin, row_remaining_tiyin, state, cancelled_at')
             .in('subscription_id', subscriptionIds)
             .is('cancelled_at', null)
             .order('seq')
-        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; row_remaining_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
     ])
 
     // Границы текущей заморозки — из subscription_summary (freeze_from/
@@ -298,6 +307,8 @@ export default async function StudentPage({
         typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
         payerId: row.payer_id,
         priceTiyin: row.price_tiyin,
+        listPriceTiyin: row.list_price_tiyin,
+        discountReason: row.discount_reason_id ? (reasonNameById.get(row.discount_reason_id) ?? null) : null,
         lessonsTotal: row.lessons_total,
         startsAt: row.starts_at,
         endsAt: row.ends_at,
@@ -323,6 +334,7 @@ export default async function StudentPage({
             seq: r.seq as number,
             dueDate: r.due_date as string,
             amountTiyin: r.amount_tiyin as number,
+            remainingTiyin: r.row_remaining_tiyin ?? (r.amount_tiyin as number),
             state: r.state ?? '',
           })),
         cover: cover
@@ -387,6 +399,7 @@ export default async function StudentPage({
         }
       }),
       canManage: true,
+      discountReasons: (reasonRows ?? []).filter((r) => r.is_active && !r.deleted_at).map((r) => ({ id: r.id, name: r.name })),
     }
 
     // Следующее — из lesson_participants: там и разовые, и групповые занятия
@@ -407,9 +420,19 @@ export default async function StudentPage({
       .filter((row) => row.startsAt && row.startsAt <= nowIso)
       .reduce<AttendanceHistoryRow | null>((latest, row) => (!latest || row.startsAt > latest.startsAt ? row : latest), null)
 
+    // «Внести аванс» решает база (0101 Р2): спрашиваем, только когда кнопка
+    // вообще уместна — долга нет, а занятия идут без абонемента или аванс уже есть.
+    const balance = subscriptionsSection.balance
+    const advanceRelevant =
+      balance.debtTiyin + balance.overdrawnTiyin === 0 && (!balance.activeSubscriptionId || (balance.creditTiyin ?? 0) > 0)
+    const { data: advanceRows } = advanceRelevant
+      ? await supabase.rpc('lesson_advance_preview', { p_student_id: id })
+      : { data: null }
+
     summary = {
       lastMark: lastMark ? { startsAt: lastMark.startsAt, statusName: lastMark.statusName } : null,
       nextLessonAt: nextRow?.starts_at ?? null,
+      advanceBlock: advanceRows ? (advanceRows[0]?.block_reason ?? null) : undefined,
     }
   } else if (isParent) {
     // Родителю — то же самое «Оплачено X из Y», статус и график рассрочки,
@@ -450,11 +473,11 @@ export default async function StudentPage({
       subscriptionIds.length
         ? supabase
             .from('installments_view')
-            .select('subscription_id, seq, due_date, amount_tiyin, state, cancelled_at')
+            .select('subscription_id, seq, due_date, amount_tiyin, row_remaining_tiyin, state, cancelled_at')
             .in('subscription_id', subscriptionIds)
             .is('cancelled_at', null)
             .order('seq')
-        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
+        : Promise.resolve({ data: [] as { subscription_id: string | null; seq: number | null; due_date: string | null; amount_tiyin: number | null; row_remaining_tiyin: number | null; state: string | null; cancelled_at: string | null }[] }),
       Promise.all((subsRows ?? []).map((row) => supabase.rpc('subscription_summary', { p_subscription_id: row.id }))),
     ])
 
@@ -484,6 +507,7 @@ export default async function StudentPage({
             seq: r.seq as number,
             dueDate: r.due_date as string,
             amountTiyin: r.amount_tiyin as number,
+            remainingTiyin: r.row_remaining_tiyin ?? (r.amount_tiyin as number),
             state: r.state ?? '',
           })),
       }
@@ -1462,6 +1486,7 @@ export default async function StudentPage({
               sources: subscriptionsSection.sources,
               today: subscriptionsSection.today,
               isOwner: role === 'owner',
+              advanceBlock: summary.advanceBlock,
             }}
           />
         ) : null}

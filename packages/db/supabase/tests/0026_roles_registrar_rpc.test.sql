@@ -246,12 +246,17 @@ reset role;
 insert into t_ins
   select 'inst1', i.id from public.installments i
    where i.subscription_id = (select subscription_id from t_sale limit 1) and i.seq = 1;
+-- Сумма к оплате (0100: обязательна) — тоже от postgres, из той же вью.
+create temporary table t_due as
+  select v.due_through_tiyin as amount from public.installments_view v
+   where v.id = (select id from t_ins where name = 'inst1');
+grant select on t_due to authenticated;
 
 select public.tests_claims('22222222-2222-2222-2222-222222222222','cccccccc-0000-0000-0000-00000000000a');
 set local role authenticated;
 
 select lives_ok(
-  $q$ select public.pay_installment((select id from t_ins where name = 'inst1'), (select id from t_src)) $q$,
+  $q$ select public.pay_installment((select id from t_ins where name = 'inst1'), (select amount from t_due), (select id from t_src)) $q$,
   'pay_installment (→ record_payment) — registrar');
 select is(
   public.cancel_installment_plan((select subscription_id from t_sale limit 1)),

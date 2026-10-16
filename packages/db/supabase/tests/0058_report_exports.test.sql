@@ -225,8 +225,8 @@ select is(
   '…и долг по занятиям у него 0 — отметка списана с абонемента');
 select is(
   (select lessons_debt_tiyin from t_debts where student_name = 'Ребёнок Два'),
-  (select debt_tiyin from public.student_debts() where student_id = 'eeeeeeee-0000-0000-0000-000000000582'),
-  'Ребёнок Два: долг по занятиям = student_debts() — то же, что на /app/debts');
+  (select debt_tiyin + overdrawn_tiyin from public.student_debt_problems() where student_id = 'eeeeeeee-0000-0000-0000-000000000582'),
+  'Ребёнок Два: долг по занятиям = долг + перерасход из student_debt_problems() — то же, что на /app/debts (0100 Р3)');
 select is(
   (select lessons_debt_tiyin from t_debts where student_name = 'Ребёнок Два'), 30000,
   '…и это 300 сом из цены услуги: отметка без абонемента');

@@ -35,3 +35,29 @@ test('Зарплата: таблица месяца, детализация и �
   await expect(page.getByText('e2e: бонус за месяц')).toBeVisible()
   await expect(page.locator('tbody tr').first()).toContainText(formatSom(50_000))
 })
+
+// Выплата из кассы (0101) — после корректировки выше: «к выплате» у первого
+// специалиста прошлого месяца не меньше 500. Выплачивается всё; потом владелец
+// отменяет выплату в детализации — «к выплате» возвращается.
+test('Зарплата: выплата из кассы и отмена ошибочной выплаты владельцем', async ({ page }) => {
+  await page.goto(`/app/salary?month=${previousMonthFirst()}`)
+  await expect(page.getByRole('heading', { name: 'Зарплата' })).toBeVisible()
+
+  const firstRow = page.locator('tbody tr').first()
+  await firstRow.getByRole('button', { name: /^Выплатить · / }).click()
+  // Сумма по умолчанию — всё «к выплате» из salary_summary; база сверит её сама.
+  await actAndAwait(page, /^Выплатить$/, 'Выплата проведена')
+  await expect(page.locator('tbody tr').first().getByRole('button', { name: /^Выплатить · / })).toHaveCount(0)
+
+  // Детализация — с нуля (goto), чтобы итог выплаты не остался вторым role=status.
+  const details = await page.locator('tbody tr').first().getByRole('link', { name: 'Детализация' }).getAttribute('href')
+  await page.goto(details!)
+  await expect(page.getByText('Выплаты за месяц')).toBeVisible()
+  await page.getByRole('button', { name: 'Отменить', exact: true }).click()
+  await page.getByLabel('Причина отмены').fill('e2e: выплатили не тому')
+  await page.getByRole('button', { name: 'Отменить расход' }).click()
+  await actAndAwait(page, 'Подтвердить', 'Расход отменён')
+
+  await expect(page.getByText('отменена')).toBeVisible()
+  await expect(page.locator('tbody tr').first().getByRole('button', { name: /^Выплатить · / })).toBeVisible()
+})

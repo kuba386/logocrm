@@ -344,8 +344,9 @@ select lives_ok(
 );
 select lives_ok(
   $q$ select * from public.sell_subscription_paid('77777777-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000001',
-        '55550000-0000-0000-0000-000000000041', 350000, null, 350000, (select id from t_src), null, null, null, 1::smallint, 0) $q$,
-  'Цена переопределена (скидка 3 500) и внесена целиком — ожидаемый остаток 0 сходится'
+        '55550000-0000-0000-0000-000000000041', 350000, null, 350000, (select id from t_src), null, null, null, 1::smallint, 0,
+        (select id from public.discount_reasons where code = 'promo')) $q$,
+  'Цена переопределена (скидка 500 с причиной, 0101) и внесена целиком — ожидаемый остаток 0 сходится'
 );
 
 reset role;
@@ -354,15 +355,15 @@ reset role;
 -- 35-38. Гранты и хранимый инвариант ключа -------------------------------------------------
 
 select ok(
-  has_function_privilege('authenticated', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer,uuid)', 'EXECUTE'),
   'sell_subscription_paid исполняется authenticated'
 );
 select ok(
-  not has_function_privilege('anon', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)', 'EXECUTE'),
+  not has_function_privilege('anon', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer,uuid)', 'EXECUTE'),
   'anon — нет'
 );
 select ok(
-  not has_function_privilege('public', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer)', 'EXECUTE'),
+  not has_function_privilege('public', 'public.sell_subscription_paid(uuid,uuid,uuid,integer,date,integer,uuid,date,integer,date,smallint,integer,uuid)', 'EXECUTE'),
   'public — нет'
 );
 select throws_like(
