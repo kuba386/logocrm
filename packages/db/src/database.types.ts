@@ -565,32 +565,6 @@ export type Database = {
           },
         ]
       }
-      center_digest_runs: {
-        Row: {
-          center_id: string
-          digest_on: string
-          sent_at: string
-        }
-        Insert: {
-          center_id: string
-          digest_on: string
-          sent_at?: string
-        }
-        Update: {
-          center_id?: string
-          digest_on?: string
-          sent_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "center_digest_runs_center_id_fkey"
-            columns: ["center_id"]
-            isOneToOne: false
-            referencedRelation: "centers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       cash_transfers: {
         Row: {
           amount_tiyin: number
@@ -631,7 +605,55 @@ export type Database = {
           transferred_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cash_transfers_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_transfers_from_fk"
+            columns: ["from_source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "cash_transfers_to_fk"
+            columns: ["to_source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      center_digest_runs: {
+        Row: {
+          center_id: string
+          digest_on: string
+          sent_at: string
+        }
+        Insert: {
+          center_id: string
+          digest_on: string
+          sent_at?: string
+        }
+        Update: {
+          center_id?: string
+          digest_on?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "center_digest_runs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       centers: {
         Row: {
@@ -919,42 +941,6 @@ export type Database = {
           },
         ]
       }
-      events: {
-        Row: {
-          attempts: number
-          center_id: string
-          claimed_at: string | null
-          created_at: string
-          id: number
-          last_error: string | null
-          payload: Json
-          processed_at: string | null
-          type: string
-        }
-        Insert: {
-          attempts?: number
-          center_id: string
-          claimed_at?: string | null
-          created_at?: string
-          id?: number
-          last_error?: string | null
-          payload?: Json
-          processed_at?: string | null
-          type: string
-        }
-        Update: {
-          attempts?: number
-          center_id?: string
-          claimed_at?: string | null
-          created_at?: string
-          id?: number
-          last_error?: string | null
-          payload?: Json
-          processed_at?: string | null
-          type?: string
-        }
-        Relationships: []
-      }
       discount_reasons: {
         Row: {
           center_id: string
@@ -991,6 +977,50 @@ export type Database = {
           name?: string
           sort?: number
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_reasons_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          attempts: number
+          center_id: string
+          claimed_at: string | null
+          created_at: string
+          id: number
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+          type: string
+        }
+        Insert: {
+          attempts?: number
+          center_id: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          type: string
+        }
+        Update: {
+          attempts?: number
+          center_id?: string
+          claimed_at?: string | null
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          type?: string
         }
         Relationships: []
       }
@@ -1175,6 +1205,20 @@ export type Database = {
             columns: ["source_id", "center_id"]
             isOneToOne: false
             referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "expenses_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "expenses_void_fk"
+            columns: ["voids_expense_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id", "center_id"]
           },
         ]
@@ -4578,6 +4622,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "subscriptions_discount_reason_fk"
+            columns: ["discount_reason_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "discount_reasons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
             foreignKeyName: "subscriptions_payer_fk"
             columns: ["payer_id", "center_id"]
             isOneToOne: false
@@ -6724,6 +6775,10 @@ export type Database = {
         Returns: boolean
       }
       seed_attendance_statuses: {
+        Args: { p_center_id: string }
+        Returns: undefined
+      }
+      seed_discount_reasons: {
         Args: { p_center_id: string }
         Returns: undefined
       }
