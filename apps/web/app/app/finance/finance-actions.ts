@@ -1,7 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { monthSchema, payInstallmentSchema, recordExpenseSchema, recordPaymentSchema } from '@logocrm/contracts'
+import {
+  cashTransferSchema,
+  monthSchema,
+  payInstallmentSchema,
+  recordExpenseSchema,
+  recordPaymentSchema,
+  voidExpenseSchema,
+} from '@logocrm/contracts'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
@@ -170,4 +177,60 @@ export async function voidPayment(_prev: FinanceState, formData: FormData): Prom
   revalidatePath('/app/finance')
   revalidatePath('/app/payers')
   return { message: '', notice: 'Платёж отменён' }
+}
+
+/**
+ * Отменить ошибочный расход (void_expense, 0101) — только владелец, с причиной.
+ * Как у платежей (0093): база пишет корректировку на ту же сумму с минусом той
+ * же датой, исходная строка остаётся. Выплата зарплаты отменяется так же —
+ * «Выплачено» у специалиста уменьшится.
+ */
+export async function voidExpense(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const parsed = voidExpenseSchema.safeParse({
+    expenseId: String(formData.get('expenseId') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+  })
+  if (!parsed.success) return firstIssue(parsed.error, t('finance', 'checkForm'))
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('void_expense', { p_expense_id: parsed.data.expenseId, p_reason: parsed.data.reason })
+  if (error) return toAppError(error, 'Не удалось отменить расход')
+
+  revalidatePath('/app/finance')
+  revalidatePath('/app/salary')
+  revalidatePath('/app/reports')
+  return { message: '', notice: 'Расход отменён', done: Date.now() }
+}
+
+/**
+ * Перевод между кассами (record_cash_transfer, 0101): наличные сдали в банк,
+ * терминал перечислил на счёт. Итог центра не меняется, меняются итоги касс.
+ * Ошибочный перевод исправляется обратным переводом.
+ */
+export async function recordCashTransfer(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const parsed = cashTransferSchema.safeParse({
+    fromSourceId: String(formData.get('fromSourceId') ?? ''),
+    toSourceId: String(formData.get('toSourceId') ?? ''),
+    amountTiyin: signedTiyin(formData, 'amountSom', false),
+    transferredOn: String(formData.get('transferredOn') ?? ''),
+    comment: optional(formData, 'comment') ?? '',
+    transferKey: String(formData.get('transferKey') ?? ''),
+  })
+  if (!parsed.success) return firstIssue(parsed.error, t('finance', 'checkForm'))
+  const input = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('record_cash_transfer', {
+    p_from_source_id: input.fromSourceId,
+    p_to_source_id: input.toSourceId,
+    p_amount_tiyin: input.amountTiyin,
+    p_transfer_key: input.transferKey,
+    p_transferred_on: input.transferredOn,
+    p_comment: input.comment || undefined,
+  })
+  if (error) return toAppError(error, 'Не удалось провести перевод')
+
+  revalidatePath('/app/finance')
+  revalidatePath('/app/reports')
+  return { message: '', notice: t('finance', 'transferRecorded'), done: Date.now() }
 }

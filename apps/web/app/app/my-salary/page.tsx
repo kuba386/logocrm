@@ -84,7 +84,7 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
         <p className="text-sm text-muted-foreground">{t('mySalary', 'noCard')}</p>
       ) : (
         <>
-          <dl className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/50 p-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
             <div>
               <dt className="text-xs text-muted-foreground">{t('salary', 'colCalc')}</dt>
               <dd className="font-medium">{formatSom(mine.calc_tiyin)}</dd>
@@ -103,6 +103,17 @@ export default async function MySalaryPage({ searchParams }: { searchParams: Pro
                 {mine.approved_run_id && mine.approved_at
                   ? t('salary', 'approvedAt', { at: dayInZone(mine.approved_at, timeZone) })
                   : t('salary', 'notApproved')}
+              </dd>
+            </div>
+            {/* Выплаты из кассы (0101) — сумма из salary_summary: таблица расходов специалисту закрыта. */}
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('mySalary', 'paid')}</dt>
+              <dd className="font-medium">{formatSom(mine.paid_tiyin)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t('mySalary', 'due')}</dt>
+              <dd className="font-medium">
+                {mine.due_tiyin < 0 ? t('salary', 'overpaid', { sum: formatSom(-mine.due_tiyin) }) : formatSom(mine.due_tiyin)}
               </dd>
             </div>
           </dl>

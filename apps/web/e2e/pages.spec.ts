@@ -42,6 +42,7 @@ const STATIC_ROUTES = [
   '/app/settings/subscription-types',
   '/app/settings/payment-sources',
   '/app/settings/expense-categories',
+  '/app/settings/discount-reasons',
   '/app/settings/teacher-rates',
   '/app/settings/notifications',
   '/app/settings/plan',

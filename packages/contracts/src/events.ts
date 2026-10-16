@@ -198,6 +198,8 @@ export const subscriptionCreatedSchema = z.object({
     student_id: z.string().uuid(),
     /** Деньги — целые тыйыны, никаких дробей. */
     price_tiyin: z.number().int().nonnegative(),
+    /** Цена типа на момент продажи (0101); ниже неё price_tiyin — скидка. В событиях до 0101 поля нет. */
+    list_price_tiyin: z.number().int().nonnegative().optional(),
     /** null — безлимитный абонемент, а не «ноль занятий». */
     lessons_total: z.number().int().positive().nullable(),
   }),
@@ -456,6 +458,37 @@ export const paymentVoidedSchema = z.object({
   }),
 })
 export type PaymentVoided = z.infer<typeof paymentVoidedSchema>
+
+/**
+ * Выплата зарплаты из кассы (0101, pay_salary): расход по статье «Зарплата»
+ * со специалистом и месяцем. month — первое число месяца зарплаты.
+ */
+export const salaryPaidSchema = z.object({
+  type: z.literal('salary.paid'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    expense_id: z.string().uuid(),
+    teacher_id: z.string().uuid(),
+    month: z.string(),
+    amount_tiyin: z.number().int().positive(),
+  }),
+})
+export type SalaryPaid = z.infer<typeof salaryPaidSchema>
+
+/**
+ * Ошибочный расход отменён владельцем (0101, void_expense): корректировка на
+ * ту же сумму с минусом. Причины в payload нет — она в comment строки отмены.
+ */
+export const expenseVoidedSchema = z.object({
+  type: z.literal('expense.voided'),
+  payload: z.object({
+    center_id: z.string().uuid(),
+    expense_id: z.string().uuid(),
+    voided_expense_id: z.string().uuid(),
+    amount_tiyin: z.number().int().positive(),
+  }),
+})
+export type ExpenseVoided = z.infer<typeof expenseVoidedSchema>
 
 /**
  * Долг за занятия/перерасход списан владельцем без денег (0087,
@@ -1218,6 +1251,8 @@ export const appEventSchema = z.discriminatedUnion('type', [
   lessonDebtWrittenOffSchema,
   lessonDebtCoveredSchema,
   paymentVoidedSchema,
+  salaryPaidSchema,
+  expenseVoidedSchema,
   subscriptionShortfallWrittenOffSchema,
   centerDeletionRequestedSchema,
   centerDeletionCancelledSchema,

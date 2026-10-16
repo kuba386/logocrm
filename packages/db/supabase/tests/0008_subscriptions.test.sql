@@ -132,9 +132,11 @@ select is(
 
 -- 6. Цена не считается браузером: аргумент переопределяет тип ----------------
 
+-- Цена ниже цены типа — скидка: с 0101 только с причиной из справочника центра.
 insert into t_sub (name, id)
 values ('custom', public.sell_subscription('77777777-0000-0000-0000-000000000001',
-                                           'eeeeeeee-0000-0000-0000-000000000002', 200000));
+                                           'eeeeeeee-0000-0000-0000-000000000002', 200000, null,
+                                           (select id from public.discount_reasons where code = 'promo')));
 
 select is(
   (select price_tiyin from public.subscriptions

@@ -27,6 +27,8 @@ import {
   PayInstallmentForm,
   PaymentDialog,
   ReopenPeriodForm,
+  TransferDialog,
+  VoidExpenseForm,
   VoidPaymentForm,
   type StudentOption,
 } from './finance-forms'
@@ -135,8 +137,8 @@ export default async function FinancePage({
       // Долг, аванс и просрочка по ребёнку — для подсказок в форме оплаты (считает база).
       supabase.from('student_balance').select('student_id, debt_tiyin, overdrawn_tiyin, lesson_credit_tiyin, subscription_overdue_tiyin'),
       finance
-        ? supabase.from('expense_categories').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort')
-        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+        ? supabase.from('expense_categories').select('id, name, code').eq('is_active', true).is('deleted_at', null).order('sort')
+        : Promise.resolve({ data: [] as { id: string; name: string; code: string }[] }),
     ])
   const sources = (sourceRows ?? []).map((s) => ({ id: s.id, name: s.name }))
   const sourceName = new Map(sources.map((s) => [s.id, s.name]))
@@ -163,6 +165,8 @@ export default async function FinancePage({
     })
   const studentName = new Map((studentRows ?? []).map((s) => [s.id, s.full_name]))
   const categories = (categoryRows ?? []).map((c) => ({ id: c.id, name: c.name }))
+  // Статья «Зарплата» (сид 0016, код salary): форма расхода подскажет провести выплату в «Зарплате» (0101).
+  const salaryCategoryId = (categoryRows ?? []).find((c) => c.code === 'salary')?.id
 
   const tabs: { key: Tab; title: string }[] = [
     { key: 'payments', title: t('finance', 'tabPayments') },
@@ -191,7 +195,9 @@ export default async function FinancePage({
             actions={
               <>
                 <PaymentDialog payers={payers} students={students} sources={sources} today={today} />
-                {finance ? <ExpenseDialog categories={categories} sources={sources} today={today} /> : null}
+                {finance ? <ExpenseDialog categories={categories} sources={sources} today={today} salaryCategoryId={salaryCategoryId} /> : null}
+                {/* Перевод между кассами (0101) — касса только у can_finance. */}
+                {finance ? <TransferDialog sources={sources} today={today} /> : null}
               </>
             }
           />
@@ -268,6 +274,7 @@ export default async function FinancePage({
               sourceName={sourceName}
               cashError={cashError}
               spent={sum((r) => r.spent_tiyin)}
+              isOwner={isOwner}
             />
           ) : null}
           {tab === 'installments' ? <InstallmentsTab supabase={supabase} timeZone={timeZone} sources={sources} /> : null}
@@ -419,6 +426,9 @@ async function PaymentsTab({
               ))}
             </ul>
           ) : null}
+          {cashError ? null : (
+            <TransfersList supabase={supabase} fromIso={fromIso} toIso={toIso} timeZone={timeZone} sources={sources} sourceName={sourceName} today={today} />
+          )}
         </>
       ) : (
         <p className="text-sm text-muted-foreground">{t('finance', 'registrarNoCash')}</p>
@@ -569,6 +579,7 @@ async function ExpensesTab({
   sourceName,
   cashError,
   spent,
+  isOwner,
 }: {
   supabase: Supabase
   month: string
@@ -580,21 +591,34 @@ async function ExpensesTab({
   sourceName: Map<string, string>
   cashError: string | null
   spent: number
+  /** Владелец — «Отменить» у ошибочного расхода (0101); право проверяет база. */
+  isOwner: boolean
 }) {
   let query = supabase
     .from('expenses')
-    .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment', { count: 'exact' })
+    .select('id, category_id, source_id, amount_tiyin, paid_at, kind, comment, teacher_id, salary_month, voids_expense_id', { count: 'exact' })
     .gte('paid_at', fromIso)
     .lt('paid_at', toIso)
   if (categoryFilter) query = query.eq('category_id', categoryFilter)
   // Имена статей — со всеми, включая скрытые и архивные: у прошлых расходов
   // название не должно пропадать (read_archived, 0028).
-  const [{ data: expenses, error: expensesError, count: expensesCount }, { data: allCategories }] = await Promise.all([
-    query.order('paid_at', { ascending: false }).limit(LIST_LIMIT),
+  const [{ data: expenses, error: expensesError, count: expensesCount }, { data: allCategories }, { data: teacherRows }] = await Promise.all([
+    // Вторичный порядок держит отмену рядом с исходным расходом — у пары одна дата (0101).
+    query.order('paid_at', { ascending: false }).order('created_at', { ascending: false }).limit(LIST_LIMIT),
     supabase.from('expense_categories').select('id, name'),
+    // Имена специалистов у выплат зарплаты — со всеми, включая архивных.
+    supabase.from('teachers').select('id, full_name'),
   ])
   const categoryName = new Map((allCategories ?? []).map((c) => [c.id, c.name]))
+  const teacherName = new Map((teacherRows ?? []).map((tr) => [tr.id, tr.full_name]))
   const rows = expenses ?? []
+  // Отменённые — отдельным запросом по id строк страницы: отмена может не попасть
+  // в фильтр по статье или за границу limit, а кнопка «Отменить» у отменённого — ошибка.
+  const pageIds = rows.map((e) => e.id)
+  const { data: voidRows } = pageIds.length
+    ? await supabase.from('expenses').select('voids_expense_id').in('voids_expense_id', pageIds)
+    : { data: [] as { voids_expense_id: string | null }[] }
+  const voidedIds = new Set((voidRows ?? []).map((v) => v.voids_expense_id).filter((v): v is string => Boolean(v)))
   const back = `/app/finance?tab=expenses&month=${month}`
 
   return (
@@ -650,21 +674,39 @@ async function ExpensesTab({
                   <TableHead>{t('finance', 'colSource')}</TableHead>
                   <TableHead className="text-right">{t('finance', 'colAmount')}</TableHead>
                   <TableHead>{t('finance', 'colComment')}</TableHead>
+                  {isOwner ? <TableHead className="text-right"> </TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="whitespace-nowrap">{dayInZone(e.paid_at, timeZone)}</TableCell>
-                    <TableCell>{categoryName.get(e.category_id) ?? '—'}</TableCell>
-                    <TableCell>{label('expenseKind', e.kind)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {e.source_id ? (sourceName.get(e.source_id) ?? '—') : t('finance', 'noSource')}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatSom(e.amount_tiyin)}</TableCell>
-                    <TableCell className="max-w-[16rem] truncate text-muted-foreground">{e.comment ?? ''}</TableCell>
-                  </TableRow>
-                ))}
+                {rows.map((e) => {
+                  const voided = voidedIds.has(e.id)
+                  return (
+                    <TableRow key={e.id} className={cn(voided && 'text-muted-foreground')}>
+                      <TableCell className="whitespace-nowrap">{dayInZone(e.paid_at, timeZone)}</TableCell>
+                      <TableCell>
+                        <span className={cn(voided && 'line-through')}>{categoryName.get(e.category_id) ?? '—'}</span>
+                        {/* Выплата зарплаты (0101): кому и за какой месяц. */}
+                        {e.teacher_id && e.salary_month ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {teacherName.get(e.teacher_id) ?? '—'} · {monthLabel(e.salary_month)}
+                          </span>
+                        ) : null}
+                        {voided ? <span className="block text-xs">{t('finance', 'expenseVoided')}</span> : null}
+                      </TableCell>
+                      <TableCell>{e.voids_expense_id ? t('finance', 'expenseVoidRow') : label('expenseKind', e.kind)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {e.source_id ? (sourceName.get(e.source_id) ?? '—') : t('finance', 'noSource')}
+                      </TableCell>
+                      <TableCell className={cn('text-right font-medium tabular-nums', voided && 'line-through')}>{formatSom(e.amount_tiyin)}</TableCell>
+                      <TableCell className="max-w-[16rem] truncate text-muted-foreground">{e.comment ?? ''}</TableCell>
+                      {isOwner ? (
+                        <TableCell className="text-right">
+                          {e.kind === 'expense' && !voided && !e.voids_expense_id ? <VoidExpenseForm expenseId={e.id} amountTiyin={e.amount_tiyin} /> : null}
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}
@@ -989,5 +1031,69 @@ async function DaySummary({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Переводы между кассами за месяц (0101): кто, откуда, куда. Ошибочный перевод
+ * исправляется обратным — кнопка заполняет форму наоборот. Свёрнут, если
+ * переводов нет: место над платежами важнее.
+ */
+async function TransfersList({
+  supabase,
+  fromIso,
+  toIso,
+  timeZone,
+  sources,
+  sourceName,
+  today,
+}: {
+  supabase: Supabase
+  fromIso: string
+  toIso: string
+  timeZone: string
+  sources: { id: string; name: string }[]
+  sourceName: Map<string, string>
+  today: string
+}) {
+  const { data, error } = await supabase
+    .from('cash_transfers')
+    .select('id, from_source_id, to_source_id, amount_tiyin, transferred_at, comment')
+    .gte('transferred_at', fromIso)
+    .lt('transferred_at', toIso)
+    .order('transferred_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(LIST_LIMIT)
+  if (error) return <FormError message={loadErrorMessage(error, t('finance', 'transfersLoadFailed'))} />
+  const rows = data ?? []
+  if (rows.length === 0) return null
+  // Имена — со всеми источниками, включая архивные: у прошлого перевода название не пропадает.
+  const { data: allSources } = await supabase.from('payment_sources').select('id, name')
+  const names = new Map([...sourceName, ...(allSources ?? []).map((src) => [src.id, src.name] as const)])
+  return (
+    <details className="rounded-md border border-border p-3 text-sm">
+      <summary className="cursor-pointer font-medium">
+        {t('finance', 'transfersTitle')} ({rows.length})
+      </summary>
+      <ul className="mt-3 space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {dayInZone(r.transferred_at, timeZone)} · {names.get(r.from_source_id) ?? '—'} → {names.get(r.to_source_id) ?? '—'}
+              {r.comment ? <span className="text-muted-foreground"> · {r.comment}</span> : null}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="font-medium tabular-nums">{formatSom(r.amount_tiyin)}</span>
+              <TransferDialog
+                sources={sources}
+                today={today}
+                label={t('finance', 'transferReverse')}
+                prefill={{ fromSourceId: r.to_source_id, toSourceId: r.from_source_id, amountSom: String(r.amount_tiyin / 100) }}
+              />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }

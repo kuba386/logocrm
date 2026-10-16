@@ -2,7 +2,7 @@ import { formatSom } from '@logocrm/core'
 import { cn } from '@/lib/utils'
 import { formatInTimeZone, isoDayInZone } from '@/lib/timezone'
 import type { BalanceView } from './subscriptions-panel'
-import { CreditRefundAction, DebtActions } from '../../debts/debt-dialogs'
+import { AdvanceAction, CreditRefundAction, DebtActions } from '../../debts/debt-dialogs'
 
 /**
  * Шапка карточки для администратора: главное о ребёнке одной строкой —
@@ -35,12 +35,21 @@ export function StudentSummary({
     sources: { id: string; name: string }[]
     today: string
     isOwner: boolean
+    /**
+     * Причина, по которой аванс не принять (lesson_advance_preview, 0101): null —
+     * можно, undefined — база не спрашивалась (долг или идёт абонемент).
+     */
+    advanceBlock?: string | null
   }
 }) {
   const debt = balance.debtTiyin > 0 || balance.overdrawnTiyin > 0
   const lessonDebt = balance.debtTiyin + balance.overdrawnTiyin
   const credit = balance.creditTiyin ?? 0
   const back = money ? `/app/students/${money.studentId}` : '/app'
+  // «Внести аванс» — когда база разрешила (0101 Р2). Если нельзя — короткое
+  // объяснение вместо кнопки: иначе форма открывалась бы ради отказа.
+  const advance = money?.advanceBlock === null
+  const advanceHint = money?.advanceBlock ? ADVANCE_BLOCK_HINTS[money.advanceBlock] : undefined
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-card p-4">
@@ -90,7 +99,7 @@ export function StudentSummary({
         </div>
       </dl>
       {/* Кнопки денег — отдельной строкой на всю ширину: в узкой колонке «Долг» на телефоне они не помещались. */}
-      {money && (lessonDebt > 0 || credit > 0) ? (
+      {money && (lessonDebt > 0 || credit > 0 || advance || advanceHint) ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           {lessonDebt > 0 ? (
             <DebtActions
@@ -104,6 +113,17 @@ export function StudentSummary({
               payLabel={`Принять оплату долга · ${formatSom(lessonDebt)}`}
             />
           ) : null}
+          {advance ? (
+            <AdvanceAction
+              studentId={money.studentId}
+              studentName={money.studentName}
+              creditTiyin={credit}
+              sources={money.sources}
+              today={money.today}
+              back={back}
+            />
+          ) : null}
+          {advanceHint ? <p className="text-xs text-muted-foreground">{advanceHint}</p> : null}
           {credit > 0 ? (
             <CreditRefundAction
               studentId={money.studentId}
@@ -118,6 +138,17 @@ export function StudentSummary({
       ) : null}
     </div>
   )
+}
+
+/**
+ * Почему аванс не принять — коды lesson_advance_block_unchecked (0101). «Долг» тут
+ * не встречается (при долге база не спрашивается), архив молчит — у архивного
+ * ученика подсказка про аванс была бы шумом.
+ */
+const ADVANCE_BLOCK_HINTS: Record<string, string> = {
+  no_payer: 'Аванс не принимается: у ученика нет плательщика.',
+  writeoff: 'Аванс не отразится: у ученика списан долг за занятия. Предложите абонемент.',
+  unpaid_subscription: 'Аванс не принимается, пока не доплачен абонемент — примите оплату абонемента.',
 }
 
 /** Календарная дата абонемента (date без времени): полдень UTC, чтобы пояс не сдвинул день. */

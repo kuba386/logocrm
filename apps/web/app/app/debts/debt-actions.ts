@@ -60,6 +60,40 @@ export async function acceptDebtPayment(_prev: DebtActionState, formData: FormDa
   }
 }
 
+/**
+ * Аванс за будущие занятия без абонемента, когда долга нет (accept_lesson_advance,
+ * 0101). expected — аванс, который показали в форме: второе нажатие уходит с
+ * тем же нулём и получает 23514, а не второй аванс. Долг, недоплаченный
+ * абонемент, списанный долг и архив — отказ базы с подсказкой, что делать.
+ */
+export async function acceptLessonAdvance(_prev: DebtActionState, formData: FormData): Promise<DebtActionState> {
+  const studentId = String(formData.get('studentId') ?? '')
+  const sourceId = String(formData.get('sourceId') ?? '')
+  const paidOn = String(formData.get('paidOn') ?? '')
+  const amount = tiyinFromSom(formData.get('amountSom'))
+  const expected = Number(formData.get('expectedCreditTiyin'))
+  const comment = String(formData.get('comment') ?? '').trim()
+
+  if (!UUID.test(studentId) || !Number.isInteger(expected)) return { message: 'Обновите страницу и попробуйте снова' }
+  if (!Number.isFinite(amount) || amount <= 0) return { message: 'Укажите сумму больше нуля' }
+  if (!UUID.test(sourceId)) return { message: 'Укажите источник оплаты' }
+  if (!DAY.test(paidOn)) return { message: 'Укажите дату оплаты' }
+
+  const supabase = await createClient()
+  const { data: paymentId, error } = await supabase.rpc('accept_lesson_advance', {
+    p_student_id: studentId,
+    p_amount_tiyin: amount,
+    p_source_id: sourceId,
+    p_paid_on: paidOn,
+    p_expected_credit_tiyin: expected,
+    p_comment: comment || undefined,
+  })
+  if (error) return toAppError(error, 'Не удалось принять аванс')
+
+  revalidateDebts(studentId)
+  return { message: '', notice: 'Аванс принят', done: Date.now(), paymentId: paymentId ?? undefined }
+}
+
 /** Списание без денег — только владелец (проверяет SQL), причина обязательна. */
 export async function writeOffDebt(_prev: DebtActionState, formData: FormData): Promise<DebtActionState> {
   const studentId = String(formData.get('studentId') ?? '')

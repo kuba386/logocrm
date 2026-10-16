@@ -10,6 +10,7 @@ const ADMIN_SECTIONS: SettingsSection[] = [
   { href: '/app/settings/subscription-types', label: 'Типы абонементов' },
   { href: '/app/settings/payment-sources', label: 'Способы оплаты' },
   { href: '/app/settings/expense-categories', label: 'Статьи расходов' },
+  { href: '/app/settings/discount-reasons', label: 'Причины скидок' },
   { href: '/app/settings/teacher-rates', label: 'Ставки' },
   { href: '/app/settings/notifications', label: 'Уведомления' },
   { href: '/app/settings/plan', label: 'Тариф' },
@@ -18,6 +19,7 @@ const ADMIN_SECTIONS: SettingsSection[] = [
 const FINANCE_SECTIONS = new Set([
   '/app/settings/payment-sources',
   '/app/settings/expense-categories',
+  '/app/settings/discount-reasons',
   '/app/settings/teacher-rates',
 ])
 

@@ -44,6 +44,7 @@ export async function sellSubscriptionPaid(
     typeId: String(formData.get('typeId') ?? ''),
     saleKey: String(formData.get('saleKey') ?? ''),
     priceTiyin: optionalTiyin(formData, 'priceSom'),
+    discountReasonId: optional(formData, 'discountReasonId'),
     startsAt: optional(formData, 'startsAt'),
     paidTiyin,
     sourceId: paidTiyin > 0 ? optional(formData, 'sourceId') : undefined,
@@ -72,6 +73,7 @@ export async function sellSubscriptionPaid(
     p_first_due: input.firstDue,
     p_step_months: input.stepMonths,
     p_expected_remaining_tiyin: input.expectedRemainingTiyin,
+    p_discount_reason_id: input.discountReasonId,
   })
 
   if (error) return toAppError(error, t('sale', 'failed'))

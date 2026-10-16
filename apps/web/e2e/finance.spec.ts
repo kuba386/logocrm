@@ -162,3 +162,43 @@ test('Финансы: «Принять оплату» при долге за з�
   const debtRow = page.locator('div').filter({ hasText: STUDENTS.amina }).filter({ hasText: 'Долг' }).last()
   await expect(debtRow).toContainText(formatSom(50_000))
 })
+
+// Деньги центра (0101). Эмир — без занятий и абонементов (e2e.sql), его счёт
+// другие файлы не читают: аванс 1 000 → «аванс 1 000» и «Вернуть аванс».
+test('Аванс без долга: «Внести аванс» на карточке — аванс виден, вернуть можно той же карточкой', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.emir }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.emir })).toBeVisible()
+
+  // Кнопку показывает база (lesson_advance_preview): долга нет, абонемента нет.
+  await page.getByRole('button', { name: 'Внести аванс' }).click()
+  const dialog = page.locator('dialog[open]')
+  await dialog.getByLabel('Сумма, сом').fill('1000')
+  await actAndAwait(page, 'Принять аванс', 'Аванс принят')
+  await expect(page.getByRole('status').getByRole('link', { name: 'Квитанция' })).toBeVisible()
+
+  // Аванс — из счёта занятий в базе (student_balance.lesson_credit_tiyin), не из формы.
+  // exact: в закрытом <dialog> «Внести аванс» тот же текст внутри описания.
+  await expect(page.getByText(`аванс ${formatSom(100_000)}`, { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Вернуть аванс' })).toBeVisible()
+})
+
+// Перевод между кассами (0101): итог центра не меняется, перевод — в списке
+// месяца с «Обратным переводом». Сумма маленькая: касса фикстуры не важна,
+// отрицательный итог одной кассы допустим (остатков касс нет — 0101 Р10).
+test('Перевод между кассами: проведён и виден в списке месяца', async ({ page }) => {
+  await page.goto('/app/finance?tab=payments')
+  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Перевод между кассами' }).click()
+  const dialog = page.locator('dialog[open]')
+  // Откуда и куда по умолчанию — две первые кассы, разные.
+  await dialog.getByLabel('Сумма, сом').fill('50')
+  await dialog.getByLabel('Комментарий').fill('e2e: инкассация')
+  await actAndAwait(page, 'Перевести', 'Перевод проведён')
+
+  await page.getByText(/^Переводы между кассами за месяц \(\d+\)$/).click()
+  const transfer = page.locator('li', { hasText: 'e2e: инкассация' }).first()
+  await expect(transfer).toContainText(formatSom(5_000))
+  await expect(transfer.getByRole('button', { name: 'Обратный перевод' })).toBeVisible()
+})

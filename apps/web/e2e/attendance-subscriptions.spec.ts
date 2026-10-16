@@ -342,3 +342,24 @@ test('Этап 5, п.1: продажа с оплатой 2 000 и рассроч
   // две строки по 1 000 остаются только в графике карточки.
   await expect(page.getByText('· ожидается', { exact: false }).or(page.getByText('· к оплате', { exact: false }))).toHaveCount(2)
 })
+
+// Скидка (0101): цена ниже цены типа — только с причиной из справочника центра
+// (сид: «Второй ребёнок»…). Сезим — без занятий и абонементов (e2e.sql), других
+// продаж со скидкой в прогоне нет — итог отчёта ровно эта продажа.
+test('Скидка: продажа дешевле цены типа — с причиной, видна на карточке и в отчёте', async ({ page }) => {
+  await page.goto('/app/students')
+  await page.getByRole('link', { name: STUDENTS.sezim }).click()
+  await expect(page.getByRole('heading', { name: STUDENTS.sezim })).toBeVisible()
+
+  const sale = await openSaleDialog(page, TYPE_NAME)
+  await sale.locator('#priceSom').fill('3500')
+  await expect(sale.getByText(`Скидка ${formatSom(50_000)} от цены типа ${formatSom(400_000)}`)).toBeVisible()
+  await sale.locator('#discountReasonId').selectOption({ label: 'Второй ребёнок' })
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
+
+  await expect(page.getByText(`Скидка от цены типа ${formatSom(400_000)} — Второй ребёнок`)).toBeVisible()
+
+  // Итог и группировку считает база (subscription_discount_totals).
+  await page.goto('/app/reports')
+  await expect(page.getByText(`Скидок на ${formatSom(50_000)} — продаж со скидкой: 1.`)).toBeVisible()
+})

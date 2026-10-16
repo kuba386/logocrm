@@ -6,17 +6,18 @@ import { toAppError } from '@/lib/errors'
 import type { CatalogState } from './services/actions'
 
 /**
- * Способы оплаты и статьи расходов — справочники денег (0013, 0016): пишут
+ * Способы оплаты, статьи расходов и причины скидок (0101) — справочники денег (0013, 0016): пишут
  * owner/admin и бухгалтер (RLS tenant_admin + apply_role_rls finance write,
  * 0028), архив и восстановление — RPC под can_finance (0027). Прямой update
  * — только справочные поля (grant update (code, name, is_active, sort)).
  */
 
-type Catalog = 'payment_sources' | 'expense_categories'
+type Catalog = 'payment_sources' | 'expense_categories' | 'discount_reasons'
 
 const PATHS: Record<Catalog, string> = {
   payment_sources: '/app/settings/payment-sources',
   expense_categories: '/app/settings/expense-categories',
+  discount_reasons: '/app/settings/discount-reasons',
 }
 
 function text(formData: FormData, key: string): string {
@@ -77,6 +78,10 @@ export async function saveExpenseCategory(_prev: CatalogState, formData: FormDat
   return save('expense_categories', formData, 'статью расхода')
 }
 
+export async function saveDiscountReason(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  return save('discount_reasons', formData, 'причину скидки')
+}
+
 export async function archivePaymentSource(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
   const id = text(formData, 'id')
   if (!id) return { message: 'Способ оплаты не найден' }
@@ -114,5 +119,25 @@ export async function restoreExpenseCategory(_prev: CatalogState, formData: Form
   const { error } = await supabase.rpc('restore_expense_category', { p_id: id })
   if (error) return toAppError(error, 'Не удалось восстановить статью')
   revalidateMoney('expense_categories')
+  return { message: '', notice: 'Восстановлена' }
+}
+
+export async function archiveDiscountReason(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Причина скидки не найдена' }
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('archive_discount_reason', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось отправить причину в архив')
+  revalidateMoney('discount_reasons')
+  return { message: '', notice: 'В архиве' }
+}
+
+export async function restoreDiscountReason(_prev: CatalogState, formData: FormData): Promise<CatalogState> {
+  const id = text(formData, 'id')
+  if (!id) return { message: 'Причина скидки не найдена' }
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('restore_discount_reason', { p_id: id })
+  if (error) return toAppError(error, 'Не удалось восстановить причину')
+  revalidateMoney('discount_reasons')
   return { message: '', notice: 'Восстановлена' }
 }

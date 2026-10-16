@@ -532,13 +532,15 @@ end if;
 |---|---|---|
 | **Выручка** (начисление) | `attendance.price_tiyin` по отметкам `deducted = true` занятий в статусе `done`; месяц — по `lessons.starts_at` в поясе центра | `revenue_by_month` / `revenue_by_teacher` / `revenue_by_service` (0021) |
 | **Зарплата** | те же отметки: `done` и `pays_teacher`, атрибуция по `attendance.paid_teacher_id` | `calc_salary` (0017) |
-| **Касса** | `payments` **и** `expenses` по `paid_at` в поясе центра; расход входит с инвертированным знаком | `cash_by_source` (0021) |
+| **Касса** | `payments` **и** `expenses` по `paid_at` в поясе центра; расход входит с инвертированным знаком. С 0101 — и переводы между кассами (`cash_transfers`, две ноги одной датой): итог источника честный, сумма по центру не меняется | `cash_by_source` (0021, 0101) |
 | **Поступления** за день | только `payments` (знак — часть суммы: возврат и корректировка входят) по `paid_at` в сутках центра, расходы не входят; слово «касса» для этого числа не используется | `center_payments_day` (0072): `/cash` в боте (`can_finance`) и `payments_day_summary` в вебе (0100, `can_payments` — и стойке) |
 | **Долг** по занятиям | отметки `deducted` без абонемента | `student_balance.debt_tiyin` (0015) |
 | **Долг за занятия** (на экранах и в CSV) | долг по занятиям **плюс** перерасход по пакетам (`remaining` счёта занятий, 0087/0089) | `/app/debts` (`student_debt_summary`), `export_debts().lessons_debt_tiyin` (с 0100), `payer_money_summary` |
 | **Недоплата** по абонементу (всего) | `price_tiyin − paid_tiyin`, независимо от графика рассрочки — «сколько всего должны» | `subscription_payment_summary`, `installments_view`, `export_debts().subscriptions_unpaid_tiyin` (0018–0020, 0058) |
 | **Просрочка** по абонементу | с планом рассрочки — недобор до графика `greatest(base_paid − paid, 0)` плюс **остатки** просроченных строк (`installments_view.row_remaining_tiyin`, state `overdue`), не больше `price − paid`; без плана — вся недоплата немедленно — «кому писать сегодня». До 0100 бралась плановая сумма строк — частично оплаченная строка завышала просрочку | `subscription_overdue_unchecked` (0100, одна копия формулы) → `student_subscriptions_overdue()`, `student_balance.subscription_overdue_tiyin`, `payer_money_summary` |
 | **К оплате по строке рассрочки** | `due_through_tiyin` = `greatest(base_paid + cumulative − paid, 0)` — закрыть всё по эту строку включительно (ровно сумма `pay_installment`); `row_remaining_tiyin` = `least(amount, due_through)` — остаток самой строки. У отменённого плана обе 0 | `installments_view` (0100) |
+| **Выплачено / к выплате** (зарплата) | выплачено — Σ `expenses` со специалистом и месяцем зарплаты (отмены с минусом); к выплате — итог месяца (снимок или расчёт + корректировки) минус выплачено, минус — переплата | `salary_totals_unchecked` (0101, одна копия) → `salary_summary.paid_tiyin/due_tiyin`, `pay_salary` |
+| **Скидка** | цена типа на момент продажи (`subscriptions.list_price_tiyin`) минус цена продажи; только у проданных с 0101 (раньше цену типа не хранили) | `subscription_discounts`, `subscription_discount_totals` (0101) |
 
 «Недоплата» и «просрочка» по абонементу — тоже не взаимозаменяемы, хоть и
 похожи внешне. «Недоплата» отвечает на вопрос бухгалтера «сколько нам
@@ -1863,3 +1865,59 @@ error)` берёт ставку из `ai_model_rates()` (VALUES, тыйыны з
   по RLS, 0028), день не позже `center_today`, NULL — 22023. Бот `/cash`
   остаётся `can_finance` (0072 Р7) — известное расхождение.
 - **`record_expense`** — дата не в будущем и не старше года (как у платежей).
+
+## Деньги центра (0101)
+
+Аванс без долга, выплата зарплаты из кассы, отмена расхода, переводы между
+кассами, скидки с причиной. Решения владельца 16.10.2026, architect-ревью
+плана — 11 находок (шапка миграции).
+
+- **Аванс** — `accept_lesson_advance(p_student_id, p_amount_tiyin,
+  p_source_id, p_paid_on, p_expected_credit_tiyin, p_comment)`:
+  `can_payments`, `lesson_debt_lock`, сверка текущего аванса (второе нажатие —
+  23514). Когда нельзя, решает одна функция `lesson_advance_block_unchecked`
+  (код причины: `archived`, `no_payer`, `debt`, `writeoff`,
+  `unpaid_subscription`); её же отдаёт `lesson_advance_preview` — кнопку на
+  карточке прячет база. `writeoff`: долг закрыт списанием и `paid < accrued +
+  overdrawn_gross` — аванс съелся бы (credit 0087 Р2 «сначала деньги, потом
+  списание»), отказ постоянный, пока не изменятся начисления.
+  `unpaid_subscription` — строго, и при рассрочке по графику: аванс легко
+  принять за оплату абонемента. Аванс принадлежит **счёту ребёнка**: при смене
+  плательщика остаётся у ребёнка, вернуть — текущему плательщику
+  (`refund_lesson_debt_credit`). Ошибочный аванс отменяется только возвратом
+  (оплату долга `void_payment` не трогает, 0093 Р2).
+- **Выплата зарплаты** — `pay_salary(p_teacher_id, p_month, p_amount_tiyin,
+  p_source_id, p_paid_on, p_expected_due_tiyin, p_comment)`: `can_finance`,
+  строка `expenses` по статье «Зарплата» (`code = 'salary'`, код статьи
+  неизменяем триггером) с `teacher_id` и `salary_month`; не больше «к выплате»,
+  сверка под advisory-блокировкой специалиста-месяца. Месяц — не будущий, дата
+  выплаты — не раньше месяца зарплаты. Область — живые карточки специалистов,
+  как у `salary_summary`: архивному специалисту выплатить нельзя (сначала
+  восстановить). CSV зарплаты (`export_salary_summary`) выплат не показывает —
+  тип возврата не менялся.
+- **Отмена расхода** — `void_expense(p_expense_id, p_reason)`: только owner,
+  зеркальная корректировка той же датой (`voids_expense_id`, одна отмена на
+  расход), причина — в `comment` строки отмены. Границы — триггер
+  `expenses_links_guard`: отмена зеркалит исходную (nullable через `is
+  distinct from`), пара и отмена неизменяемы, специалист/месяц/ссылка — тоже,
+  выплата — только по статье `salary`. CHECK: корректировка со специалистом —
+  только отмена.
+- **Переводы между кассами** — `cash_transfers` (откуда, куда, сумма > 0, день
+  по поясу центра), пишет только `record_cash_transfer(..., p_transfer_key,
+  ...)` с ключом идемпотентности (unique по центру). Неизменяем триггером,
+  чтение — `can_finance`, у `service_role` прав нет, под замком месяца и
+  readonly-guard. Ошибочный перевод исправляется обратным. «Поступления за
+  день» (`payments_day_summary`) переводов не видят — это только платежи.
+  Остатков касс на дату нет: без начального остатка накопительный итог был бы
+  мусором.
+- **Скидки** — `subscriptions.list_price_tiyin` (цена типа на момент продажи,
+  пишет `sell_subscription`) и `discount_reason_id` → справочник
+  `discount_reasons` (как статьи расходов: сид пяти причин при создании
+  центра, пишут owner/admin/finance, стойка читает, родителю справочник
+  закрыт — текст причины не уходит в `subscriptions_parent_read`). CHECK:
+  скидка требует причину, причина — только при скидке. `sell_subscription` —
+  пятый аргумент `p_discount_reason_id`, `sell_subscription_paid` — тринадцатый.
+  Отчёт — `subscription_discounts` (строки: причина, автор — имя карточки и
+  роль, без email) и `subscription_discount_totals` (итоги по причинам,
+  строка итога `is_total`), оба `can_finance`.
+

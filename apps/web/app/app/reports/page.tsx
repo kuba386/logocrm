@@ -5,6 +5,7 @@ import { t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DebtsReportForm, PeriodReportForm, SalaryReportForm } from './report-forms'
 import { MonthSummary } from './month-summary'
+import { DiscountsSummary } from './discounts-summary'
 import { centerTimeZone } from '@/lib/timezone'
 
 export const metadata = { title: 'Отчёты — LogoCRM' }
@@ -47,6 +48,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </div>
 
       <MonthSummary supabase={supabase} month={summaryMonth} timeZone={timeZone} />
+
+      {/* Скидки за тот же месяц (0101): листается вместе со сводкой — month из адреса. */}
+      <DiscountsSummary supabase={supabase} month={summaryMonth} timeZone={timeZone} />
 
       <Card>
         <CardHeader>
