@@ -18,6 +18,7 @@ import { centerTimeZone, dayInZone, isoDayInZone } from '@/lib/timezone'
 import { canPayments, isFinance } from '@/lib/roles'
 import { DebtActions } from './debt-dialogs'
 import { SavedFilters } from '../saved-filters/saved-filters'
+import { PageNoticeProvider } from '@/components/ui/page-notice'
 import { loadSavedFilters } from '../saved-filters/load'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -261,95 +262,108 @@ export default async function DebtsPage({
 
       <SavedFilters page="debts" basePath="/app/debts" current={currentFilter} data={savedFilters} />
 
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="pt-6 text-sm text-muted-foreground">Ничего не найдено с этим фильтром.</CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((row) => {
-            const rowProblems = debtProblems(row)
-            const waNumber = whatsappNumber(row.payerPhone)
-            // null — сказать текущему плательщику нечего (только чужая просрочка): кнопки нет.
-            const waText = debtWhatsappMessage(row)
-            // Просрочка есть, но платить должен не тот, чей контакт на
-            // карточке — молча звать текущего плательщика ребёнка нельзя
-            // (0070, находка №6). subscriptionOverduePayerId = null, если у
-            // ребёнка сразу несколько просроченных абонементов разных
-            // плательщиков — уточнить, кому писать, тогда может только
-            // человек, а не эта карточка.
-            const overdueMismatch = row.subscriptionOverdueTiyin > 0 && !subscriptionOverdueAddressable(row)
-            return (
-              <Card key={row.studentId}>
-                <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <Link href={`/app/students/${row.studentId}`} className="font-medium hover:underline">
-                      {row.studentName}
-                    </Link>
-                    <p className="text-sm text-muted-foreground">
-                      {row.payerName ?? 'Плательщик не указан'}
-                      {row.payerPhone ? ` · ${formatKgPhone(row.payerPhone)}` : ''}
-                    </p>
-                    {overdueMismatch ? (
-                      <p className="text-xs text-warning">
-                        Абонемент оформлен на{' '}
-                        {row.overduePayerName
-                          ? `${row.overduePayerName}${row.overduePayerPhone ? ` · ${formatKgPhone(row.overduePayerPhone)}` : ''}`
-                          : 'другого плательщика'}
-                        — писать текущему плательщику ребёнка про эту сумму нельзя.
+      {/* Итог оплаты — над списком: строка должника после полной оплаты
+          исчезает, и уведомление внутри неё пропало бы вместе с ней. */}
+      <PageNoticeProvider>
+        {rows.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-sm text-muted-foreground">Ничего не найдено с этим фильтром.</CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const rowProblems = debtProblems(row)
+              const waNumber = whatsappNumber(row.payerPhone)
+              // null — сказать текущему плательщику нечего (только чужая просрочка): кнопки нет.
+              const waText = debtWhatsappMessage(row)
+              // Просрочка есть, но платить должен не тот, чей контакт на
+              // карточке — молча звать текущего плательщика ребёнка нельзя
+              // (0070, находка №6). subscriptionOverduePayerId = null, если у
+              // ребёнка сразу несколько просроченных абонементов разных
+              // плательщиков — уточнить, кому писать, тогда может только
+              // человек, а не эта карточка.
+              const overdueMismatch = row.subscriptionOverdueTiyin > 0 && !subscriptionOverdueAddressable(row)
+              return (
+                <Card key={row.studentId}>
+                  <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <Link href={`/app/students/${row.studentId}`} className="font-medium hover:underline">
+                        {row.studentName}
+                      </Link>
+                      <p className="text-sm text-muted-foreground">
+                        {row.payerName ?? 'Плательщик не указан'}
+                        {row.payerPhone ? ` · ${formatKgPhone(row.payerPhone)}` : ''}
                       </p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      Последнее: {row.lastLessonAt ? dayInZone(row.lastLessonAt, timeZone) : '—'} · Ближайшее:{' '}
-                      {row.nextLessonAt ? dayInZone(row.nextLessonAt, timeZone) : 'не запланировано'}
-                    </p>
-                  </div>
+                      {overdueMismatch ? (
+                        <p className="text-xs text-warning">
+                          Абонемент оформлен на{' '}
+                          {row.overduePayerName
+                            ? `${row.overduePayerName}${row.overduePayerPhone ? ` · ${formatKgPhone(row.overduePayerPhone)}` : ''}`
+                            : 'другого плательщика'}
+                          — писать текущему плательщику ребёнка про эту сумму нельзя.
+                        </p>
+                      ) : null}
+                      <p className="text-xs text-muted-foreground">
+                        Последнее: {row.lastLessonAt ? dayInZone(row.lastLessonAt, timeZone) : '—'} · Ближайшее:{' '}
+                        {row.nextLessonAt ? dayInZone(row.nextLessonAt, timeZone) : 'не запланировано'}
+                      </p>
+                    </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {rowProblems.map((problem) => (
-                      <span
-                        key={problem.label}
-                        className={cn(
-                          'rounded px-2 py-1 text-sm font-medium',
-                          problem.tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-warning-bg text-warning',
-                        )}
-                      >
-                        {problem.label}
-                        {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
-                      </span>
-                    ))}
-                    {waNumber && waText ? (
-                      <a
-                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        WhatsApp
-                      </a>
-                    ) : null}
-                    {/* Долг за занятия и перерасход — гасятся оплатой и списанием (0087);
-                        просрочка по абонементу — оплатой абонемента на карточке. */}
-                    {row.debtTiyin + row.overdrawnTiyin > 0 ? (
-                      <DebtActions
-                        studentId={row.studentId}
-                        studentName={row.studentName}
-                        remainingTiyin={row.debtTiyin + row.overdrawnTiyin}
-                        sources={sources}
-                        today={today}
-                        canWriteOff={role === 'owner'}
-                      />
-                    ) : null}
-                    <Link href={`/app/students/${row.studentId}#subscriptions`} className={buttonVariants({ size: 'sm' })}>
-                      Продать абонемент
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {rowProblems.map((problem) => (
+                        <span
+                          key={problem.label}
+                          className={cn(
+                            'rounded px-2 py-1 text-sm font-medium',
+                            problem.tone === 'danger' ? 'bg-destructive/10 text-destructive' : 'bg-warning-bg text-warning',
+                          )}
+                        >
+                          {problem.label}
+                          {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
+                        </span>
+                      ))}
+                      {waNumber && waText ? (
+                        <a
+                          href={`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        >
+                          WhatsApp
+                        </a>
+                      ) : null}
+                      {/* Долг за занятия и перерасход — гасятся оплатой и списанием (0087);
+                          просрочка по абонементу — оплатой абонемента на карточке. */}
+                      {row.debtTiyin + row.overdrawnTiyin > 0 ? (
+                        <DebtActions
+                          studentId={row.studentId}
+                          studentName={row.studentName}
+                          remainingTiyin={row.debtTiyin + row.overdrawnTiyin}
+                          overdueTiyin={row.subscriptionOverdueTiyin}
+                          sources={sources}
+                          today={today}
+                          canWriteOff={role === 'owner'}
+                        />
+                      ) : null}
+                      {/* Просрочку по абонементу принимают у самого абонемента (accept_subscription_payment, 0090);
+                          исчерпанный остаток — повод продлить. Обе — на карточке ученика. */}
+                      {row.subscriptionOverdueTiyin > 0 ? (
+                        <Link href={`/app/students/${row.studentId}#subscriptions`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                          Оплата абонемента
+                        </Link>
+                      ) : (
+                        <Link href={`/app/students/${row.studentId}#subscriptions`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                          Продать абонемент
+                        </Link>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </PageNoticeProvider>
     </div>
   )
 }

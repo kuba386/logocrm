@@ -13,6 +13,10 @@ import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { AddStudentDialog } from '@/app/app/students/add-student-dialog'
 import { PayerTelegramPanel, type PayerTelegramStatus } from './payer-telegram-panel'
+import { DebtActions } from '@/app/app/debts/debt-dialogs'
+import { PageNoticeProvider } from '@/components/ui/page-notice'
+import { receiptHref } from '@/lib/receipt'
+import { isoDayInZone } from '@/lib/timezone'
 
 export const metadata = { title: 'Плательщик — LogoCRM' }
 
@@ -67,7 +71,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
   // overdue_payer_id — плательщик просроченного АБОНЕМЕНТА, он может не
   // совпадать с текущим payer_id ребёнка (0060, 0070).
   const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? ''
-  const [{ data: debtRows }, { data: payments }, { data: center }, { data: installmentRows }] = await Promise.all([
+  const [{ data: debtRows }, { data: payments }, { data: center }, { data: installmentRows }, { data: sourceRows }] = await Promise.all([
     supabase.rpc('student_debt_problems'),
     supabase
       .from('payments')
@@ -87,10 +91,20 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
       .is('cancelled_at', null)
       .neq('state', 'paid')
       .order('due_date'),
+    // Источники — для «Принять оплату долга» прямо на карточке семьи.
+    frontDesk
+      ? supabase.from('payment_sources').select('id, name').eq('is_active', true).is('deleted_at', null).order('sort')
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
   const timeZone = centerTimeZone(center?.settings)
+  const today = isoDayInZone(new Date(), timeZone)
+  const sources = (sourceRows ?? []).map((src) => ({ id: src.id, name: src.name }))
   const installments = (installmentRows ?? []).filter((r) => r.due_date && r.amount_tiyin != null)
   const myDebtRows = (debtRows ?? []).filter((r) => r.payer_id === id || r.overdue_payer_id === id)
+  // Долг за занятия по ребёнку этого плательщика — для кнопки оплаты (суммы из SQL, 0076).
+  const lessonDebtByStudent = new Map(
+    myDebtRows.filter((r) => r.payer_id === id).map((r) => [r.student_id, r.debt_tiyin + r.overdrawn_tiyin]),
+  )
   const debtByStudent = new Map(
     myDebtRows.map((r) => [
       r.student_id,
@@ -173,6 +187,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           <CardDescription>Все, за кого платит этот человек.</CardDescription>
         </CardHeader>
         <CardContent>
+          <PageNoticeProvider>
           {children && children.length > 0 ? (
             <ul className="space-y-2">
               {children.map((child) => (
@@ -188,13 +203,25 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                       {studentAge(child.birth_date)}, {statusLabel(child.status).toLowerCase()}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {(debtByStudent.get(child.id) ?? []).map((problem) => (
                       <StatusBadge key={problem.label} tone={problem.tone}>
                         {problem.label}
                         {problem.amount != null ? ` ${formatSom(problem.amount)}` : ''}
                       </StatusBadge>
                     ))}
+                    {/* Оплата долга за занятия — прямо на карточке семьи (0087), без похода в «Долги». */}
+                    {frontDesk && (lessonDebtByStudent.get(child.id) ?? 0) > 0 ? (
+                      <DebtActions
+                        studentId={child.id}
+                        studentName={child.full_name}
+                        remainingTiyin={lessonDebtByStudent.get(child.id) ?? 0}
+                        sources={sources}
+                        today={today}
+                        canWriteOff={role === 'owner'}
+                        back={`/app/payers/${payer.id}`}
+                      />
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -202,6 +229,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
           ) : (
             <p className="text-sm text-muted-foreground">Детей пока нет.</p>
           )}
+          </PageNoticeProvider>
         </CardContent>
       </Card>
 
@@ -275,7 +303,14 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                     ) : null}
                     {p.comment ? <span className="block text-xs text-muted-foreground">{p.comment}</span> : null}
                   </span>
-                  <span className="font-medium tabular-nums">{formatSom(p.amount_tiyin)}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium tabular-nums">{formatSom(p.amount_tiyin)}</span>
+                    {frontDesk ? (
+                      <Link href={receiptHref(p.id, `/app/payers/${payer.id}`)} className="text-xs text-primary underline-offset-4 hover:underline">
+                        Квитанция
+                      </Link>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>

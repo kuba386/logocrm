@@ -35,6 +35,7 @@ import { MonthlyReportPanel, type MonthOption } from './monthly-report-panel'
 import type { MonthlyReport } from './clinical-actions'
 import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
 import { StudentSummary } from './student-summary'
+import { PageNoticeProvider } from '@/components/ui/page-notice'
 import { CardTabs, type CardTab } from './card-tabs'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
@@ -121,7 +122,9 @@ export default async function StudentPage({
     notes: 'notes' in base ? base.notes : null,
   }
 
-  const payer = isAdmin && 'payer_id' in base && base.payer_id
+  // Стойке контакты семьи положены так же, как администратору (матрица прав:
+  // «Контакты плательщика» — registrar В; RLS payers — registrar write, 0028).
+  const payer = (isAdmin || isRegistrar) && 'payer_id' in base && base.payer_id
     ? (
         await supabase
           .from('payers')
@@ -178,7 +181,11 @@ export default async function StudentPage({
     nextLessonAt: string | null
   } | null = null
 
-  if (isAdmin) {
+  // Стойка (registrar) продаёт, принимает оплату, замораживает, переносит и
+  // отменяет абонементы — так в матрице прав и в SQL (can_front_desk /
+  // can_payments, 0026). Раньше панель строилась только owner/admin, и
+  // регистратору на карточке не доставалось ни абонементов, ни долга.
+  if (isAdmin || isRegistrar) {
     const payerId = 'payer_id' in base ? base.payer_id : null
     const centerId = (user.app_metadata as { center_id?: string })?.center_id ?? null
 
@@ -192,7 +199,7 @@ export default async function StudentPage({
     ] = await Promise.all([
         supabase
           .from('subscriptions')
-          .select('id, type_id, price_tiyin, starts_at, ends_at, payer_id')
+          .select('id, type_id, price_tiyin, starts_at, ends_at, payer_id, lessons_total')
           .eq('student_id', id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
@@ -205,7 +212,7 @@ export default async function StudentPage({
           .order('name'),
         supabase
           .from('student_balance')
-          .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin')
+          .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin, lesson_credit_tiyin')
           .eq('student_id', id)
           .maybeSingle(),
         supabase
@@ -291,6 +298,7 @@ export default async function StudentPage({
         typeName: row.type_id ? (typeNameById.get(row.type_id) ?? 'Абонемент') : 'Абонемент',
         payerId: row.payer_id,
         priceTiyin: row.price_tiyin,
+        lessonsTotal: row.lessons_total,
         startsAt: row.starts_at,
         endsAt: row.ends_at,
         lessonsLeft: summary?.lessons_left ?? null,
@@ -351,6 +359,7 @@ export default async function StudentPage({
         endsAt: balanceRow?.ends_at ?? null,
         debtTiyin: balanceRow?.debt_tiyin ?? 0,
         overdrawnTiyin: balanceRow?.overdrawn_tiyin ?? 0,
+        creditTiyin: balanceRow?.lesson_credit_tiyin ?? 0,
       },
       subscriptions,
       types: (typeRows ?? [])
@@ -418,13 +427,13 @@ export default async function StudentPage({
     const [{ data: subsRows }, { data: balanceRow }, { data: center }] = await Promise.all([
       supabase
         .from('subscriptions')
-        .select('id, type_id, price_tiyin, starts_at, ends_at')
+        .select('id, type_id, price_tiyin, starts_at, ends_at, lessons_total')
         .eq('student_id', id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false }),
       supabase
         .from('student_balance')
-        .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin')
+        .select('active_subscription_id, lessons_left, ends_at, debt_tiyin, overdrawn_tiyin, lesson_credit_tiyin')
         .eq('student_id', id)
         .maybeSingle(),
       supabase.from('centers').select('settings').eq('id', centerId ?? '').maybeSingle(),
@@ -455,6 +464,7 @@ export default async function StudentPage({
         id: row.id,
         typeName: 'Абонемент',
         priceTiyin: row.price_tiyin,
+        lessonsTotal: row.lessons_total,
         startsAt: row.starts_at,
         endsAt: row.ends_at,
         lessonsLeft: summary?.lessons_left ?? null,
@@ -486,6 +496,7 @@ export default async function StudentPage({
         endsAt: balanceRow?.ends_at ?? null,
         debtTiyin: balanceRow?.debt_tiyin ?? 0,
         overdrawnTiyin: balanceRow?.overdrawn_tiyin ?? 0,
+        creditTiyin: balanceRow?.lesson_credit_tiyin ?? 0,
       },
       subscriptions,
       types: [],
@@ -1030,7 +1041,7 @@ export default async function StudentPage({
               <CardTitle>{subscriptionsSection.canManage ? 'Абонементы и посещения' : 'Абонементы'}</CardTitle>
               <CardDescription>
                 {subscriptionsSection.canManage
-                  ? 'Продажа, заморозка, возврат — доступны только администратору.'
+                  ? 'Продажа и оплата, заморозка, перенос и возврат. Суммы считает база.'
                   : 'Оплачено, состояние и график рассрочки — те же данные, что видит центр.'}
               </CardDescription>
             </CardHeader>
@@ -1057,11 +1068,12 @@ export default async function StudentPage({
           <CardHeader>
             <CardTitle>Данные</CardTitle>
             <CardDescription>
-              {isAdmin ? 'Изменения сохраняются сразу.' : 'Редактирование доступно администратору центра.'}
+              {isAdmin || isRegistrar ? 'Изменения сохраняются сразу.' : 'Редактирование доступно администратору центра.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <StudentForm student={student} teachers={teacherOptions} canEdit={isAdmin} />
+            {/* Стойка правит карточку ученика (матрица: registrar В С П У; RLS students — write, archive_student — can_front_desk). */}
+            <StudentForm student={student} teachers={teacherOptions} canEdit={isAdmin || isRegistrar} />
           </CardContent>
         </Card>
       ),
@@ -1100,7 +1112,7 @@ export default async function StudentPage({
                       WhatsApp
                     </a>
                   ) : null}
-                  {isAdmin ? (
+                  {isAdmin || isRegistrar ? (
                     <Link
                       href={`/app/payers/${payer.id}`}
                       className={buttonVariants({ variant: 'ghost', size: 'sm' })}
@@ -1394,7 +1406,10 @@ export default async function StudentPage({
     })
     .filter((tab) => tab.sectionIds.length > 0)
 
+  // Итоги денег (оплата долга, абонемент, аванс) — один на страницу, внизу
+  // экрана: кнопка-источник после успеха часто исчезает (оплачено целиком).
   return (
+    <PageNoticeProvider>
     <div className="space-y-6">
       {printMode ? (
         <PrintToolbar backHref={`/app/students/${id}`} />
@@ -1438,6 +1453,13 @@ export default async function StudentPage({
             lastMark={summary.lastMark}
             nextLessonAt={summary.nextLessonAt}
             timeZone={subscriptionsSection.timeZone}
+            money={{
+              studentId: student.id,
+              studentName: student.fullName,
+              sources: subscriptionsSection.sources,
+              today: subscriptionsSection.today,
+              isOwner: role === 'owner',
+            }}
           />
         ) : null}
       </div>
@@ -1452,5 +1474,6 @@ export default async function StudentPage({
         <CardTabs tabs={tabs} initial={tabs[0]!.key} />
       )}
     </div>
+    </PageNoticeProvider>
   )
 }

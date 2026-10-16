@@ -7,7 +7,8 @@ import { toAppError, type AppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
 import { addDays } from '@/lib/timezone'
 
-export type SubscriptionState = AppError & { notice?: string }
+/** paymentId — проведённый платёж (для ссылки «Квитанция» в итоге действия). */
+export type SubscriptionState = AppError & { notice?: string; paymentId?: string }
 
 function optional(formData: FormData, key: string): string | undefined {
   const value = String(formData.get(key) ?? '').trim()
@@ -58,7 +59,7 @@ export async function sellSubscriptionPaid(
   const input = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('sell_subscription_paid', {
+  const { data, error } = await supabase.rpc('sell_subscription_paid', {
     p_type_id: input.typeId,
     p_student_id: input.studentId,
     p_sale_key: input.saleKey,
@@ -76,7 +77,10 @@ export async function sellSubscriptionPaid(
   if (error) return toAppError(error, t('sale', 'failed'))
 
   revalidatePath(`/app/students/${studentId}`)
-  return { message: '', notice: t('sale', 'sold') }
+  revalidatePath('/app/finance')
+  // Строки ответа — график рассрочки; payment_id у всех один (или NULL без оплаты).
+  const paymentId = data?.find((row) => row.payment_id)?.payment_id ?? undefined
+  return { message: '', notice: t('sale', 'sold'), paymentId }
 }
 
 export async function freezeSubscription(
@@ -242,7 +246,7 @@ export async function acceptSubscriptionPayment(
   if (amountTiyin == null || amountTiyin <= 0) return { message: 'Укажите сумму больше нуля' }
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('accept_subscription_payment', {
+  const { data: paymentId, error } = await supabase.rpc('accept_subscription_payment', {
     p_subscription_id: subscriptionId,
     p_amount_tiyin: amountTiyin,
     p_source_id: sourceId as string,
@@ -254,7 +258,7 @@ export async function acceptSubscriptionPayment(
   revalidatePath(`/app/students/${studentId}`)
   revalidatePath('/app/debts')
   revalidatePath('/app/finance')
-  return { message: '', notice: 'Оплата принята' }
+  return { message: '', notice: 'Оплата принята', paymentId: paymentId ?? undefined }
 }
 
 /**

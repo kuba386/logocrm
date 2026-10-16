@@ -98,7 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     {
       label: 'Деньги',
       links: [
-        { href: '/app/payers', label: 'Плательщики', show: isAdmin },
+        { href: '/app/payers', label: 'Плательщики', show: canSeeContacts },
         { href: '/app/debts', label: 'Долги', show: payments },
         { href: '/app/finance', label: 'Финансы', show: payments },
         { href: '/app/salary', label: 'Зарплата', show: finance },

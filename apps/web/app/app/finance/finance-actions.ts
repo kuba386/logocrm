@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
 
-export type FinanceState = AppError & { notice?: string }
+/** paymentId — проведённый платёж (ссылка «Квитанция»); done — метка успеха, чтобы закрыть диалог. */
+export type FinanceState = AppError & { notice?: string; paymentId?: string; done?: number }
 
 function optional(formData: FormData, key: string): string | undefined {
   const value = String(formData.get(key) ?? '').trim()
@@ -45,7 +46,7 @@ export async function recordPayment(_prev: FinanceState, formData: FormData): Pr
   const input = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('record_payment', {
+  const { data: paymentId, error } = await supabase.rpc('record_payment', {
     p_payer_id: input.payerId,
     p_amount_tiyin: input.amountTiyin,
     p_kind: input.kind,
@@ -57,13 +58,15 @@ export async function recordPayment(_prev: FinanceState, formData: FormData): Pr
   if (error) return toAppError(error, t('finance', 'paymentFailed'))
 
   revalidatePath('/app/finance')
+  if (input.studentId) revalidatePath(`/app/students/${input.studentId}`)
+  revalidatePath(`/app/payers/${input.payerId}`)
   const notice =
     input.kind === 'refund'
       ? t('finance', 'refundRecorded')
       : input.kind === 'correction'
         ? t('finance', 'correctionRecorded')
         : t('finance', 'paymentRecorded')
-  return { message: '', notice }
+  return { message: '', notice, paymentId: paymentId ?? undefined, done: Date.now() }
 }
 
 export async function recordExpense(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
@@ -91,7 +94,8 @@ export async function recordExpense(_prev: FinanceState, formData: FormData): Pr
   if (error) return toAppError(error, t('finance', 'expenseFailed'))
 
   revalidatePath('/app/finance')
-  return { message: '', notice: t('finance', 'expenseRecorded') }
+  revalidatePath('/app/reports')
+  return { message: '', notice: t('finance', 'expenseRecorded'), done: Date.now() }
 }
 
 /** Сумма строки рассрочки считается в pay_installment — форма её не передаёт. */
@@ -105,7 +109,7 @@ export async function payInstallment(_prev: FinanceState, formData: FormData): P
   const input = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('pay_installment', {
+  const { data: paymentId, error } = await supabase.rpc('pay_installment', {
     p_installment_id: input.installmentId,
     p_source_id: input.sourceId,
     p_comment: input.comment || undefined,
@@ -113,7 +117,8 @@ export async function payInstallment(_prev: FinanceState, formData: FormData): P
   if (error) return toAppError(error, t('finance', 'installmentFailed'))
 
   revalidatePath('/app/finance')
-  return { message: '', notice: t('finance', 'installmentPaid') }
+  revalidatePath('/app/debts')
+  return { message: '', notice: t('finance', 'installmentPaid'), paymentId: paymentId ?? undefined, done: Date.now() }
 }
 
 export async function closeMonth(_prev: FinanceState, formData: FormData): Promise<FinanceState> {

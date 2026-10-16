@@ -21,8 +21,18 @@ export default async function StudentsPage() {
   if (!role) redirect('/select-center')
 
   const isAdmin = role === 'owner' || role === 'admin'
+  const isRegistrar = role === 'registrar'
   const isFinance = role === 'finance'
-  const canSeeContacts = isAdmin || isFinance
+  // Стойка ведёт учеников и семьи так же, как администратор (матрица прав:
+  // «Ученики» — registrar В С П У, контакты плательщика — В; RLS students и
+  // payers — registrar write, 0028; create_student_with_payer — can_front_desk).
+  // Раньше она шла веткой специалиста: без телефонов, без «Добавить ученика»
+  // и с подписью «дети, закреплённые за вами».
+  const frontDesk = isAdmin || isRegistrar
+  const canSeeContacts = frontDesk || isFinance
+  // Деньги в списке — тем, кто принимает оплату (can_payments): остаток,
+  // долг, просрочка и аванс из student_balance, одним запросом на всех.
+  const canSeeMoney = frontDesk || isFinance
 
   const { data: teachers } = await supabase
     .from('teachers')
@@ -39,8 +49,8 @@ export default async function StudentsPage() {
 
   let students: StudentRowView[] = []
 
-  if (isAdmin) {
-    // Владелец и администратор читают таблицу с контактами плательщика.
+  if (frontDesk) {
+    // Владелец, администратор и стойка читают таблицу с контактами плательщика.
     const { data } = await supabase
       .from('students')
       .select('id, full_name, birth_date, status, primary_teacher_id, payers(full_name, phone)')
@@ -119,24 +129,44 @@ export default async function StudentsPage() {
       conclusionByStudent.set(row.student_id, { code: row.conclusion_code, name: row.conclusion_name })
     }
   }
-  const studentsWithConclusions = students.map((s) => ({
-    ...s,
-    conclusionCode: conclusionByStudent.get(s.id)?.code ?? null,
-    conclusionName: conclusionByStudent.get(s.id)?.name ?? null,
-  }))
+  // Деньги по ребёнку считает база (student_balance), здесь только раскладка по строкам.
+  const { data: balanceRows } = canSeeMoney
+    ? await supabase
+        .from('student_balance')
+        .select('student_id, active_subscription_id, lessons_left, debt_tiyin, overdrawn_tiyin, subscription_overdue_tiyin, lesson_credit_tiyin')
+    : { data: null }
+  const balanceByStudent = new Map((balanceRows ?? []).map((b) => [b.student_id, b]))
+
+  const studentsWithConclusions = students.map((s) => {
+    const b = balanceByStudent.get(s.id)
+    return {
+      ...s,
+      conclusionCode: conclusionByStudent.get(s.id)?.code ?? null,
+      conclusionName: conclusionByStudent.get(s.id)?.name ?? null,
+      money: canSeeMoney
+        ? {
+            hasActive: Boolean(b?.active_subscription_id),
+            lessonsLeft: b?.lessons_left ?? null,
+            debtTiyin: (b?.debt_tiyin ?? 0) + (b?.overdrawn_tiyin ?? 0),
+            overdueTiyin: b?.subscription_overdue_tiyin ?? 0,
+            creditTiyin: b?.lesson_credit_tiyin ?? 0,
+          }
+        : undefined,
+    }
+  })
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Ученики"
         description={`Всего: ${students.length}. ${
-          isAdmin
+          frontDesk
             ? 'Контакты родителей — на карточке плательщика.'
             : isFinance
               ? 'ФИО, статус, специалист и плательщик — без заметок.'
               : 'Здесь дети, закреплённые за вами.'
         }`}
-        actions={isAdmin ? <AddStudentDialog teachers={teacherOptions} /> : null}
+        actions={frontDesk ? <AddStudentDialog teachers={teacherOptions} /> : null}
       />
 
       <Card>

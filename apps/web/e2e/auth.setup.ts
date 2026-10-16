@@ -12,6 +12,7 @@ const ROLES = [
   { name: 'admin', email: USERS.admin },
   { name: 'teacher', email: USERS.teacher },
   { name: 'parent', email: USERS.parent },
+  { name: 'registrar', email: USERS.registrar },
 ] as const
 
 for (const role of ROLES) {

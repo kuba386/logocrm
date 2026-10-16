@@ -7,6 +7,8 @@ import {
   bishkekBeforeLessonsIso,
   lessonCard,
   openBishkekYesterdayWeek,
+  openSaleDialog,
+  SELL_SUBMIT,
   studentCards,
 } from './helpers'
 
@@ -115,21 +117,19 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   await page.getByRole('link', { name: STUDENTS.daniyar }).click()
   await expect(page.getByRole('heading', { name: STUDENTS.daniyar })).toBeVisible()
 
-  const typeSelect = page.locator('select#typeId')
-  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
-  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
-  await typeSelect.selectOption(optionValue)
+  const sale = await openSaleDialog(page, TYPE_NAME)
 
   // Цена подставляется из типа (400000 тыйын = 4000 сом) и не трогается —
   // проверяем именно то, что подстановка сработала, а не переписываем её.
-  await expect(page.locator('#priceSom')).toHaveValue('4000')
+  await expect(sale.locator('#priceSom')).toHaveValue('4000')
 
   // Явно вчера по Бишкеку — та же дата, что у занятий фикстуры (см.
   // комментарий вверху файла). Пустое поле взяло бы center_today() и
   // разошлось бы с занятиями на день.
-  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
+  await sale.locator('#startsAt').fill(bishkekBeforeLessonsIso())
 
-  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+  // Внесено по умолчанию — полная цена: кнопка называет сумму («Продать и принять 4 000 сом»).
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
 
   await expect(page.locator('dt', { hasText: 'Остаток' }).locator('xpath=following-sibling::dd[1]')).toContainText(
     '8 зан.',
@@ -139,10 +139,8 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // (subscriptions-panel.tsx:297). Проверено на уровне SQL: pgTAP уже
   // покрывает «8 занятий за 400000 → lesson_price 50000» (0008 test, п.4).
   //
-  // exact: true — форма продажи остаётся на странице с тем же типом всё
-  // ещё выбранным в <select>, а его <option> содержит TYPE_NAME как
-  // подстроку («Восемь занятий · e2e · 8 занятий») — без exact запрос
-  // находит оба элемента разом и падает на strict mode violation.
+  // exact: true — подпись типа в карточке абонемента ровно TYPE_NAME; диалог
+  // продажи после успеха закрыт и его <option> («… · 8 занятий») в DOM уже нет.
   await expect(page.getByText(TYPE_NAME, { exact: true })).toBeVisible()
   // formatSom разделяет тысячи неразрывным пробелом (U+00A0), не обычным —
   // сверяемся с самим форматтером, а не гадаем пробел в литерале. Продажа с
@@ -181,27 +179,24 @@ test('Этап 4, п.3: отметить посещение во время за
   await page.getByRole('link', { name: STUDENTS.timur }).click()
   await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
 
-  const typeSelect = page.locator('select#typeId')
-  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
-  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
-  await typeSelect.selectOption(optionValue)
+  const sale = await openSaleDialog(page, TYPE_NAME)
   // Та же дата, что у занятия Тимура в фикстуре (e2e.sql, a0006, 15:00) —
   // иначе s.starts_at > v_lesson_date и абонемент вообще не попал бы в
   // кандидаты (0015:1064), тест проверял бы не то исключение.
-  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
-  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+  await sale.locator('#startsAt').fill(bishkekBeforeLessonsIso())
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
 
   // Замораживаем сразу же, открытым концом, с той же даты — абонемент
   // становится единственным кандидатом на списание, и он заморожен на дату
   // занятия (subscription_freezes.period @> v_lesson_date).
   await page.reload()
   await expect(page.getByRole('heading', { name: STUDENTS.timur })).toBeVisible()
-  await page.getByLabel('С', { exact: true }).fill(bishkekBeforeLessonsIso())
+  await page.getByRole('button', { name: 'Заморозить', exact: true }).click()
+  const freeze = page.locator('dialog[open]')
+  await freeze.getByLabel('С', { exact: true }).fill(bishkekBeforeLessonsIso())
 
-  // Не actAndAwait: как и в тесте «Заморозка с датой окончания…» ниже,
-  // успешная заморозка размонтирует FreezeForm вместе с её уведомлением
-  // раньше, чем тест успеет его прочитать.
-  await page.getByRole('button', { name: 'Заморозить' }).click()
+  // Итог — строка «Заморожен с …» в карточке: диалог после успеха закрывается.
+  await freeze.getByRole('button', { name: 'Заморозить', exact: true }).click()
   await expect(page.getByText(/Заморожен с \d{2}\.\d{2}\.\d{4}, пока не разморозят/)).toBeVisible({
     timeout: 20_000,
   })
@@ -246,12 +241,9 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
   await page.getByRole('link', { name: STUDENTS.amina }).click()
   await expect(page.getByRole('heading', { name: STUDENTS.amina })).toBeVisible()
 
-  const typeSelect = page.locator('select#typeId')
-  const optionValue = await typeSelect.locator('option', { hasText: SMALL_TYPE }).getAttribute('value')
-  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
-  await typeSelect.selectOption(optionValue)
-  await page.locator('#startsAt').fill(bishkekBeforeLessonsIso())
-  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+  const sale = await openSaleDialog(page, SMALL_TYPE)
+  await sale.locator('#startsAt').fill(bishkekBeforeLessonsIso())
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
 
   // Три занятия Амины в фикстуре (e2e.sql, a0007-a0009): 15:45, 16:30,
   // 17:15 — следом за единственным занятием Тимура (15:00-15:45), не
@@ -264,7 +256,10 @@ test('Этап 4, п.4: остаток до 0 — исчерпан, следую
 
   await page.goto('/app/students')
   await page.getByRole('link', { name: STUDENTS.amina }).click()
-  const smallCard = page.locator('div').filter({ hasText: SMALL_TYPE }).filter({ hasText: '0 зан.' }).last()
+  // Исчерпанный и оплаченный абонемент свёрнут в «Завершённые абонементы» —
+  // раскрываем и проверяем «Осталось 0 из 2» и состояние.
+  await page.getByText(/Завершённые абонементы/).click()
+  const smallCard = page.locator('div').filter({ hasText: SMALL_TYPE }).filter({ hasText: 'Осталось 0 из 2' }).last()
   await expect(smallCard).toContainText('Исчерпан')
 
   // 17:15 — третья отметка: абонемент исчерпан, списывать не с чего, долг
@@ -285,32 +280,26 @@ test('Заморозка с датой окончания покрывает в�
   await page.getByRole('link', { name: STUDENTS.ailin }).click()
   await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
 
-  const typeSelect = page.locator('select#typeId')
-  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
-  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
-  await typeSelect.selectOption(optionValue)
-  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+  await openSaleDialog(page, TYPE_NAME)
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
 
   // Без перезагрузки второй actAndAwait подряд на той же странице видит
-  // «Абонемент продан» формы продажи как уже пришедший ответ и никогда не
-  // дожидается своего — та же причина, что у reload в fillLessonDialog
-  // (helpers.ts).
+  // «Абонемент продан» как уже пришедший ответ и никогда не дожидается
+  // своего — та же причина, что у reload в fillLessonDialog (helpers.ts).
   await page.reload()
   await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
 
   // freeze_subscription строит daterange с исключающей верхней границей —
   // без +1 дня на call site (subscription-actions.ts) 05.04.2027 молча
   // осталось бы незамороженным, хотя поле «По» обещает включительно.
-  await page.getByLabel('С', { exact: true }).fill('2027-04-01')
-  await page.getByLabel('По (пусто — пока не разморозят)').fill('2027-04-05')
+  await page.getByRole('button', { name: 'Заморозить', exact: true }).click()
+  const freeze = page.locator('dialog[open]')
+  await freeze.getByLabel('С', { exact: true }).fill('2027-04-01')
+  await freeze.getByLabel('По (пусто — пока не разморозят)').fill('2027-04-05')
 
-  // Не actAndAwait: как только freezeFrom не null, SubscriptionCard прячет
-  // FreezeForm целиком (условие рендера — «!subscription.freezeFrom»,
-  // subscriptions-panel.tsx) — успешная заморозка размонтирует форму
-  // вместе с её уведомлением раньше, чем тест успеет его прочитать. Ждём
-  // результат напрямую; freezeFrom в будущем (2027) — «Будет заморожен»,
-  // не «Заморожен» (тот же файл).
-  await page.getByRole('button', { name: 'Заморозить' }).click()
+  // Ждём результат в карточке: диалог после успеха закрывается, а
+  // freezeFrom в будущем (2027) — «Будет заморожен», не «Заморожен».
+  await freeze.getByRole('button', { name: 'Заморозить', exact: true }).click()
   const result = page.getByText(/(Будет заморожен|Заморожен) с 01\.04\.2027 по 05\.04\.2027/)
   const error = page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({ hasText: /\S/ })
   await expect(result.or(error).first()).toBeVisible({ timeout: 20_000 })
@@ -330,23 +319,20 @@ test('Этап 5, п.1: продажа с оплатой 2 000 и рассроч
   await page.getByRole('link', { name: STUDENTS.ailin }).click()
   await expect(page.getByRole('heading', { name: STUDENTS.ailin })).toBeVisible()
 
-  const typeSelect = page.locator('select#typeId')
-  const optionValue = await typeSelect.locator('option', { hasText: TYPE_NAME }).getAttribute('value')
-  if (!optionValue) throw new Error('Тип абонемента не появился в форме продажи')
-  await typeSelect.selectOption(optionValue)
+  const sale = await openSaleDialog(page, TYPE_NAME)
 
   // Внесено подставляется из цены (4000) — меняем на 2000, источник остаётся
-  // первым из списка центра, дата оплаты — сегодня по центру.
-  await expect(page.locator('#paidSom')).toHaveValue('4000')
-  await page.locator('#paidSom').fill('2000')
-  await expect(page.getByText(`Остаток к оплате: ${formatSom(200_000)}`)).toBeVisible()
+  // последним выбранным (или первым в списке), дата оплаты — сегодня по центру.
+  await expect(sale.locator('#paidSom')).toHaveValue('4000')
+  await sale.locator('#paidSom').fill('2000')
+  await expect(sale.getByText(`Остаток к оплате: ${formatSom(200_000)}`)).toBeVisible()
 
-  await page.getByLabel('Рассрочка на остаток').check()
-  await expect(page.locator('#installments')).toHaveValue('2')
+  await sale.getByLabel('Рассрочка на остаток').check()
+  await expect(sale.locator('#installments')).toHaveValue('2')
   // Предпросмотр — из core (splitInstallments), две строки по 1 000.
-  await expect(page.getByText(formatSom(100_000), { exact: false })).toHaveCount(2)
+  await expect(sale.getByText(formatSom(100_000), { exact: false })).toHaveCount(2)
 
-  await actAndAwait(page, 'Продать абонемент', 'Абонемент продан')
+  await actAndAwait(page, SELL_SUBMIT, 'Абонемент продан')
 
   // Карточка — по ответу сервера: внесено/цена/состояние и живой график
   // (installments_view), не предпросмотр формы.
