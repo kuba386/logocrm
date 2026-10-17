@@ -70,3 +70,4 @@ export {
 export { planSwitchDays, prepayDiscountPercent, platformPaymentAmountTiyin } from './platform-payment'
 export { pickSavedFilterParams, sameSavedFilterParams, savedFilterParamsOk } from './saved-filters'
 export type { SavedFilterPage, SavedFilterParams } from './saved-filters'
+export { safeNextPath } from './safe-next'

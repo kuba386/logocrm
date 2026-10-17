@@ -61,7 +61,10 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
-    loginUrl.searchParams.set('next', pathname)
+    // Путь вместе с параметрами (?tab=cash) — иначе после входа вкладка терялась,
+    // а параметры страницы оседали в адресе входа отдельными ключами.
+    loginUrl.search = ''
+    loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(loginUrl)
   }
 

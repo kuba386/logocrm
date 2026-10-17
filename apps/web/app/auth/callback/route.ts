@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { safeNextPath } from '@logocrm/core'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { acceptInvitation } from '@/app/invite/[token]/actions'
@@ -11,7 +12,7 @@ import { INVITE_COOKIE, INVITE_ERROR_COOKIE } from '@/lib/invite'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/app'
+  const next = safeNextPath(searchParams.get('next'))
 
   if (!code) {
     return NextResponse.redirect(`${origin}/error`)

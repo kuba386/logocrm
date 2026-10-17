@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { magicLinkSchema, signInSchema } from '@logocrm/contracts'
+import { safeNextPath } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/env'
 import { captchaOptions } from '@/lib/captcha'
@@ -36,7 +37,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   }
 
   revalidatePath('/', 'layout')
-  redirect(String(formData.get('next') || '/app'))
+  redirect(safeNextPath(formData.get('next')))
 }
 
 /** Регистрация по email и паролю. */
@@ -112,7 +113,7 @@ export async function verifyCode(_prev: AuthState, formData: FormData): Promise<
   }
 
   revalidatePath('/', 'layout')
-  redirect(purpose === 'signup' ? '/onboarding' : String(formData.get('next') || '/app'))
+  redirect(purpose === 'signup' ? '/onboarding' : safeNextPath(formData.get('next')))
 }
 
 /** Повторное письмо с кодом. */
