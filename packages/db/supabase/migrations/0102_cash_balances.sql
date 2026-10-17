@@ -418,7 +418,7 @@ as $$
       cross join tz
      where c.center_id = p_center_id and c.cancelled_at is null and c.counted_on <= p_day
      order by c.source_id, c.counted_on desc, c.counted_at desc
-  ),
+  )
   -- Движения каждой кассы — только с начала дня её якоря (без якоря — вся история).
   select s.id,
          coalesce(a.counted_tiyin, 0)
