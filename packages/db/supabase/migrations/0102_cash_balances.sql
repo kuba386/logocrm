@@ -267,7 +267,7 @@ create trigger financial_period_guard_cash_counts
 -- 3. Движения и правило «после сверки» (Р2, Р7) ------------------------------------------------
 
 -- Все движения денег центра с моментом до p_until: знак — «в кассу +».
-create or replace function public.cash_movements_unchecked(p_center_id uuid, p_until timestamptz)
+create or replace function public.cash_movements_unchecked(p_center_id uuid, p_from timestamptz, p_until timestamptz)
   returns table (
     source_id  uuid,
     src        text,
@@ -282,23 +282,23 @@ create or replace function public.cash_movements_unchecked(p_center_id uuid, p_u
 as $$
   select p.source_id, 'payment'::text, p.kind, p.amount_tiyin::bigint, p.paid_at, p.created_at
     from public.payments p
-   where p.center_id = p_center_id and p.paid_at < p_until
+   where p.center_id = p_center_id and p.paid_at >= p_from and p.paid_at < p_until
   union all
   select e.source_id, 'expense', e.kind, -(e.amount_tiyin::bigint), e.paid_at, e.created_at
     from public.expenses e
-   where e.center_id = p_center_id and e.paid_at < p_until
+   where e.center_id = p_center_id and e.paid_at >= p_from and e.paid_at < p_until
   union all
   select ct.from_source_id, 'transfer', 'transfer_out', -(ct.amount_tiyin::bigint), ct.transferred_at, ct.created_at
     from public.cash_transfers ct
-   where ct.center_id = p_center_id and ct.transferred_at < p_until
+   where ct.center_id = p_center_id and ct.transferred_at >= p_from and ct.transferred_at < p_until
   union all
   select ct.to_source_id, 'transfer', 'transfer_in', ct.amount_tiyin::bigint, ct.transferred_at, ct.created_at
     from public.cash_transfers ct
-   where ct.center_id = p_center_id and ct.transferred_at < p_until;
+   where ct.center_id = p_center_id and ct.transferred_at >= p_from and ct.transferred_at < p_until;
 $$;
-comment on function public.cash_movements_unchecked(uuid, timestamptz) is
-  'Движения денег центра до момента (0102 Р7): платежи (+), расходы (−), переводы (две ноги). Одна копия для остатков, расхождений и оборотов. Без сессии и без грантов.';
-revoke all on function public.cash_movements_unchecked(uuid, timestamptz) from public, anon, authenticated, service_role;
+comment on function public.cash_movements_unchecked(uuid, timestamptz, timestamptz) is
+  'Движения денег центра в [p_from, p_until) (0102 Р7): платежи (+), расходы (−), переводы (две ноги). Одна копия для остатков, расхождений и оборотов. Без сессии и без грантов.';
+revoke all on function public.cash_movements_unchecked(uuid, timestamptz, timestamptz) from public, anon, authenticated, service_role;
 
 -- Движение «после» сверки (Р2): позже дня сверки, либо в её день и внесено в
 -- тот же день после момента сверки. p_day_start/p_day_end — границы дня сверки.
@@ -309,8 +309,9 @@ create or replace function public.cash_after_count(
   returns boolean
   language sql
   immutable
-  set search_path = ''
 as $$
+  -- Без SET search_path намеренно: объектов не читает, а SET мешает встраиванию
+  -- в запрос — функция зовётся на каждую строку движения (ревью SQL 0102).
   select p_at >= p_day_end
       or (p_at >= p_day_start and p_created_at > p_counted_at and p_created_at < p_day_end);
 $$;
@@ -322,7 +323,9 @@ revoke all on function public.cash_after_count(timestamptz, timestamptz, timesta
 
 -- Неотменённые сверки центра (или одной кассы) с предыдущим якорем, ожидаемым
 -- по текущим данным и расхождением. p_center_id — current_center вызывающего.
-create or replace function public.cash_count_diffs_unchecked(p_center_id uuid, p_source_id uuid default null)
+create or replace function public.cash_count_diffs_unchecked(
+  p_center_id uuid, p_source_id uuid default null, p_from_day date default null, p_to_day date default null
+)
   returns table (
     count_id         uuid,
     source_id        uuid,
@@ -361,7 +364,10 @@ as $$
            and (p.counted_on, p.counted_at) < (k.counted_on, k.counted_at)
          order by p.counted_on desc, p.counted_at desc
          limit 1
-      ) prev on true
+          ) prev on true
+     -- Сверки нужного периода; предыдущий якорь ищется по всей истории.
+     where (p_from_day is null or k.counted_on >= p_from_day)
+       and (p_to_day is null or k.counted_on <= p_to_day)
   )
   select kp.id, kp.source_id, kp.counted_on, kp.counted_at, kp.counted_tiyin,
          e.expected,
@@ -370,16 +376,17 @@ as $$
     from kp
     cross join lateral (
       select coalesce(kp.prev_counted, 0) + coalesce(sum(m.delta), 0) as expected
-        from public.cash_movements_unchecked(p_center_id, kp.day_end) m
+        -- Снизу — начало дня предыдущего якоря: раньше «после него» ничего не бывает.
+        from public.cash_movements_unchecked(p_center_id, coalesce(kp.prev_day_start, '-infinity'::timestamptz), kp.day_end) m
        where m.source_id = kp.source_id
          and (kp.prev_counted_at is null
               or public.cash_after_count(m.at, m.created_at, kp.prev_counted_at, kp.prev_day_start, kp.prev_day_end))
          and not public.cash_after_count(m.at, m.created_at, kp.counted_at, kp.day_start, kp.day_end)
     ) e;
 $$;
-comment on function public.cash_count_diffs_unchecked(uuid, uuid) is
+comment on function public.cash_count_diffs_unchecked(uuid, uuid, date, date) is
   'Неотменённые сверки с ожидаемым по текущим данным и расхождением (0102 Р3); is_opening — первая сверка кассы, начальный остаток (Р4). Без сессии и без грантов.';
-revoke all on function public.cash_count_diffs_unchecked(uuid, uuid) from public, anon, authenticated, service_role;
+revoke all on function public.cash_count_diffs_unchecked(uuid, uuid, date, date) from public, anon, authenticated, service_role;
 
 -- Остаток каждой кассы центра на конец дня p_day (Р1); для сегодняшнего дня — на сейчас.
 create or replace function public.cash_balances_unchecked(p_center_id uuid, p_day date)
@@ -412,17 +419,14 @@ as $$
      where c.center_id = p_center_id and c.cancelled_at is null and c.counted_on <= p_day
      order by c.source_id, c.counted_on desc, c.counted_at desc
   ),
-  mv as (
-    select m.source_id, m.delta, m.at, m.created_at
-      from b, public.cash_movements_unchecked(p_center_id, b.day_end) m
-     where m.source_id is not null
-  )
+  -- Движения каждой кассы — только с начала дня её якоря (без якоря — вся история).
   select s.id,
          coalesce(a.counted_tiyin, 0)
-           + coalesce((select sum(mv.delta) from mv
-                        where mv.source_id = s.id
+           + coalesce((select sum(m.delta)
+                         from b, public.cash_movements_unchecked(p_center_id, coalesce(a.day_start, '-infinity'::timestamptz), b.day_end) m
+                        where m.source_id = s.id
                           and (a.source_id is null
-                               or public.cash_after_count(mv.at, mv.created_at, a.counted_at, a.day_start, a.day_end))), 0),
+                               or public.cash_after_count(m.at, m.created_at, a.counted_at, a.day_start, a.day_end))), 0)::bigint,
          a.counted_on,
          a.source_id is not null
     from src s
@@ -679,7 +683,8 @@ begin
            d.expected_tiyin, d.difference_tiyin, coalesce(d.is_opening, false),
            c.comment, tch.full_name, m.role, c.cancelled_at, c.cancel_reason
       from public.cash_counts c
-      left join public.cash_count_diffs_unchecked(v_center) d on d.count_id = c.id
+      left join public.cash_count_diffs_unchecked(v_center, null, v_month, (v_month + interval '1 month' - interval '1 day')::date) d
+        on d.count_id = c.id
       left join public.memberships m on m.user_id = c.created_by and m.center_id = c.center_id
       left join public.teachers tch on tch.id = m.teacher_id and tch.deleted_at is null
      where c.center_id = v_center
@@ -747,8 +752,7 @@ begin
   return query
   with mv as (
     select m.source_id, m.src, m.kind, m.delta
-      from public.cash_movements_unchecked(v_center, v_end) m
-     where m.at >= v_start
+      from public.cash_movements_unchecked(v_center, v_start, v_end) m
   ),
   turn as (
     select mv.source_id,
@@ -776,8 +780,7 @@ begin
            coalesce(sum(d.difference_tiyin) filter (where d.is_opening), 0)::bigint     as opening_adj,
            coalesce(sum(d.difference_tiyin) filter (where not d.is_opening), 0)::bigint as diffs,
            max(d.counted_on) as last_on
-      from public.cash_count_diffs_unchecked(v_center) d
-     where d.counted_on >= v_first and d.counted_on <= v_last
+      from public.cash_count_diffs_unchecked(v_center, null, v_first, v_last) d
      group by d.source_id
   ),
   last_any as (

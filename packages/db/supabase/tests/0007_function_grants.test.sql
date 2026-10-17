@@ -171,9 +171,9 @@ from unnest(array[
   'public.centers_seed_discount_reasons()',
   -- 0102: остатки касс — помощники и триггер без грантов.
   'public.cash_counts_immutable()',
-  'public.cash_movements_unchecked(uuid,timestamp with time zone)',
+  'public.cash_movements_unchecked(uuid,timestamp with time zone,timestamp with time zone)',
   'public.cash_after_count(timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone)',
-  'public.cash_count_diffs_unchecked(uuid,uuid)',
+  'public.cash_count_diffs_unchecked(uuid,uuid,date,date)',
   'public.cash_balances_unchecked(uuid,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;

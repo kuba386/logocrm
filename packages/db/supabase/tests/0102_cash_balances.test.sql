@@ -15,7 +15,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(36);
+select plan(39);
 
 
 -- 1. Фикстура -------------------------------------------------------------------------------------
@@ -295,7 +295,8 @@ select ok(
   not exists (
     select 1 from public.cash_report((select today from t_src)) r
       full join (select * from public.cash_by_source where month = date_trunc('month', (select today from t_src))::date) c
-        on c.source_id is not distinct from r.source_id
+        -- Хешируемое равенство: FULL JOIN не планируется по is not distinct from.
+        on coalesce(c.source_id, '00000000-0000-0000-0000-000000000000') = coalesce(r.source_id, '00000000-0000-0000-0000-000000000000')
      where coalesce(r.turnover_tiyin, 0) <> coalesce(c.total_tiyin, 0)
         or coalesce(r.received_tiyin, 0) <> coalesce(c.received_tiyin, 0)
         or coalesce(r.spent_tiyin, 0) <> coalesce(c.spent_tiyin, 0)
@@ -384,6 +385,27 @@ select throws_ok(
 reset role;
 
 
+select public.tests_claims('01020000-0000-0000-0000-0000000000a5', '01020000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- 35
+select lives_ok(
+  $q$ select * from public.cash_count_preview((select bank from t_src)) $q$,
+  'Администратор видит остаток кассы');
+
+-- 36
+select throws_ok(
+  $q$ select * from public.cash_report(((select today from t_src) + interval '1 month')::date) $q$,
+  '22023', 'Месяц — не позже текущего',
+  'Отчёт будущим месяцем — отказ');
+
+reset role;
+
+-- 37
+select ok(
+  exists (select 1 from public.export_center_tables() where table_name = 'cash_counts'),
+  'Сверки — в экспорте центра');
+
 -- 4. Закрытый месяц — последним -------------------------------------------------------------------
 
 insert into public.financial_periods (center_id, month, closed_at)
@@ -392,14 +414,14 @@ values ('01020000-0000-0000-0000-0000000000c1', date_trunc('month', (select toda
 select public.tests_claims('01020000-0000-0000-0000-0000000000a1', '01020000-0000-0000-0000-0000000000c1');
 set local role authenticated;
 
--- 35
+-- 38
 select throws_like(
   $q$ select * from public.record_cash_count((select bank from t_src), (select today from t_src), 40000, 40000,
                                              '01020000-0000-0000-0000-00000000c008') $q$,
   'Месяц % закрыт — переоткройте его во вкладке «Периоды», затем сверяйте',
   'Сверка в закрытом месяце — свой текст');
 
--- 36
+-- 39
 select throws_like(
   $q$ select public.cancel_cash_count((select id from public.cash_counts where count_key = '01020000-0000-0000-0000-00000000c001'), 'поздно') $q$,
   'Месяц сверки (%) закрыт%',
