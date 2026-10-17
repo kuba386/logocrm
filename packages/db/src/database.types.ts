@@ -617,7 +617,22 @@ export type Database = {
           source_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cash_counts_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_counts_source_fk"
+            columns: ["source_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "payment_sources"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
       }
       cash_transfers: {
         Row: {
@@ -5639,6 +5654,43 @@ export type Database = {
         Args: { p_from: string; p_reason?: string; p_series_id: string }
         Returns: number
       }
+      cash_after_count: {
+        Args: {
+          p_at: string
+          p_counted_at: string
+          p_created_at: string
+          p_day_end: string
+          p_day_start: string
+        }
+        Returns: boolean
+      }
+      cash_balances_unchecked: {
+        Args: { p_center_id: string; p_day: string }
+        Returns: {
+          anchor_on: string
+          balance_tiyin: number
+          source_id: string
+          verified: boolean
+        }[]
+      }
+      cash_count_diffs_unchecked: {
+        Args: {
+          p_center_id: string
+          p_from_day?: string
+          p_source_id?: string
+          p_to_day?: string
+        }
+        Returns: {
+          count_id: string
+          counted_at: string
+          counted_on: string
+          counted_tiyin: number
+          difference_tiyin: number
+          expected_tiyin: number
+          is_opening: boolean
+          source_id: string
+        }[]
+      }
       cash_count_preview: {
         Args: { p_day?: string; p_source_id: string }
         Returns: {
@@ -5664,6 +5716,17 @@ export type Database = {
           expected_tiyin: number
           is_opening: boolean
           source_id: string
+        }[]
+      }
+      cash_movements_unchecked: {
+        Args: { p_center_id: string; p_from: string; p_until: string }
+        Returns: {
+          at: string
+          created_at: string
+          delta: number
+          kind: string
+          source_id: string
+          src: string
         }[]
       }
       cash_report: {
