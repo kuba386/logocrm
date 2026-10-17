@@ -7,7 +7,10 @@ import { useFormStatus } from 'react-dom'
 import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { formatSom } from '@logocrm/core'
 import {
+  cancelCashCount,
   closeMonth,
+  previewCashCount,
+  recordCashCount,
   payInstallment,
   recordCashTransfer,
   recordExpense,
@@ -366,8 +369,8 @@ function PaymentForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="payment-source">{t('finance', 'source')}</Label>
-          {/* Оплате долга и авансу источник обязателен (0087, 0101); прочему платежу — по желанию, как раньше. */}
-          <SourceSelect id="payment-source" sources={sources} allowEmpty={!accountMode} />
+          {/* Живым деньгам касса обязательна (0102: иначе они мимо остатка); без кассы — только корректировка. */}
+          <SourceSelect id="payment-source" sources={sources} allowEmpty={kind === 'correction'} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="payment-date">{t('finance', 'date')}</Label>
@@ -456,6 +459,7 @@ function ExpenseForm({
     onDone(next.notice ?? t('finance', 'expenseRecorded')),
   )
   const [categoryId, setCategoryId] = useState('')
+  const [expenseKind, setExpenseKind] = useState<'expense' | 'refund' | 'correction'>('expense')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -479,7 +483,7 @@ function ExpenseForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor="expense-kind">{t('finance', 'kind')}</Label>
-          <Select id="expense-kind" name="kind" defaultValue="expense">
+          <Select id="expense-kind" name="kind" value={expenseKind} onChange={(e) => setExpenseKind(e.target.value as 'expense' | 'refund' | 'correction')}>
             {(['expense', 'refund', 'correction'] as const).map((kind) => (
               <option key={kind} value={kind}>
                 {label('expenseKind', kind)}
@@ -493,7 +497,8 @@ function ExpenseForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor="expense-source">{t('finance', 'source')}</Label>
-          <SourceSelect id="expense-source" sources={sources} allowEmpty />
+          {/* Живые деньги — с кассой (0102): иначе они не попадут в остаток, и сверка покажет недостачу. */}
+          <SourceSelect id="expense-source" sources={sources} allowEmpty={expenseKind === 'correction'} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="expense-date">{t('finance', 'date')}</Label>
@@ -854,6 +859,152 @@ export function VoidExpenseForm({ expenseId, amountTiyin }: { expenseId: string;
           label="Отменить расход"
           question={`Отменить расход ${formatSom(amountTiyin)}? Рядом появится отмена на ту же сумму, в кассе станет на ${formatSom(amountTiyin)} больше.`}
         />
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Не отменять
+        </Button>
+      </div>
+      <FormError message={state.message} />
+      <FormNotice message={local} />
+    </form>
+  )
+}
+
+function CashCountForm({
+  sourceId,
+  today,
+  onDone,
+}: {
+  sourceId: string
+  today: string
+  onDone: (text: string) => void
+}) {
+  const [state, formAction, pending] = useResultAction(recordCashCount, initial, (next) => onDone(next.notice ?? t('finance', 'cashCountSaved')))
+  const [day, setDay] = useState(today)
+  const [preview, setPreview] = useState<{ expectedTiyin: number; lastCountOn: string | null } | null>(null)
+  const [previewError, setPreviewError] = useState('')
+  const [countKey, setCountKey] = useState('')
+  useEffect(() => {
+    setCountKey(crypto.randomUUID())
+  }, [state])
+  // Остаток по учёту — из базы (cash_count_preview), заново на каждую дату и после отказа 23514.
+  useEffect(() => {
+    let alive = true
+    setPreview(null)
+    setPreviewError('')
+    previewCashCount(sourceId, day).then((res) => {
+      if (!alive) return
+      if ('expectedTiyin' in res) setPreview({ expectedTiyin: res.expectedTiyin, lastCountOn: res.lastCountOn })
+      else setPreviewError(res.message)
+    })
+    return () => {
+      alive = false
+    }
+  }, [sourceId, day, state])
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    startTransition(() => formAction(formData))
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <input type="hidden" name="sourceId" value={sourceId} />
+      <input type="hidden" name="countKey" value={countKey} />
+      {preview ? <input type="hidden" name="expectedTiyin" value={preview.expectedTiyin} /> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="count-day">{t('finance', 'cashCountDay')}</Label>
+          <Input id="count-day" name="countedOn" type="date" max={today} value={day} onChange={(e) => setDay(e.target.value)} required />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="count-sum">{t('finance', 'cashCountCounted')}</Label>
+          <Input id="count-sum" name="countedSom" type="number" inputMode="decimal" min="0" step="0.01" required />
+        </div>
+      </div>
+      <p className="rounded-md bg-muted/60 px-3 py-2 text-sm">
+        {previewError
+          ? previewError
+          : preview
+            ? t('finance', day === today ? 'cashCountExpectedNow' : 'cashCountExpectedDay', { sum: formatSom(preview.expectedTiyin) })
+            : t('finance', 'cashCountLoading')}
+        {preview && !preview.lastCountOn ? <span className="block text-xs text-muted-foreground">{t('finance', 'cashCountFirstHint')}</span> : null}
+      </p>
+      <div className="space-y-1">
+        <Label htmlFor="count-comment">{t('finance', 'comment')}</Label>
+        <Input id="count-comment" name="comment" maxLength={500} placeholder={t('finance', 'cashCountCommentPlaceholder')} />
+      </div>
+      <FormError message={state.message} />
+      <PendingButton pending={pending || !preview || !countKey}>{t('finance', 'cashCountSubmit')}</PendingButton>
+    </form>
+  )
+}
+
+/**
+ * «Сверить кассу» (0102): посчитали наличные или посмотрели выписку — вносим
+ * факт. Первая сверка становится начальным остатком, следующие показывают
+ * недостачу или излишек. Остаток по учёту и расхождение считает база.
+ */
+export function CashCountDialog({ sourceId, sourceName, today }: { sourceId: string; sourceName: string; today: string }) {
+  const [open, setOpen] = useState(false)
+  const [round, setRound] = useState(0)
+  const notice = usePageNotice()
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="max-sm:w-full"
+        onClick={() => {
+          notice?.(null)
+          setRound((r) => r + 1)
+          setOpen(true)
+        }}
+      >
+        {t('finance', 'cashCount')}
+      </Button>
+      <Dialog open={open} onClose={() => setOpen(false)} title={t('finance', 'cashCountTitle', { name: sourceName })} description={t('finance', 'cashCountHint')}>
+        {open ? (
+          <CashCountForm
+            key={round}
+            sourceId={sourceId}
+            today={today}
+            onDone={(text) => {
+              setOpen(false)
+              notice?.({ text })
+            }}
+          />
+        ) : null}
+      </Dialog>
+    </>
+  )
+}
+
+/** «Отменить» ошибочную сверку (0102) — только владелец, с причиной; итог — в уведомление страницы. */
+export function CancelCashCountForm({ countId }: { countId: string }) {
+  const notice = usePageNotice()
+  const [local, setLocal] = useState<string | undefined>(undefined)
+  const [state, formAction] = useResultAction(cancelCashCount, initial, (next) => {
+    const text = next.notice ?? 'Сверка отменена'
+    if (notice) notice({ text })
+    else setLocal(text)
+  })
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Отменить
+      </Button>
+    )
+  }
+  return (
+    <form action={formAction} className="space-y-2">
+      <input type="hidden" name="countId" value={countId} />
+      <Input name="reason" required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Причина, например «не та касса»" aria-label="Причина отмены сверки" />
+      <div className="flex gap-2">
+        <ConfirmSubmit label="Отменить сверку" question="Отменить сверку? Остаток кассы снова будет считаться от предыдущей сверки." />
         <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Не отменять
         </Button>

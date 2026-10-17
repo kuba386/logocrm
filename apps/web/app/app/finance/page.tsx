@@ -5,7 +5,7 @@ import { formatSom, whatsappNumber } from '@logocrm/core'
 import { createClient } from '@/lib/supabase/server'
 import { monthBounds, shiftMonth } from '@/lib/month'
 import { centerTimeZone, dayInZone, formatInTimeZone, isoDayInZone, startOfDayInZone } from '@/lib/timezone'
-import { canPayments, isFinance } from '@/lib/roles'
+import { canPayments, isFinance, roleLabel } from '@/lib/roles'
 import { label, t } from '@/lib/messages'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
@@ -27,6 +27,8 @@ import {
   PayInstallmentForm,
   PaymentDialog,
   ReopenPeriodForm,
+  CancelCashCountForm,
+  CashCountDialog,
   TransferDialog,
   VoidExpenseForm,
   VoidPaymentForm,
@@ -45,7 +47,7 @@ function shownOfTotal(shown: number, total: number | null, which = 'послед
 
 export const metadata = { title: 'Финансы — LogoCRM' }
 
-type Tab = 'payments' | 'expenses' | 'installments' | 'periods'
+type Tab = 'payments' | 'cash' | 'expenses' | 'installments' | 'periods'
 type Kind = 'payment' | 'refund' | 'correction'
 
 const UUID = /^[0-9a-f-]{36}$/
@@ -105,7 +107,7 @@ export default async function FinancePage({
   // редиректом на первую вкладку, отказ по данным и так придёт из базы.
   const requested = params.tab as Tab | undefined
   const tab: Tab =
-    requested === 'expenses' || requested === 'periods'
+    requested === 'expenses' || requested === 'periods' || requested === 'cash'
       ? finance
         ? requested
         : 'payments'
@@ -170,6 +172,7 @@ export default async function FinancePage({
 
   const tabs: { key: Tab; title: string }[] = [
     { key: 'payments', title: t('finance', 'tabPayments') },
+    ...(finance ? [{ key: 'cash' as const, title: t('finance', 'tabCash') }] : []),
     ...(finance ? [{ key: 'expenses' as const, title: t('finance', 'tabExpenses') }] : []),
     { key: 'installments', title: t('finance', 'tabInstallments') },
     ...(finance ? [{ key: 'periods' as const, title: t('finance', 'tabPeriods') }] : []),
@@ -279,6 +282,7 @@ export default async function FinancePage({
           ) : null}
           {tab === 'installments' ? <InstallmentsTab supabase={supabase} timeZone={timeZone} sources={sources} /> : null}
           {tab === 'periods' ? <PeriodsTab supabase={supabase} timeZone={timeZone} today={today} isOwner={isOwner} /> : null}
+          {tab === 'cash' ? <CashTab supabase={supabase} month={month} today={today} isOwner={isOwner} /> : null}
         </div>
       </PageNoticeProvider>
     </div>
@@ -1095,5 +1099,142 @@ async function TransfersList({
         ))}
       </ul>
     </details>
+  )
+}
+
+function signedSom(tiyin: number): string {
+  return tiyin > 0 ? `+${formatSom(tiyin)}` : formatSom(tiyin)
+}
+
+/**
+ * Касса (0102): остаток каждой кассы на начало и конец месяца, обороты,
+ * поправка начального остатка и расхождения сверок — всё из cash_report.
+ * Остаток считается от последней сверки: первая сверка — начальный остаток.
+ */
+async function CashTab({ supabase, month, today, isOwner }: { supabase: Supabase; month: string; today: string; isOwner: boolean }) {
+  const first = `${month}-01`
+  const [{ data: report, error }, { data: counts, error: countsError }, { data: allSources }] = await Promise.all([
+    supabase.rpc('cash_report', { p_month: first }),
+    supabase.rpc('cash_counts_list', { p_month: first }),
+    supabase.from('payment_sources').select('id, name, deleted_at'),
+  ])
+  const sourceInfo = new Map((allSources ?? []).map((src) => [src.id, src]))
+  // Порядок отчёта не задан — по названию кассы, как в списках выбора.
+  const rows = (report ?? [])
+    .filter((r) => r.source_id)
+    .sort((a, b) => (sourceInfo.get(a.source_id)?.name ?? '').localeCompare(sourceInfo.get(b.source_id)?.name ?? '', 'ru'))
+  const noSource = (report ?? []).find((r) => !r.source_id)
+  const isCurrent = month === today.slice(0, 7)
+
+  if (error) return <FormError message={loadErrorMessage(error, t('finance', 'cashLoadFailed'))} />
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t('finance', 'cashHint')}</p>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {rows.map((r) => {
+          const src = r.source_id ? sourceInfo.get(r.source_id) : undefined
+          const lines: [string, number][] = (
+            [
+              [t('finance', 'cashOpening'), r.opening_tiyin],
+              [t('finance', 'received'), r.received_tiyin],
+              [t('finance', 'refunded'), r.refunded_tiyin],
+              [t('finance', 'corrections'), r.corrections_tiyin],
+              [t('finance', 'spent'), r.spent_tiyin],
+              [t('finance', 'transferIn'), r.transfers_in_tiyin],
+              [t('finance', 'transferOut'), r.transfers_out_tiyin],
+              [t('finance', 'cashOther'), r.other_tiyin],
+              [t('finance', 'cashOpeningAdjustment'), r.opening_adjustment_tiyin],
+              [t('finance', 'cashCountsDifference'), r.counts_difference_tiyin],
+            ] as [string, number][]
+          ).filter(([, v], i) => i === 0 || v !== 0)
+          return (
+            <Card key={r.source_id}>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex flex-wrap items-baseline justify-between gap-2 text-base">
+                  <span>
+                    {src?.name ?? '—'}
+                    {src?.deleted_at ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('finance', 'cashArchived')}</span> : null}
+                  </span>
+                  <span className={cn('tabular-nums', r.closing_tiyin < 0 && 'text-destructive')}>{formatSom(r.closing_tiyin)}</span>
+                </CardTitle>
+                <CardDescription>
+                  {isCurrent ? t('finance', 'cashClosingNow') : t('finance', 'cashClosingMonth')} ·{' '}
+                  {r.closing_verified && r.last_count_on
+                    ? t('finance', 'cashVerified', { day: calendarDate(r.last_count_on, 'UTC') })
+                    : t('finance', 'cashNotVerified')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <dl className="space-y-1 text-sm">
+                  {lines.map(([label, v]) => (
+                    <div key={label} className="flex justify-between gap-3">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="tabular-nums">{label === t('finance', 'cashOpening') ? formatSom(v) : signedSom(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {!r.closing_verified ? <p className="text-xs text-muted-foreground">{t('finance', 'cashFirstCountHint')}</p> : null}
+                {r.source_id && !src?.deleted_at && isCurrent ? (
+                  <CashCountDialog sourceId={r.source_id} sourceName={src?.name ?? ''} today={today} />
+                ) : null}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+      {noSource && noSource.turnover_tiyin !== 0 ? (
+        <p className="rounded-md bg-warning-bg px-3 py-2 text-sm text-warning">
+          {t('finance', 'cashNoSource', { sum: signedSom(noSource.turnover_tiyin) })}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('finance', 'cashCountsTitle')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {countsError ? (
+            <FormError message={loadErrorMessage(countsError, t('finance', 'cashLoadFailed'))} />
+          ) : (counts ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('finance', 'cashCountsEmpty')}</p>
+          ) : (
+            <ul className="space-y-3 text-sm">
+              {(counts ?? []).map((c) => {
+                const cancelled = Boolean(c.cancelled_at)
+                const diff = c.difference_tiyin ?? 0
+                return (
+                  <li key={c.count_id} className={cn('space-y-1 border-b border-border pb-3 last:border-0', cancelled && 'text-muted-foreground')}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className={cn('font-medium', cancelled && 'line-through')}>
+                        {calendarDate(c.counted_on, 'UTC')} · {sourceInfo.get(c.source_id)?.name ?? '—'} · {formatSom(c.counted_tiyin)}
+                      </span>
+                      <span className={cn('tabular-nums', !cancelled && diff < 0 && 'text-destructive', !cancelled && diff > 0 && 'text-success')}>
+                        {cancelled
+                          ? t('finance', 'cashCountCancelled')
+                          : c.is_opening
+                            ? t('finance', 'cashCountOpeningTag')
+                            : diff === 0
+                              ? t('finance', 'cashCountMatchedTag')
+                              : diff < 0
+                                ? t('finance', 'cashShortageTag', { sum: formatSom(-diff) })
+                                : t('finance', 'cashSurplusTag', { sum: formatSom(diff) })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t('finance', 'cashCountExpectedLine', { sum: formatSom(c.expected_tiyin ?? c.expected_at_count) })}
+                      {c.counted_by_name || c.counted_by_role ? ` · ${c.counted_by_name ?? roleLabel(c.counted_by_role)}` : ''}
+                      {c.comment ? ` · ${c.comment}` : ''}
+                      {cancelled && c.cancel_reason ? ` · ${c.cancel_reason}` : ''}
+                    </p>
+                    {isOwner && !cancelled ? <CancelCashCountForm countId={c.count_id} /> : null}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

@@ -168,7 +168,13 @@ from unnest(array[
   'public.expenses_links_guard()',
   'public.cash_transfers_immutable()',
   'public.seed_discount_reasons(uuid)',
-  'public.centers_seed_discount_reasons()'
+  'public.centers_seed_discount_reasons()',
+  -- 0102: остатки касс — помощники и триггер без грантов.
+  'public.cash_counts_immutable()',
+  'public.cash_movements_unchecked(uuid,timestamp with time zone,timestamp with time zone)',
+  'public.cash_after_count(timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone)',
+  'public.cash_count_diffs_unchecked(uuid,uuid,date,date)',
+  'public.cash_balances_unchecked(uuid,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -485,7 +491,13 @@ select set_eq(
     ('archive_discount_reason(uuid)'),
     ('restore_discount_reason(uuid)'),
     ('subscription_discounts(date,date)'),
-    ('subscription_discount_totals(date,date)')
+    ('subscription_discount_totals(date,date)'),
+    -- 0102: остатки касс и сверка.
+    ('cash_count_preview(uuid,date)'),
+    ('record_cash_count(uuid,date,bigint,bigint,uuid,text)'),
+    ('cancel_cash_count(uuid,text)'),
+    ('cash_counts_list(date)'),
+    ('cash_report(date)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );
