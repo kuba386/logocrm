@@ -291,6 +291,8 @@ export const recordExpenseSchema = z
   })
   .refine((i) => i.kind !== 'expense' || i.amountTiyin > 0, { message: 'Расход — положительная сумма', path: ['amountTiyin'] })
   .refine((i) => i.kind !== 'refund' || i.amountTiyin < 0, { message: 'Возврат из расхода — отрицательная сумма', path: ['amountTiyin'] })
+  // Живые деньги — с кассой (0102): без неё расход не попадёт в остаток, и сверка покажет недостачу.
+  .refine((i) => i.kind === 'correction' || Boolean(i.sourceId), { message: 'Укажите, из какой кассы', path: ['sourceId'] })
 export type RecordExpenseInput = z.infer<typeof recordExpenseSchema>
 
 export const payInstallmentSchema = z.object({
@@ -322,6 +324,17 @@ export const cashTransferSchema = z
   })
   .refine((i) => i.fromSourceId !== i.toSourceId, { message: 'Откуда и куда — разные кассы', path: ['toSourceId'] })
 export type CashTransferInput = z.infer<typeof cashTransferSchema>
+
+/** record_cash_count (0102): сверка кассы — посчитано ≥ 0, остаток по учёту из предпросмотра, ключ идемпотентности. */
+export const cashCountSchema = z.object({
+  sourceId: z.string().uuid('Выберите кассу'),
+  countedOn: isoDateSchema,
+  countedTiyin: z.number().int('Сумма — в сомах, до тыйына').min(0, 'Посчитанная сумма не может быть отрицательной'),
+  expectedTiyin: z.number().int('Обновите страницу: остаток по учёту не загружен'),
+  countKey: z.string().uuid('Обновите страницу и повторите сверку'),
+  comment: commentSchema,
+})
+export type CashCountInput = z.infer<typeof cashCountSchema>
 
 /** Первое число месяца — как salary_runs_month_is_first_of_month и close_month. */
 export const monthSchema = z.object({

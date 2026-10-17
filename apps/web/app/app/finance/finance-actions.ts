@@ -1,7 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { formatSom } from '@logocrm/core'
 import {
+  cashCountSchema,
   cashTransferSchema,
   monthSchema,
   payInstallmentSchema,
@@ -233,4 +235,71 @@ export async function recordCashTransfer(_prev: FinanceState, formData: FormData
   revalidatePath('/app/finance')
   revalidatePath('/app/reports')
   return { message: '', notice: t('finance', 'transferRecorded'), done: Date.now() }
+}
+
+/** Остаток кассы по учёту для формы сверки (cash_count_preview, 0102): на конец дня, сегодня — на сейчас. */
+export async function previewCashCount(
+  sourceId: string,
+  day: string,
+): Promise<{ expectedTiyin: number; today: string; lastCountOn: string | null } | { message: string }> {
+  if (!/^[0-9a-f-]{36}$/.test(sourceId) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { message: 'Обновите страницу и попробуйте снова' }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('cash_count_preview', { p_source_id: sourceId, p_day: day })
+  if (error) return toAppError(error, 'Не удалось посчитать остаток по учёту')
+  const row = data?.[0]
+  if (!row) return { message: 'Не удалось посчитать остаток по учёту' }
+  return { expectedTiyin: row.expected_tiyin, today: row.today, lastCountOn: row.last_count_on }
+}
+
+/**
+ * Сверка кассы (record_cash_count, 0102): посчитанное становится якорем остатка.
+ * Расхождение считает база; текст итога — отсюда, из её ответа.
+ */
+export async function recordCashCount(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const parsed = cashCountSchema.safeParse({
+    sourceId: String(formData.get('sourceId') ?? ''),
+    countedOn: String(formData.get('countedOn') ?? ''),
+    countedTiyin: signedTiyin(formData, 'countedSom', false),
+    expectedTiyin: Number(formData.get('expectedTiyin') ?? 'x'),
+    countKey: String(formData.get('countKey') ?? ''),
+    comment: optional(formData, 'comment') ?? '',
+  })
+  if (!parsed.success) return firstIssue(parsed.error, t('finance', 'checkForm'))
+  const input = parsed.data
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('record_cash_count', {
+    p_source_id: input.sourceId,
+    p_counted_on: input.countedOn,
+    p_counted_tiyin: input.countedTiyin,
+    p_expected_tiyin: input.expectedTiyin,
+    p_count_key: input.countKey,
+    p_comment: input.comment || undefined,
+  })
+  if (error) return toAppError(error, 'Не удалось сохранить сверку')
+
+  const row = data?.[0]
+  const diff = row?.difference_tiyin ?? 0
+  const notice = row?.is_opening
+    ? t('finance', 'cashCountOpening')
+    : diff === 0
+      ? t('finance', 'cashCountMatched')
+      : diff < 0
+        ? t('finance', 'cashCountShortage', { sum: formatSom(-diff) })
+        : t('finance', 'cashCountSurplus', { sum: formatSom(diff) })
+  revalidatePath('/app/finance')
+  return { message: '', notice, done: Date.now() }
+}
+
+/** Отмена ошибочной сверки (cancel_cash_count, 0102) — только владелец, с причиной. */
+export async function cancelCashCount(_prev: FinanceState, formData: FormData): Promise<FinanceState> {
+  const countId = String(formData.get('countId') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!countId) return { message: 'Обновите страницу и попробуйте снова' }
+  if (!reason) return { message: 'Укажите причину отмены' }
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('cancel_cash_count', { p_count_id: countId, p_reason: reason })
+  if (error) return toAppError(error, 'Не удалось отменить сверку')
+  revalidatePath('/app/finance')
+  return { message: '', notice: 'Сверка отменена', done: Date.now() }
 }

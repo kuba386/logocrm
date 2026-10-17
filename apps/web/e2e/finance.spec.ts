@@ -53,7 +53,7 @@ test('Финансы: корректировка без абонемента п�
 // Цепочка денег сквозь экраны: продажа с частичной оплатой и рассрочкой →
 // график в «Рассрочках» → приём первого платежа → итог в «Платежах» и на
 // карточке. Проверяет не суммы базы (их держит pgTAP 0013/0018/0021), а что
-// экраны показывают одно и то же и полоска сумм сходится в «Итого в кассе».
+// экраны показывают одно и то же и полоска сумм сходится в «Оборот за месяц».
 // Тип абонемента «Восемь занятий · e2e» (4 000 сом) заводит
 // attendance-subscriptions.spec.ts — проект admin идёт раньше owner-money.
 
@@ -108,8 +108,8 @@ test('Финансы: продажа с рассрочкой сходится н
   const refunded = await value('Возвращено')
   const corrections = await value('Корректировки')
   const spent = await value('Расходы')
-  const total = await value('Итого в кассе')
-  expect(received + refunded + corrections + spent, 'строки полоски сходятся в «Итого в кассе»').toBe(total)
+  const total = await value('Оборот за месяц')
+  expect(received + refunded + corrections + spent, 'строки полоски сходятся в «Оборот за месяц»').toBe(total)
 
   // Карточка: оплачено уже 2 500 из 4 000.
   await page.goto('/app/students')
@@ -201,4 +201,22 @@ test('Перевод между кассами: проведён и виден �
   const transfer = page.locator('li', { hasText: 'e2e: инкассация' }).first()
   await expect(transfer).toContainText(formatSom(5_000))
   await expect(transfer.getByRole('button', { name: 'Обратный перевод' })).toBeVisible()
+})
+
+// Сверка кассы (0102): первая сверка кассы — начальный остаток, следующие —
+// недостача, излишек или «сошлось». Сумму не угадываем: вносим ровно «по учёту»
+// из предпросмотра базы — при повторном прогоне выйдет «всё сошлось».
+test('Касса: сверка сохраняется, касса отмечена сверенной', async ({ page }) => {
+  await page.goto('/app/finance?tab=cash')
+  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Сверить кассу' }).first().click()
+  const dialog = page.locator('dialog[open]')
+  const expected = dialog.getByText(/^По учёту сейчас: /)
+  await expect(expected).toBeVisible()
+  const som = (await expected.innerText()).replace(/[^\d,−-]/g, '').replace('−', '-').replace(',', '.')
+  await dialog.getByLabel('Посчитали, сом').fill(String(Math.max(Number(som), 0)))
+  await actAndAwait(page, 'Сохранить сверку', /Начальный остаток кассы сохранён|Сверка сохранена/)
+
+  await expect(page.getByText(/сверено \d{2}\.\d{2}\.\d{4}/).first()).toBeVisible()
 })

@@ -565,6 +565,60 @@ export type Database = {
           },
         ]
       }
+      cash_counts: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          center_id: string
+          comment: string | null
+          count_key: string
+          counted_at: string
+          counted_on: string
+          counted_tiyin: number
+          created_at: string
+          created_by: string | null
+          expected_tiyin: number
+          id: string
+          source_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          center_id?: string
+          comment?: string | null
+          count_key: string
+          counted_at: string
+          counted_on: string
+          counted_tiyin: number
+          created_at?: string
+          created_by?: string | null
+          expected_tiyin: number
+          id?: string
+          source_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          center_id?: string
+          comment?: string | null
+          count_key?: string
+          counted_at?: string
+          counted_on?: string
+          counted_tiyin?: number
+          created_at?: string
+          created_by?: string | null
+          expected_tiyin?: number
+          id?: string
+          source_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cash_transfers: {
         Row: {
           amount_tiyin: number
@@ -5564,6 +5618,10 @@ export type Database = {
       can_finance: { Args: { p_center_id?: string }; Returns: boolean }
       can_front_desk: { Args: { p_center_id?: string }; Returns: boolean }
       can_payments: { Args: { p_center_id?: string }; Returns: boolean }
+      cancel_cash_count: {
+        Args: { p_count_id: string; p_reason: string }
+        Returns: undefined
+      }
       cancel_center_deletion: { Args: never; Returns: undefined }
       cancel_installment_plan: {
         Args: { p_subscription_id: string }
@@ -5580,6 +5638,54 @@ export type Database = {
       cancel_series_from: {
         Args: { p_from: string; p_reason?: string; p_series_id: string }
         Returns: number
+      }
+      cash_count_preview: {
+        Args: { p_day?: string; p_source_id: string }
+        Returns: {
+          day: string
+          expected_tiyin: number
+          last_count_on: string
+          today: string
+        }[]
+      }
+      cash_counts_list: {
+        Args: { p_month: string }
+        Returns: {
+          cancel_reason: string
+          cancelled_at: string
+          comment: string
+          count_id: string
+          counted_by_name: string
+          counted_by_role: string
+          counted_on: string
+          counted_tiyin: number
+          difference_tiyin: number
+          expected_at_count: number
+          expected_tiyin: number
+          is_opening: boolean
+          source_id: string
+        }[]
+      }
+      cash_report: {
+        Args: { p_month: string }
+        Returns: {
+          closing_tiyin: number
+          closing_verified: boolean
+          corrections_tiyin: number
+          counts_difference_tiyin: number
+          last_count_on: string
+          opening_adjustment_tiyin: number
+          opening_tiyin: number
+          opening_verified: boolean
+          other_tiyin: number
+          received_tiyin: number
+          refunded_tiyin: number
+          source_id: string
+          spent_tiyin: number
+          transfers_in_tiyin: number
+          transfers_out_tiyin: number
+          turnover_tiyin: number
+        }[]
       }
       center_ai_notes_used: { Args: { p_center_id: string }; Returns: number }
       center_ai_questions_used: {
@@ -6500,6 +6606,21 @@ export type Database = {
       recalc_subscription_usage: {
         Args: { p_subscription_id: string }
         Returns: undefined
+      }
+      record_cash_count: {
+        Args: {
+          p_comment?: string
+          p_count_key: string
+          p_counted_on: string
+          p_counted_tiyin: number
+          p_expected_tiyin: number
+          p_source_id: string
+        }
+        Returns: {
+          count_id: string
+          difference_tiyin: number
+          is_opening: boolean
+        }[]
       }
       record_cash_transfer: {
         Args: {
