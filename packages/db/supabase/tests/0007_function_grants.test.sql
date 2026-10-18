@@ -174,7 +174,10 @@ from unnest(array[
   'public.cash_movements_unchecked(uuid,timestamp with time zone,timestamp with time zone)',
   'public.cash_after_count(timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone)',
   'public.cash_count_diffs_unchecked(uuid,uuid,date,date)',
-  'public.cash_balances_unchecked(uuid,date)'
+  'public.cash_balances_unchecked(uuid,date)',
+  -- 0103: выбор абонемента отметки — одна копия для триггера и метки панели.
+  'public.attendance_subscription_candidates_unchecked(uuid,uuid,uuid,date)',
+  'public.attendance_pick_subscription_unchecked(uuid,uuid,uuid,date)'
 ]) as func,
 unnest(array['public', 'anon', 'authenticated']) as role_name;
 
@@ -497,7 +500,9 @@ select set_eq(
     ('record_cash_count(uuid,date,bigint,bigint,uuid,text)'),
     ('cancel_cash_count(uuid,text)'),
     ('cash_counts_list(date)'),
-    ('cash_report(date)')
+    ('cash_report(date)'),
+    -- 0103: метка панели отметки с учётом услуги занятия.
+    ('lesson_attendance_balances(uuid)')
   $$,
   'authenticated исполняет только функции из белого списка'
 );

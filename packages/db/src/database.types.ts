@@ -5489,6 +5489,32 @@ export type Database = {
         Returns: number
       }
       assistant_quota: { Args: never; Returns: Json }
+      attendance_pick_subscription_unchecked: {
+        Args: {
+          p_center: string
+          p_day: string
+          p_service: string
+          p_student: string
+        }
+        Returns: {
+          id: string
+          is_frozen: boolean
+        }[]
+      }
+      attendance_subscription_candidates_unchecked: {
+        Args: {
+          p_center: string
+          p_day: string
+          p_service: string
+          p_student: string
+        }
+        Returns: {
+          created_at: string
+          ends_at: string
+          id: string
+          is_frozen: boolean
+        }[]
+      }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
       booking_center_info: {
@@ -6219,6 +6245,16 @@ export type Database = {
         Returns: {
           block_reason: string
           credit_tiyin: number
+        }[]
+      }
+      lesson_attendance_balances: {
+        Args: { p_lesson_id: string }
+        Returns: {
+          kind: string
+          lessons_left: number
+          numbers: boolean
+          price_tiyin: number
+          student_id: string
         }[]
       }
       lesson_debt_account: {

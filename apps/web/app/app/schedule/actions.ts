@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { toAppError, type AppError, type ConflictDay } from '@/lib/errors'
 import { centerTimeZone, zonedDateTimeToIso } from '@/lib/timezone'
+import { attendanceBalanceLabel, type AttendanceBalanceLabel } from '@logocrm/core'
 
 export type ScheduleState = AppError & { notice?: string }
 
@@ -218,8 +219,9 @@ export type AttendanceParticipant = {
   statusId: string | null
   statusCode: string | null
   comment: string | null
-  /** Родителю и teacher — только слово («есть»/«заканчивается»/«нет»); admin/owner — число занятий. */
+  /** Метка остатка с учётом услуги занятия (0103); числа — только стойке. */
   balance: string
+  balanceTone: AttendanceBalanceLabel['tone']
 }
 
 export type AttendancePanelData = {
@@ -228,9 +230,14 @@ export type AttendancePanelData = {
 } & Partial<AppError>
 
 /**
- * Список участников занятия с текущими отметками и остатком абонемента.
+ * Список участников занятия с текущими отметками и меткой остатка.
  * Отдельный запрос на занятие, а не на неделю: участники нужны только
  * открытой панели, а не всей сетке расписания.
+ *
+ * Состав и метку отдаёт lesson_attendance_balances (0103): абонемент
+ * подбирается тем же правилом, что при отметке, — по услуге и дате занятия.
+ * Раньше метка брала student_balance без услуги и показывала остаток
+ * логопедического абонемента рядом с кнопками СМК-занятия (жалоба KadamLogo).
  */
 export async function getAttendancePanelData(lessonId: string): Promise<AttendancePanelData> {
   const empty = { participants: [], statuses: [] }
@@ -238,10 +245,9 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
 
   const supabase = await createClient()
 
-  const [{ data: lesson, error: lessonError }, { data: role }, { data: statusRows, error: statusError }] =
+  const [{ data: balanceRows, error: balanceError }, { data: statusRows, error: statusError }] =
     await Promise.all([
-      supabase.from('lessons').select('id, student_id, group_id').eq('id', lessonId).maybeSingle(),
-      supabase.rpc('my_role'),
+      supabase.rpc('lesson_attendance_balances', { p_lesson_id: lessonId }),
       supabase
         .from('attendance_statuses')
         .select('id, code, name, color, is_default')
@@ -249,8 +255,7 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
         .order('sort'),
     ])
 
-  if (lessonError) return { ...empty, ...toAppError(lessonError, 'Не удалось загрузить занятие') }
-  if (!lesson) return { ...empty, message: 'Занятие не найдено' }
+  if (balanceError) return { ...empty, ...toAppError(balanceError, 'Не удалось загрузить участников') }
   if (statusError) return { ...empty, ...toAppError(statusError, 'Не удалось загрузить статусы') }
 
   const statuses: AttendanceStatusOption[] = (statusRows ?? []).map((row) => ({
@@ -261,92 +266,43 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
     isDefault: row.is_default,
   }))
 
-  let studentIds: string[] = []
-  if (lesson.group_id) {
-    const { data: participantRows, error: participantsError } = await supabase
-      .from('lesson_participants')
-      .select('student_id')
-      .eq('lesson_id', lessonId)
-      .is('deleted_at', null)
-    if (participantsError) return { ...empty, statuses, ...toAppError(participantsError, 'Не удалось загрузить участников') }
-    studentIds = (participantRows ?? []).map((row) => row.student_id)
-  } else if (lesson.student_id) {
-    studentIds = [lesson.student_id]
-  }
-
+  const rows = balanceRows ?? []
+  const studentIds = rows.map((row) => row.student_id)
   if (studentIds.length === 0) return { participants: [], statuses }
 
-  const isAdmin = role === 'owner' || role === 'admin'
-
-  // Admin/owner — число из student_balance (teacher туда не пущен самой
-  // вьюхой); teacher/parent — только слово из student_subscription_badge.
-  // Разные формы одного и того же результата сведены к одной форме здесь,
-  // а не разбираются в JSX компонента.
-  const fetchBalanceLabels = async (): Promise<{ studentId: string; label: string }[]> => {
-    if (isAdmin) {
-      const { data } = await supabase
-        .from('student_balance')
-        .select('student_id, active_subscription_id, lessons_left, state')
-        .in('student_id', studentIds)
-      return (data ?? []).map((row) => {
-        // lessons_left = null неоднозначен сам по себе: у student_balance
-        // это и «абонемент безлимитный», и «абонемента нет вовсе» —
-        // отличает только active_subscription_id. DESIGN.md уже наступал
-        // на этот же null в другом месте (0010, «Пробелы» по subscription_lessons_left).
-        //
-        // state считается на СЕГОДНЯ, а отметка в этой же панели — на дату
-        // ЗАНЯТИЯ (attendance_fill_and_check, v_lesson_date). Для занятия
-        // из другого дня рядом с границей заморозки метка может разойтись
-        // с тем, что ответит клик «Пришёл» — известный, не устранённый в
-        // этой миграции пробел (0015_freeze_state_unification.sql, раздел
-        // 11 в шапке файла); для сегодняшних занятий, подавляющего
-        // большинства отметок, метка точна.
-        let label: string
-        if (!row.active_subscription_id) label = 'нет абонемента'
-        else if (row.state === 'frozen') label = 'заморожен'
-        else if (row.lessons_left == null) label = 'без лимита'
-        else label = `${row.lessons_left} зан.`
-        return { studentId: row.student_id ?? '', label }
-      })
-    }
-
-    return Promise.all(
-      studentIds.map(async (studentId) => {
-        const { data } = await supabase.rpc('student_subscription_badge', { p_student_id: studentId })
-        return { studentId, label: data ?? '—' }
-      }),
-    )
-  }
-
   // Под parent этот select отдаёт 0 строк по RLS (0044, attendance_parent_read
-  // снята) — сегодня недостижимо: панель отметки не рендерится родителю
-  // (canMarkAttendance в lesson-panel.tsx требует myTeacherId). Если родителю
-  // когда-нибудь понадобится своя версия этого экрана — брать
-  // student_attendance_brief(), а не расширять доступ к attendance.
-  const [{ data: students }, { data: attendanceRows }, balanceLabels] = await Promise.all([
+  // снята) — сегодня недостижимо: lesson_attendance_balances родителю
+  // отказывает, а панель отметки ему не рендерится.
+  const [{ data: students }, { data: attendanceRows }] = await Promise.all([
     supabase.from('students').select('id, full_name').in('id', studentIds),
     supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
-    fetchBalanceLabels(),
   ])
 
   const nameById = new Map((students ?? []).map((s) => [s.id, s.full_name]))
   const statusById = new Map(statuses.map((s) => [s.id, s]))
   const attendanceByStudent = new Map((attendanceRows ?? []).map((row) => [row.student_id, row]))
-  const balanceByStudent = new Map(balanceLabels.map((row) => [row.studentId, row.label]))
 
-  const participants: AttendanceParticipant[] = studentIds.map((studentId) => {
-    const mark = attendanceByStudent.get(studentId)
-    const status = mark?.status_id ? statusById.get(mark.status_id) : undefined
+  const participants: AttendanceParticipant[] = rows
+    .map((row) => {
+      const mark = attendanceByStudent.get(row.student_id)
+      const status = mark?.status_id ? statusById.get(mark.status_id) : undefined
+      const label = attendanceBalanceLabel(
+        { kind: row.kind, lessonsLeft: row.lessons_left, priceTiyin: row.price_tiyin },
+        // Признак из базы, не роль здесь: null у стойки — «безлимит», у специалиста — «скрыто».
+        row.numbers,
+      )
 
-    return {
-      studentId,
-      fullName: nameById.get(studentId) ?? 'Ученик',
-      statusId: mark?.status_id ?? null,
-      statusCode: status?.code ?? null,
-      comment: mark?.comment ?? null,
-      balance: balanceByStudent.get(studentId) ?? '—',
-    }
-  })
+      return {
+        studentId: row.student_id,
+        fullName: nameById.get(row.student_id) ?? 'Ученик',
+        statusId: mark?.status_id ?? null,
+        statusCode: status?.code ?? null,
+        comment: mark?.comment ?? null,
+        balance: label.text,
+        balanceTone: label.tone,
+      }
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'))
 
   return { participants, statuses }
 }

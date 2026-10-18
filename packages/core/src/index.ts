@@ -71,3 +71,9 @@ export { planSwitchDays, prepayDiscountPercent, platformPaymentAmountTiyin } fro
 export { pickSavedFilterParams, sameSavedFilterParams, savedFilterParamsOk } from './saved-filters'
 export type { SavedFilterPage, SavedFilterParams } from './saved-filters'
 export { safeNextPath } from './safe-next'
+export {
+  attendanceBalanceLabel,
+  type AttendanceBalanceKind,
+  type AttendanceBalanceLabel,
+  type AttendanceBalanceRow,
+} from './attendance-balance'
