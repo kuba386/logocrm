@@ -163,7 +163,7 @@ create or replace function public.tests_pick(n integer)
   select p.id from public.attendance_pick_subscription_unchecked(
            '01030000-0000-0000-0000-0000000000c1', ('01030000-0000-0000-0000-00000000ee0' || n)::uuid,
            (select l.service_id from public.lessons l where l.id = public.tests_lesson(n)),
-           ((select l.starts_at from public.lessons l where l.id = public.tests_lesson(n)) at time zone 'Asia/Bishkek')::date);
+           ((select l.starts_at from public.lessons l where l.id = public.tests_lesson(n)) at time zone 'Asia/Bishkek')::date) p;
 $$;
 
 grant execute on function public.tests_label(integer), public.tests_lesson(integer) to authenticated;
