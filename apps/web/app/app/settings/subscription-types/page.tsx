@@ -53,7 +53,12 @@ function TypeFields({
       </div>
       <div className="space-y-1 sm:col-span-3">
         <Label htmlFor={`service-${idSuffix}`}>Услуга</Label>
-        <Select id={`service-${idSuffix}`} name="serviceId" defaultValue={type?.service_id ?? ''}>
+        <Select
+          id={`service-${idSuffix}`}
+          name="serviceId"
+          defaultValue={type?.service_id ?? ''}
+          aria-describedby={type ? undefined : `service-hint-${idSuffix}`}
+        >
           <option value="">Любая услуга</option>
           {services.map((s) => (
             <option key={s.id} value={s.id}>
@@ -61,6 +66,12 @@ function TypeFields({
             </option>
           ))}
         </Select>
+        {/* Подсказка — только в форме нового типа: в списке она повторялась бы у каждой строки. */}
+        {type ? null : (
+          <p id={`service-hint-${idSuffix}`} className="text-xs text-muted-foreground">
+            С выбранной услугой абонемент списывается только с её занятий — занятия других услуг без своего абонемента уйдут в долг. «Любая услуга» — со всех занятий.
+          </p>
+        )}
       </div>
 
       <div className="space-y-1 sm:col-span-2">

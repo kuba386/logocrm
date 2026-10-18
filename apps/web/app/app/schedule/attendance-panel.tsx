@@ -75,11 +75,13 @@ function AttendanceRow({
         <span
           className={cn(
             'text-xs',
-            // Тизерное слово у teacher/parent — «нет»; число у admin/owner —
-            // «нет абонемента». Оба варианта значат одно и то же для глаза.
-            participant.balance === 'нет' || participant.balance === 'нет абонемента'
+            // Тон — из вида метки (0103), не из текста: «уйдёт в долг» и
+            // «в долг» красным, «заканчивается» и «заморожен» — заметнее серого.
+            participant.balanceTone === 'danger'
               ? 'font-medium text-destructive'
-              : 'text-muted-foreground',
+              : participant.balanceTone === 'warn'
+                ? 'font-medium text-amber-700 dark:text-amber-300'
+                : 'text-muted-foreground',
           )}
         >
           {participant.balance}
