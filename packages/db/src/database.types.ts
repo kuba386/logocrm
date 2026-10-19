@@ -108,6 +108,24 @@ export type Database = {
           },
         ]
       }
+      app_modules: {
+        Row: {
+          code: string
+          sort: number
+          title: string
+        }
+        Insert: {
+          code: string
+          sort?: number
+          title: string
+        }
+        Update: {
+          code?: string
+          sort?: number
+          title?: string
+        }
+        Relationships: []
+      }
       assistant_requests: {
         Row: {
           center_id: string
@@ -724,6 +742,54 @@ export type Database = {
           },
         ]
       }
+      center_kind_modules: {
+        Row: {
+          kind_code: string
+          module_code: string
+        }
+        Insert: {
+          kind_code: string
+          module_code: string
+        }
+        Update: {
+          kind_code?: string
+          module_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "center_kind_modules_kind_code_fkey"
+            columns: ["kind_code"]
+            isOneToOne: false
+            referencedRelation: "center_kinds"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "center_kind_modules_module_code_fkey"
+            columns: ["module_code"]
+            isOneToOne: false
+            referencedRelation: "app_modules"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      center_kinds: {
+        Row: {
+          code: string
+          sort: number
+          title: string
+        }
+        Insert: {
+          code: string
+          sort?: number
+          title: string
+        }
+        Update: {
+          code?: string
+          sort?: number
+          title?: string
+        }
+        Relationships: []
+      }
       center_modules: {
         Row: {
           center_id: string
@@ -755,15 +821,30 @@ export type Database = {
           module_code?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "center_modules_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "center_modules_module_code_fkey"
+            columns: ["module_code"]
+            isOneToOne: false
+            referencedRelation: "app_modules"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       centers: {
         Row: {
           created_at: string
           deleted_at: string | null
           deletion_source: string | null
-          kind: string
           id: string
+          kind: string
           name: string
           plan: string
           settings: Json
@@ -776,8 +857,8 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deletion_source?: string | null
-          kind?: string
           id?: string
+          kind?: string
           name: string
           plan?: string
           settings?: Json
@@ -790,8 +871,8 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deletion_source?: string | null
-          kind?: string
           id?: string
+          kind?: string
           name?: string
           plan?: string
           settings?: Json
@@ -801,6 +882,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "centers_kind_fkey"
+            columns: ["kind"]
+            isOneToOne: false
+            referencedRelation: "center_kinds"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "centers_plan_fk"
             columns: ["plan"]
@@ -5822,6 +5910,10 @@ export type Database = {
         Returns: boolean
       }
       center_deletion_state: { Args: never; Returns: Json }
+      center_has_module: {
+        Args: { p_center: string; p_code: string }
+        Returns: boolean
+      }
       center_limits: { Args: never; Returns: Json }
       center_month_start: { Args: { p_center_id: string }; Returns: string }
       center_notification_enabled: {
@@ -6388,6 +6480,15 @@ export type Database = {
         Args: { p_lesson_id: string; p_notes?: string; p_status: string }
         Returns: undefined
       }
+      module_guarded_tables: {
+        Args: never
+        Returns: {
+          insert_only: boolean
+          module_code: string
+          table_name: string
+        }[]
+      }
+      module_visible: { Args: { p_code: string }; Returns: boolean }
       month_open_lessons_count: { Args: { p_month: string }; Returns: number }
       my_memberships: {
         Args: never
@@ -6603,7 +6704,12 @@ export type Database = {
         }[]
       }
       platform_create_center: {
-        Args: { p_city?: string; p_name: string; p_owner_email: string }
+        Args: {
+          p_city?: string
+          p_kind?: string
+          p_name: string
+          p_owner_email: string
+        }
         Returns: string
       }
       platform_day_end: {
