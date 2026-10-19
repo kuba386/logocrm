@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { PAYER_RELATIONS } from '@/lib/students'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { useTerms } from '@/components/center/terms-provider'
 
 const initialState: StudentState = {}
 
@@ -34,6 +35,7 @@ export function AddStudentDialog({
   presetPayer?: { id: string; fullName: string }
   label?: string
 }) {
+  const terms = useTerms()
   const [open, setOpen] = useState(false)
   const [state, formAction] = useActionState(createStudent, initialState)
   const keep = useKeepValuesOnError(state, Boolean(state.error))
@@ -174,7 +176,7 @@ export function AddStudentDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="primaryTeacherId">Специалист</Label>
+              <Label htmlFor="primaryTeacherId">{terms.teacher}</Label>
               <Select id="primaryTeacherId" name="primaryTeacherId" defaultValue="">
                 <option value="">Пока не назначен</option>
                 {teachers.map((teacher) => (

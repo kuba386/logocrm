@@ -21,6 +21,7 @@ export async function createCenter(
   const parsed = createCenterSchema.safeParse({
     name: String(formData.get('name') ?? ''),
     city: String(formData.get('city') ?? ''),
+    kind: String(formData.get('kind') ?? 'speech'),
   })
 
   if (!parsed.success) {
@@ -32,6 +33,7 @@ export async function createCenter(
   const { error } = await supabase.rpc('create_center', {
     p_name: parsed.data.name,
     p_city: parsed.data.city,
+    p_kind: parsed.data.kind,
   })
 
   if (error) {

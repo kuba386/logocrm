@@ -1976,3 +1976,25 @@ error)` берёт ставку из `ai_model_rates()` (VALUES, тыйыны з
   владельца 18.10.2026: «СМК — отдельный абонемент»).
 - Известный пробел: специалист читает `attendance.price_tiyin` своих занятий
   прямым select (`attendance_teacher_read`, 0009).
+
+## Тип центра и модули (0104, ADR-013)
+
+- **Тип центра** — `centers.kind` → lookup `center_kinds` (`speech`,
+  `education`): стартовые модули (`center_kind_modules`) и словарь интерфейса
+  (`centerTerms` в `@logocrm/core`). Меняет владелец (`set_center_kind`),
+  прямой PATCH закрыт триггером `centers_kind_guard` (owner этого центра,
+  readonly — PT402), событие `center.kind_changed`.
+- **Модули** — `center_modules`: живая строка (`disabled_at is null`) =
+  включён; выключение — `disabled_at`, не DELETE. Пишут только
+  `set_center_module` (owner) и триггер `centers_seed_modules` (по `kind`).
+  `has_module(code)` — для веба; `center_has_module(center, code)` — без
+  грантов, для триггеров и definer-функций; `module_visible(code)` — owner/
+  admin всегда, остальные при включённом модуле.
+- **Гард записи** — `a01_module_guard` на таблицах из `module_guarded_tables()`
+  (PT403, действует и без сессии). Новая таблица модуля добавляется в этот
+  список — забор pgTAP 0104 проверяет триггер и restrictive-политику
+  `<tbl>_module_visible`. Новая definer-функция, отдающая данные модуля
+  специалисту или родителю, начинается с `module_visible(...)`.
+- **Ядро не знает о модулях**: ветвлений по `kind` в абонементах, деньгах,
+  расписании нет. Исключения 0104 — `approve_lesson_note` (не переносит оценки
+  без «Клиники») и голосовой контур.

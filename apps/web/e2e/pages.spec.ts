@@ -46,6 +46,7 @@ const STATIC_ROUTES = [
   '/app/settings/teacher-rates',
   '/app/settings/notifications',
   '/app/settings/plan',
+  '/app/settings/modules',
   '/admin',
   '/select-center',
   '/onboarding',

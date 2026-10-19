@@ -136,3 +136,27 @@ Vitest проверяет, что набор ключей у типов совп
   требует перевыпуска ~35 функций.
 - **Модули в `create_center`** — их не получат `platform_create_center` и
   тестовые фикстуры.
+
+## Уточнения при реализации (0104, ревью плана миграции)
+
+- **goal_stages не под гардом** (отступление от Р3): AFTER-триггеры на
+  `centers` идут по алфавиту, `centers_seed_goal_stages` раньше
+  `centers_seed_modules` — с гардом не создался бы ни один центр. Выключенный
+  модуль этапы просто не показывает.
+- **Гард пропускает UPDATE, где все изменённые колонки стали NULL** — каскады
+  `on delete set null` (удаление пользователя, специалиста, занятия).
+  `lesson_voice_requests` под гардом только на INSERT: отмена и закрытие
+  диктовки не блокируются.
+- **Р4:** `approve_lesson_note` без «Клиники» утверждает заметку без переноса
+  оценок в `goal_progress` — оценки остаются предложениями.
+- **Р5:** `ai_job_begin` возвращает null без события; `bot_voice_pending` тоже
+  смотрит модуль и не держит текстовую заметку.
+- **Р6 реализован restrictive-политиками** `<tbl>_module_visible` через
+  `module_visible('clinic')` (грант authenticated; `center_has_module` без
+  грантов), а не правкой хелперов `clinical_*`: их используют ДЗ, заметки и
+  `student_notes_brief` — ядро. Definer-функции клиники для специалиста и
+  родителя перевыпущены с проверкой: `student_diagnostics_brief`,
+  `student_goals_brief`, `student_goal_dynamics_brief`, `student_conclusions`,
+  `goal_suggestions` — пусто; `student_monthly_report` — отказ PT403.
+- **Гонка** «выключение модуля одновременно с записью» по READ COMMITTED
+  пропустит одну строку — принято: граница видимости, не доступа.

@@ -46,3 +46,29 @@ test('Регистрация центра: аккаунт → центр → ч�
   await page.getByRole('button', { name: 'Показать', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Настройка центра' })).toBeVisible()
 })
+
+// 0104 (ADR-013): учебный центр — свои слова в интерфейсе и выключенная
+// «Клиника»; владелец включает её сам в «Настройки → Тип и модули».
+test('Регистрация учебного центра: слова и модули по типу', async ({ page }) => {
+  const email = `signup-edu-${Date.now()}@logocrm.kg`
+
+  await page.goto('/login?mode=signup')
+  await page.locator('#email').fill(email)
+  await page.locator('#password').fill(PASSWORD)
+  await page.getByRole('button', { name: 'Зарегистрировать центр' }).click()
+
+  await expect(page).toHaveURL(/\/onboarding(\?|$)/, { timeout: 20_000 })
+  await page.locator('#name').fill('Языковая школа e2e')
+  await page.getByRole('radio', { name: /^Учебный центр/ }).check()
+  await page.getByRole('button', { name: 'Создать центр' }).click()
+  await expect(page).toHaveURL(/^https?:\/\/[^/]+\/app(\/|$)/, { timeout: 20_000 })
+
+  await page.goto('/app/settings/rooms')
+  await expect(page.getByRole('heading', { name: 'Аудитории', level: 1 })).toBeVisible()
+
+  await page.goto('/app/settings/modules')
+  const clinic = page.getByRole('group', { name: 'Модуль «Клиника»' })
+  await expect(clinic.getByText('Выключен', { exact: true })).toBeVisible()
+  await clinic.getByRole('button', { name: 'Включить' }).click()
+  await expect(page.getByText('Модуль «Клиника» включён')).toBeVisible()
+})

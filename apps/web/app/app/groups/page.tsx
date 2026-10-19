@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { addStudentToGroup, removeStudentFromGroup, saveGroup } from '../settings/services/actions'
+import { centerTerms, type CenterTerms } from '@logocrm/core'
+import { getCenterProfile } from '@/lib/center-profile'
 
 export const metadata = { title: 'Группы — LogoCRM' }
 
@@ -31,12 +33,14 @@ function GroupFields({
   services,
   teachers,
   rooms,
+  terms,
 }: {
   group?: GroupRow
   idSuffix: string
   services: Option[]
   teachers: Option[]
   rooms: Option[]
+  terms: CenterTerms
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -63,7 +67,7 @@ function GroupFields({
         </Select>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`teacherId-${idSuffix}`}>Специалист</Label>
+        <Label htmlFor={`teacherId-${idSuffix}`}>{terms.teacher}</Label>
         <Select id={`teacherId-${idSuffix}`} name="teacherId" defaultValue={group?.teacher_id ?? ''}>
           <option value="">Не назначен</option>
           {teachers.map((t) => (
@@ -74,7 +78,7 @@ function GroupFields({
         </Select>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`roomId-${idSuffix}`}>Кабинет</Label>
+        <Label htmlFor={`roomId-${idSuffix}`}>{terms.room}</Label>
         <Select id={`roomId-${idSuffix}`} name="roomId" defaultValue={group?.room_id ?? ''}>
           <option value="">Без кабинета</option>
           {rooms.map((r) => (
@@ -138,7 +142,7 @@ export default async function GroupsPage() {
     byGroup.set(row.group_id, list)
   }
 
-  const fields = { services: serviceOptions, teachers: teacherOptions, rooms: roomOptions }
+  const fields = { services: serviceOptions, teachers: teacherOptions, rooms: roomOptions, terms: centerTerms((await getCenterProfile()).kind) }
 
   return (
     <div className="space-y-6">

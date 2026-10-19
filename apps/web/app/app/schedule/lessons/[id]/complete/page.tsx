@@ -9,6 +9,7 @@ import { calendarDay, dayInZone, timeInZone, centerTimeZone } from '@/lib/timezo
 import { studentAge } from '@/lib/students'
 import type { GoalTrend } from '@/lib/goal-trend'
 import { CompleteLessonForm, type StudentEntry, type ExerciseOption } from './complete-lesson-form'
+import { getCenterProfile, hasClinic } from '@/lib/center-profile'
 
 export const metadata = { title: 'Провести занятие — LogoCRM' }
 
@@ -143,10 +144,16 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
   const attendanceByStudent = new Map((existingAttendance ?? []).map((a) => [a.student_id, a]))
   const defaultStatusCode = (attendanceStatuses ?? []).find((s) => s.is_default)?.code ?? null
 
+  // 0104: без «Клиники» в форме нет целей и голосовой заметки — иначе
+  // complete_lesson с прогрессом целей упёрся бы в гард модуля.
+  const clinicOn = hasClinic(await getCenterProfile())
+
   const students_: StudentEntry[] = await Promise.all(
     (students ?? []).map(async (student) => {
       const [{ data: goals }, { data: prevNotes }] = await Promise.all([
-        supabase.rpc('student_goals_brief', { p_student_id: student.id }),
+        clinicOn
+          ? supabase.rpc('student_goals_brief', { p_student_id: student.id })
+          : Promise.resolve({ data: [] as { id: string; title: string; sound: string | null; stage_title: string; status: string; last_score: number | null; trend: string | null }[] }),
         supabase
           .from('lesson_notes')
           .select('id, soap, parent_summary, created_at')
@@ -208,7 +215,7 @@ export default async function CompleteLessonPage({ params }: { params: Promise<{
         students={students_}
         attendanceStatuses={(attendanceStatuses ?? []).map((s) => ({ code: s.code, name: s.name, color: s.color }))}
         exercises={exerciseOptions}
-        botName={process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? null}
+        botName={clinicOn ? (process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? null) : null}
       />
     </div>
   )

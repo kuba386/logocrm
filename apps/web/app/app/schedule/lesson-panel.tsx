@@ -24,6 +24,7 @@ import { t } from '@/lib/messages'
 import { lessonStatusLabel } from '@/lib/schedule'
 import type { TeacherOption } from './create-dialog'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { useTerms } from '@/components/center/terms-provider'
 
 const initial: ScheduleState = { message: '' }
 
@@ -65,6 +66,7 @@ export function LessonPanel({
   teachers: TeacherOption[]
   onClose: () => void
 }) {
+  const terms = useTerms()
   const [statusState, statusAction] = useActionState(markLessonStatus, initial)
   const [cancelState, cancelAction] = useActionState(cancelLesson, initial)
   const [seriesState, seriesAction] = useActionState(cancelSeriesFrom, initial)
@@ -96,12 +98,12 @@ export function LessonPanel({
       <div className="space-y-4">
         <dl className="grid gap-2 text-sm">
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Специалист</dt>
+            <dt className="text-muted-foreground">{terms.teacher}</dt>
             <dd>{lesson.teacherName}</dd>
           </div>
           {lesson.roomName ? (
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Кабинет</dt>
+              <dt className="text-muted-foreground">{terms.room}</dt>
               <dd>{lesson.roomName}</dd>
             </div>
           ) : null}
