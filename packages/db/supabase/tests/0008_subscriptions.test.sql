@@ -77,8 +77,9 @@ select is(
 
 select is(
   (select count(*)::int from public.attendance_statuses
-    where center_id = 'cccccccc-0000-0000-0000-00000000000b'),
+    where center_id = 'cccccccc-0000-0000-0000-00000000000b' and deleted_at is null),
   4,
+  -- 0105: пятый — «Пропуск с отработкой», засеян в архив до включения отработок.
   'Второму центру засеяны свои статусы, а не дубли в первый'
 );
 
