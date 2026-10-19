@@ -27,7 +27,9 @@ export async function saveMakeupPolicy(_prev: MakeupPolicyState, formData: FormD
 
 export async function disableMakeups(_prev: MakeupPolicyState): Promise<MakeupPolicyState> {
   const supabase = await createClient()
-  const { error } = await supabase.rpc('set_makeup_policy', { p_valid_days: null })
+  // null — «выключить» (set_makeup_policy, 0105). Генератор типов не знает, что
+  // аргумент функции допускает null, поэтому приведение явное.
+  const { error } = await supabase.rpc('set_makeup_policy', { p_valid_days: null as unknown as number })
   if (error) return toAppError(error, 'Не удалось выключить отработки')
 
   revalidatePath('/app/settings/makeups')
