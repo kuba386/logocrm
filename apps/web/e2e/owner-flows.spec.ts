@@ -109,3 +109,24 @@ test('Долги → «Продать абонемент» открывает к
   await page.getByRole('button', { name: 'Продать абонемент', exact: true }).click()
   await expect(page.locator('dialog[open] select#typeId')).toBeVisible()
 })
+
+// 0105: отработки включает владелец — срок и лимит; право дают статусы с флагом.
+test('Отработки: включить и выключить в настройках', async ({ page }) => {
+  await page.goto('/app/settings/makeups')
+  await expect(page.getByRole('heading', { name: 'Отработки', level: 1 })).toBeVisible()
+  // До включения статус в архиве (0105 Р15) — страница говорит, что он появится.
+  await expect(page.getByText(/появится статус «Пропуск с отработкой»/)).toBeVisible()
+
+  await page.locator('#validDays').fill('21')
+  await page.locator('#limit').fill('2')
+  await page.getByRole('button', { name: 'Включить отработки' }).click()
+  await expect(page.getByText('Отработки включены', { exact: true })).toBeVisible()
+  await expect(page.getByText('Включены', { exact: true })).toBeVisible()
+  await expect(page.getByText('Право дают статусы: «Пропуск с отработкой».')).toBeVisible()
+
+  // Кнопка «Выключить» исчезает вместе со своим уведомлением, как только
+  // отработки выключены, — ждём результат по значку, а не по уведомлению.
+  await page.getByRole('button', { name: 'Выключить отработки' }).click()
+  await expect(page.getByText('Выключены', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Включить отработки' })).toBeVisible()
+})

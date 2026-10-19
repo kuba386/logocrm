@@ -187,6 +187,7 @@ export type Database = {
           id: string
           is_present: boolean
           lesson_id: string
+          makeup_credit_id: string | null
           marked_at: string
           marked_by: string | null
           paid_teacher_id: string
@@ -206,6 +207,7 @@ export type Database = {
           id?: string
           is_present?: boolean
           lesson_id: string
+          makeup_credit_id?: string | null
           marked_at?: string
           marked_by?: string | null
           paid_teacher_id: string
@@ -225,6 +227,7 @@ export type Database = {
           id?: string
           is_present?: boolean
           lesson_id?: string
+          makeup_credit_id?: string | null
           marked_at?: string
           marked_by?: string | null
           paid_teacher_id?: string
@@ -248,6 +251,13 @@ export type Database = {
             columns: ["lesson_id", "center_id"]
             isOneToOne: false
             referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "attendance_makeup_credit_fk"
+            columns: ["makeup_credit_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "makeup_credits"
             referencedColumns: ["id", "center_id"]
           },
           {
@@ -297,6 +307,7 @@ export type Database = {
           created_by: string | null
           deducts_lesson: boolean
           deleted_at: string | null
+          grants_makeup: boolean
           id: string
           is_default: boolean
           is_present: boolean
@@ -315,6 +326,7 @@ export type Database = {
           created_by?: string | null
           deducts_lesson?: boolean
           deleted_at?: string | null
+          grants_makeup?: boolean
           id?: string
           is_default?: boolean
           is_present?: boolean
@@ -333,6 +345,7 @@ export type Database = {
           created_by?: string | null
           deducts_lesson?: boolean
           deleted_at?: string | null
+          grants_makeup?: boolean
           id?: string
           is_default?: boolean
           is_present?: boolean
@@ -2599,6 +2612,7 @@ export type Database = {
           starts_at: string
           status: string
           student_id: string
+          via_makeup: boolean
         }
         Insert: {
           center_id: string
@@ -2608,6 +2622,7 @@ export type Database = {
           starts_at: string
           status?: string
           student_id: string
+          via_makeup?: boolean
         }
         Update: {
           center_id?: string
@@ -2617,6 +2632,7 @@ export type Database = {
           starts_at?: string
           status?: string
           student_id?: string
+          via_makeup?: boolean
         }
         Relationships: [
           {
@@ -2878,6 +2894,209 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teachers"
             referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      makeup_bookings: {
+        Row: {
+          center_id: string
+          closed_at: string | null
+          closed_reason: string | null
+          created_at: string
+          created_by: string | null
+          credit_id: string
+          id: string
+          lesson_id: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id: string
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_id: string
+          id?: string
+          lesson_id: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_id?: string
+          id?: string
+          lesson_id?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "makeup_bookings_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "makeup_bookings_credit_fk"
+            columns: ["credit_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "makeup_credits"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_bookings_lesson_fk"
+            columns: ["lesson_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_bookings_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_bookings_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      makeup_credits: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          center_id: string
+          created_at: string
+          expires_on: string
+          id: string
+          missed_on: string
+          price_tiyin: number
+          service_id: string | null
+          source_attendance_id: string
+          student_id: string
+          subscription_id: string | null
+          updated_at: string
+          used_attendance_id: string | null
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          center_id: string
+          created_at?: string
+          expires_on: string
+          id?: string
+          missed_on: string
+          price_tiyin?: number
+          service_id?: string | null
+          source_attendance_id: string
+          student_id: string
+          subscription_id?: string | null
+          updated_at?: string
+          used_attendance_id?: string | null
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          center_id?: string
+          created_at?: string
+          expires_on?: string
+          id?: string
+          missed_on?: string
+          price_tiyin?: number
+          service_id?: string | null
+          source_attendance_id?: string
+          student_id?: string
+          subscription_id?: string | null
+          updated_at?: string
+          used_attendance_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "makeup_credits_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "makeup_credits_source_fk"
+            columns: ["source_attendance_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_credits_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_credits_student_fk"
+            columns: ["student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "makeup_credits_used_fk"
+            columns: ["used_attendance_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      makeup_policies: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          disabled_at: string | null
+          id: string
+          per_subscription_limit: number | null
+          updated_at: string
+          valid_days: number
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          id?: string
+          per_subscription_limit?: number | null
+          updated_at?: string
+          valid_days: number
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          id?: string
+          per_subscription_limit?: number | null
+          updated_at?: string
+          valid_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "makeup_policies_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -5641,6 +5860,10 @@ export type Database = {
       }
       backfill_student_payers_history: { Args: never; Returns: undefined }
       backfill_subscription_payments: { Args: never; Returns: undefined }
+      book_makeup: {
+        Args: { p_credit_id: string; p_lesson_id: string }
+        Returns: string
+      }
       booking_center_info: {
         Args: { p_slug: string }
         Returns: {
@@ -5794,6 +6017,10 @@ export type Database = {
       }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
+      cancel_makeup_booking: {
+        Args: { p_booking_id: string }
         Returns: undefined
       }
       cancel_salary_run: {
@@ -6462,6 +6689,36 @@ export type Database = {
       log_speech_card_opened: {
         Args: { p_student_id: string }
         Returns: undefined
+      }
+      makeup_lesson_options: {
+        Args: { p_credit_id: string }
+        Returns: {
+          ends_at: string
+          free_places: number
+          lesson_id: string
+          starts_at: string
+          teacher_name: string
+          title: string
+        }[]
+      }
+      makeup_policy_live: {
+        Args: { p_center: string }
+        Returns: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          disabled_at: string | null
+          id: string
+          per_subscription_limit: number | null
+          updated_at: string
+          valid_days: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "makeup_policies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       mark_attendance: {
         Args: {
@@ -7228,6 +7485,10 @@ export type Database = {
         Args: { p_id: string; p_status: string }
         Returns: undefined
       }
+      set_makeup_policy: {
+        Args: { p_limit?: number; p_valid_days: number }
+        Returns: undefined
+      }
       set_student_anamnesis: {
         Args: {
           p_expected_updated_at?: string
@@ -7352,6 +7613,19 @@ export type Database = {
           target_date: string
           title: string
           trend: string
+        }[]
+      }
+      student_makeups: {
+        Args: { p_student_id: string }
+        Returns: {
+          booked_starts_at: string
+          booking_id: string
+          credit_id: string
+          expires_on: string
+          missed_on: string
+          service_name: string
+          status: string
+          used_on: string
         }[]
       }
       student_monthly_report: {

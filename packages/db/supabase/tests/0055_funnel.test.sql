@@ -120,7 +120,8 @@ select is(
   'is_present засеян: present/late true, по одному центру (Д, Р1) — centers_seed_statuses ставит их каждому центру заново');
 select is(
   (select array_agg(code order by code) from public.attendance_statuses
-    where center_id = 'a0550000-0000-0000-0000-0000000000c1' and not is_present),
+    where center_id = 'a0550000-0000-0000-0000-0000000000c1' and not is_present and deleted_at is null),
+  -- 0105: «Пропуск с отработкой» засеян в архив до включения отработок.
   array['absent','sick'],
   'sick/absent — не присутствие; «Прогул» списывает занятие, но is_present у него false (Д)');
 
