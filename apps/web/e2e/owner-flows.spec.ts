@@ -124,6 +124,9 @@ test('Отработки: включить и выключить в настро
   await expect(page.getByText('Включены', { exact: true })).toBeVisible()
   await expect(page.getByText('Право дают статусы: «Пропуск с отработкой».')).toBeVisible()
 
+  // Кнопка «Выключить» исчезает вместе со своим уведомлением, как только
+  // отработки выключены, — ждём результат по значку, а не по уведомлению.
   await page.getByRole('button', { name: 'Выключить отработки' }).click()
-  await expect(page.getByText(/^Отработки выключены\./)).toBeVisible()
+  await expect(page.getByText('Выключены', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Включить отработки' })).toBeVisible()
 })
