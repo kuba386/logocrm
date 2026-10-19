@@ -880,6 +880,126 @@ RPC `cover_lesson_debt_preview`, `cover_lesson_debt` (сверка
 - открыть Authentication → Users в Supabase после первого подключения на
   staging: список пользователей открывается, бот-родитель без почты виден.
 
+## Этап 13 — тип центра, модули и словарь ⬜
+
+Фундамент для учебных центров (решение владельца 19.10.2026, ADR-013): один
+продукт для логопедических и учебных центров без ветвлений в ядре. Сам этап
+новых функций не добавляет — только основу, на которую лягут отработки, доля
+списания, мульти-абонементы и модуль «Учёба». Ревью архитектора плана: 6
+блокеров и 9 замечаний учтены в ADR-013.
+
+**Решения (ADR-013):**
+- тип центра `centers.kind` (lookup `center_kinds`: `speech`, `education`) —
+  обычная настройка; «тип → стартовые модули» — данные `center_kind_modules`;
+- модули — таблица `center_modules` (выключение — `disabled_at`, не DELETE),
+  не `settings.features`; модули `clinic` и `academic` (пустой каркас);
+- запись в выключенный модуль запрещает триггер на таблицах модуля, а не
+  проверка в RPC; действует и без сессии (контур бота);
+- модули засевает триггер на `centers`, этапы целей — всем центрам;
+- голосовой контур проверяет модуль до платных вызовов;
+- **Р6 — решение владельца 19.10.2026:** при выключенной клинике её не видят специалист
+  и родитель (owner, admin и выгрузка — видят);
+- словарь — целые фразы по типам, тексты ошибок из базы не трогаем;
+- существующие центры: `speech` + `clinic`, у них ничего не меняется.
+
+**Промт — `0104_center_kinds_modules.sql` (номер — по факту каталога):**
+- lookup `center_kinds`, `app_modules`, `center_kind_modules` по шаблону
+  Database.md (`code`, `title`, `sort`), RLS включён, select — authenticated;
+  засев до `alter table centers`;
+- `centers.kind text not null default 'speech' references center_kinds` —
+  заполняется default'ом, без UPDATE и без `disable trigger user`;
+- триггер `BEFORE UPDATE OF kind` на `centers`: только owner,
+  `center_writable`, событие `center.kind_changed` (`emit_event_internal`);
+- `center_modules (id, center_id, module_code, created_at, updated_at,
+  disabled_at, created_by)`, частичный unique по живым строкам; только
+  select-политика через членство; `apply_audit`, `apply_readonly_guard`;
+  revoke записи у всех ролей, включая `service_role` (забор 0079);
+- `center_has_module(p_center, p_code)` — definer, без грантов;
+  `has_module(p_code)` — по `current_center()`, grant authenticated;
+- `set_center_module(p_code, p_enabled)` — owner, readonly-центр (PT402) —
+  отказ, upsert без 23505, событие `center.module_changed`, аудит;
+- триггер `AFTER INSERT` на `centers` засевает модули по `new.kind`;
+  backfill — обычный insert `clinic` всем центрам, включая удалённые;
+- `seed_goal_stages` — всем центрам (идемпотентно); проверить порядок
+  триггеров засева;
+- `create_center`: `drop function create_center(text, text)` и новая
+  `create_center(p_name, p_city, p_kind default 'speech')` с явными грантами —
+  без перегрузки (иначе PGRST203 у онбординга); то же для
+  `platform_create_center`; последнее определение `create_center` — 0001:421;
+- `apply_module_guard(table, module)` + триггер `a01_module_guard` на:
+  diagnostics, diagnostic_clinical_forms, diagnostic_referrals,
+  student_anamnesis, student_articulation, syllable_assessments,
+  prosody_assessments, reading_writing_assessments, goals, goal_progress,
+  goal_stages, monthly_reports, lesson_voice_requests, lesson_note_goal_scores;
+  список «таблица → модуль» — одной функцией; свой SQLSTATE;
+- `ai_job_begin` (последнее определение 0053:285): `center_has_module` до
+  квоты и вставки в `ai_jobs`, null + одно событие;
+- Р6: `center_has_module` в хелперы видимости клиники для teacher и parent
+  (`clinical_teacher_sees`, `clinical_*_visible`, `clinical_role_allowed`,
+  `student_diagnostics_brief`, `student_goals_brief`) — последние определения
+  по grep;
+- заборы: 0050 (таблиц без `center_id` теперь +3, перевыпуск
+  `readonly_guard_exempt_tables` от 0098:676), 0056 (`export_center_tables` от
+  0102:824, `export_center_info` с `kind`), 0007 (новые функции, новая
+  сигнатура `create_center`, `center_has_module` — в закрытые), 0079;
+- контракты: `center.module_changed`, `center.kind_changed`, `kind` в
+  `center.created`.
+
+**Веб:**
+- регистрация: выбор «Логопедический / коррекционный центр» или «Учебный
+  центр» двумя карточками;
+- «Настройки → Модули» (owner): тумблеры с описанием, что появится и что
+  скроется («данные не удаляются; специалисты и родители их не видят, пока
+  модуль выключен»); тип центра там же;
+- словарь: ключи — целые фразы по типам в `ru.json`; навигация, заголовки
+  (`generateMetadata` вместо статических `metadata`), формы сотрудника,
+  кабинета, занятия, пустые состояния;
+- навигация и карточка ученика: вкладка «Обследование», панели целей,
+  месячного отчёта, голосовой заметки, блоки целей в форме проведения и в
+  черновике заметки — только при `clinic`; маршруты модуля без флага —
+  `notFound()`;
+- тип и модули читаются на сервере в layout одним запросом.
+
+**Тесты (pgTAP 0104):**
+- backfill: все центры, включая удалённые, — `speech` + `clinic`; прямой
+  insert в `centers` с `education` получает `academic` без `clinic`;
+  `platform_create_center` получает модули;
+- `create_center` с двумя аргументами (позиционно и по имени) работает,
+  перегрузки нет (`count(*)` по `pg_proc` = 1);
+- `goal_stages` есть у обоих типов;
+- гард: отказ на insert/update каждой таблицы списка при выключенном `clinic` —
+  под authenticated и без сессии; забор «каждая таблица списка под
+  триггером»; прямой PATCH `goal_stages` owner'ом — отказ;
+- ядро: `complete_lesson` с прогрессом целей и `approve_lesson_note` с
+  оценками при выключенном модуле — явный отказ, посещение не отмечено;
+- `ai_job_begin` при выключенном модуле — null, строки в `ai_jobs` нет,
+  событие одно;
+- `set_center_module`: owner да; admin/registrar/finance/teacher/parent нет;
+  чужой центр нет; readonly нет; повтор без 23505; прямая запись в
+  `center_modules` owner'ом и admin'ом — отказ; событие и аудит;
+- `kind`: прямой PATCH owner'ом — событие; admin — отказ; readonly — отказ;
+- чтение после выключения: owner видит; teacher и parent — не видят (Р6), после
+  включения — снова видят;
+- экспорт: `kind` и `center_modules` в выгрузке; гранты: у
+  `center_has_module` ни одного, `has_module` анониму недоступна;
+- Vitest: ключи словаря у обоих типов совпадают, пустых нет;
+- e2e: регистрация учебного центра → «Преподаватели», нет «Обследования»,
+  клинический маршрут — 404; логопедический центр — без изменений; обход
+  страниц под ролями — для обоих типов.
+
+**Чек-лист (кликом):**
+- [ ] новый учебный центр: в меню «Преподаватели», «Аудитории», на карточке
+      ученика нет вкладки «Обследование»;
+- [ ] «Настройки → Модули» → включить «Клиника» → вкладка появилась; выключить
+      → пропала у специалиста, ранее внесённая диагностика вернулась при
+      повторном включении;
+- [ ] существующий логопедический центр на staging — всё как было;
+- [ ] телефон 375 px, светлая тема (тёмной в приложении нет).
+
+**Вне этапа:** содержимое модуля «Учёба», привязка модулей к тарифам,
+отдельный лендинг и имя для учебных центров, тексты бота и ошибок из базы по
+типу центра (новые тексты — нейтрально).
+
 ## После этапа 8
 
 Backlog из `docs/Backlog.md` → этапы 9+. Кандидаты: телетерапия (WebRTC), приложение специалиста (PWA), бенчмарки между центрами, автоматический приём оплаты подписки, кыргызский язык интерфейса.
