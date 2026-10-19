@@ -28,6 +28,7 @@ type StatusRow = {
   deducts_lesson: boolean
   pays_teacher: boolean
   counts_absence: boolean
+  grants_makeup: boolean
   notify_parent: boolean
   is_default: boolean
   sort: number
@@ -39,6 +40,12 @@ const FLAGS: { name: string; key: keyof StatusRow; label: string; hint: string }
   { name: 'paysTeacher', key: 'pays_teacher', label: 'Оплачивается специалисту', hint: 'понадобится расчёту зарплат' },
   { name: 'countsAbsence', key: 'counts_absence', label: 'Считается пропуском', hint: 'два подряд — родителю уходит сообщение' },
   { name: 'notifyParent', key: 'notify_parent', label: 'Уведомлять родителя', hint: 'сообщение после отметки — текст в «Уведомлениях»' },
+  {
+    name: 'grantsMakeup',
+    key: 'grants_makeup',
+    label: 'Даёт право на отработку',
+    hint: 'только вместе со списанием — срок задаётся в «Отработках»',
+  },
 ]
 
 function StatusFields({ status, idSuffix }: { status?: StatusRow; idSuffix: string }) {
@@ -109,7 +116,7 @@ export default async function AttendanceStatusesPage() {
 
   const { data: statuses } = await supabase
     .from('attendance_statuses')
-    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, is_default, sort, deleted_at')
+    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, grants_makeup, is_default, sort, deleted_at')
     .order('sort')
 
   const allRows = (statuses ?? []) as StatusRow[]

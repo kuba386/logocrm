@@ -39,6 +39,10 @@ describe('attendanceBalanceLabel', () => {
     expect(attendanceBalanceLabel(row('subscription_empty', -1), true).text).toBe('-1 зан. — в минус')
   })
 
+  it('отработка — без списания и без чисел', () => {
+    expect(attendanceBalanceLabel(row('makeup', 3, 50_000), true)).toEqual({ text: 'отработка — без списания', tone: 'muted' })
+  })
+
   it('неизвестный вид — прочерк, не падение', () => {
     expect(attendanceBalanceLabel(row('что-то новое'), true).text).toBe('—')
   })

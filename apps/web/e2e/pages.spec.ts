@@ -47,6 +47,7 @@ const STATIC_ROUTES = [
   '/app/settings/notifications',
   '/app/settings/plan',
   '/app/settings/modules',
+  '/app/settings/makeups',
   '/admin',
   '/select-center',
   '/onboarding',

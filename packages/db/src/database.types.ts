@@ -179,6 +179,7 @@ export type Database = {
       }
       attendance: {
         Row: {
+          makeup_credit_id: string | null
           center_id: string
           comment: string | null
           counts_absence: boolean
@@ -198,6 +199,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          makeup_credit_id?: string | null
           center_id?: string
           comment?: string | null
           counts_absence?: boolean
@@ -217,6 +219,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          makeup_credit_id?: string | null
           center_id?: string
           comment?: string | null
           counts_absence?: boolean
@@ -289,6 +292,7 @@ export type Database = {
       }
       attendance_statuses: {
         Row: {
+          grants_makeup: boolean
           center_id: string
           code: string
           color: string
@@ -307,6 +311,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          grants_makeup?: boolean
           center_id?: string
           code: string
           color?: string
@@ -325,6 +330,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          grants_makeup?: boolean
           center_id?: string
           code?: string
           color?: string
@@ -2592,6 +2598,7 @@ export type Database = {
       }
       lesson_participants: {
         Row: {
+          via_makeup: boolean
           center_id: string
           deleted_at: string | null
           ends_at: string
@@ -2601,6 +2608,7 @@ export type Database = {
           student_id: string
         }
         Insert: {
+          via_makeup?: boolean
           center_id: string
           deleted_at?: string | null
           ends_at: string
@@ -2610,6 +2618,7 @@ export type Database = {
           student_id: string
         }
         Update: {
+          via_makeup?: boolean
           center_id?: string
           deleted_at?: string | null
           ends_at?: string
@@ -2936,6 +2945,129 @@ export type Database = {
             referencedColumns: ["id", "center_id"]
           },
         ]
+      }
+      makeup_bookings: {
+        Row: {
+          center_id: string
+          closed_at: string | null
+          closed_reason: string | null
+          created_at: string
+          created_by: string | null
+          credit_id: string
+          id: string
+          lesson_id: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_id?: string
+          id?: string
+          lesson_id?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          closed_at?: string | null
+          closed_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_id?: string
+          id?: string
+          lesson_id?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      makeup_credits: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          center_id: string
+          created_at: string
+          expires_on: string
+          id: string
+          missed_on: string
+          price_tiyin: number
+          service_id: string | null
+          source_attendance_id: string
+          student_id: string
+          subscription_id: string | null
+          updated_at: string
+          used_attendance_id: string | null
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          center_id?: string
+          created_at?: string
+          expires_on?: string
+          id?: string
+          missed_on?: string
+          price_tiyin?: number
+          service_id?: string | null
+          source_attendance_id?: string
+          student_id?: string
+          subscription_id?: string | null
+          updated_at?: string
+          used_attendance_id?: string | null
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          center_id?: string
+          created_at?: string
+          expires_on?: string
+          id?: string
+          missed_on?: string
+          price_tiyin?: number
+          service_id?: string | null
+          source_attendance_id?: string
+          student_id?: string
+          subscription_id?: string | null
+          updated_at?: string
+          used_attendance_id?: string | null
+        }
+        Relationships: []
+      }
+      makeup_policies: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          disabled_at: string | null
+          id: string
+          per_subscription_limit: number | null
+          updated_at: string
+          valid_days: number
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          id?: string
+          per_subscription_limit?: number | null
+          updated_at?: string
+          valid_days?: number
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          id?: string
+          per_subscription_limit?: number | null
+          updated_at?: string
+          valid_days?: number
+        }
+        Relationships: []
       }
       message_templates: {
         Row: {
@@ -5792,6 +5924,11 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: number
       }
+      book_makeup: {
+        Args: { p_credit_id: string; p_lesson_id: string }
+        Returns: string
+      }
+      cancel_makeup_booking: { Args: { p_booking_id: string }; Returns: undefined }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
@@ -6462,6 +6599,17 @@ export type Database = {
       log_speech_card_opened: {
         Args: { p_student_id: string }
         Returns: undefined
+      }
+      makeup_lesson_options: {
+        Args: { p_credit_id: string }
+        Returns: {
+          ends_at: string
+          free_places: number | null
+          lesson_id: string
+          starts_at: string
+          teacher_name: string | null
+          title: string
+        }[]
       }
       mark_attendance: {
         Args: {
@@ -7206,6 +7354,10 @@ export type Database = {
         }[]
       }
       set_booking_enabled: { Args: { p_enabled: boolean }; Returns: undefined }
+      set_makeup_policy: {
+        Args: { p_limit?: number; p_valid_days: number | null }
+        Returns: undefined
+      }
       set_center_kind: { Args: { p_kind: string }; Returns: undefined }
       set_center_module: {
         Args: { p_code: string; p_enabled: boolean }
@@ -7352,6 +7504,19 @@ export type Database = {
           target_date: string
           title: string
           trend: string
+        }[]
+      }
+      student_makeups: {
+        Args: { p_student_id: string }
+        Returns: {
+          booked_starts_at: string | null
+          booking_id: string | null
+          credit_id: string
+          expires_on: string
+          missed_on: string
+          service_name: string | null
+          status: string
+          used_on: string | null
         }[]
       }
       student_monthly_report: {

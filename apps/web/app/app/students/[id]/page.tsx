@@ -38,6 +38,7 @@ import { StudentSummary } from './student-summary'
 import { PageNoticeProvider } from '@/components/ui/page-notice'
 import { CardTabs, type CardTab } from './card-tabs'
 import { getCenterProfile, hasClinic } from '@/lib/center-profile'
+import { MakeupsPanel, type MakeupRow } from './makeups-panel'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
 
@@ -1062,7 +1063,37 @@ export default async function StudentPage({
   // Узлы строятся сразу для всех разделов, а рисуются только с show: true. Поэтому
   // никаких `clinicalSection!.` — у стойки и бухгалтера клиники нет (null), и
   // обращение к полю роняло всю карточку в 500 (нашёл e2e регистратора 16.10.2026).
+  // 0105: отработки — стойке (owner/admin/registrar); статусы и сроки считает база.
+  const makeupRows: MakeupRow[] =
+    isAdmin || isRegistrar
+      ? ((await supabase.rpc('student_makeups', { p_student_id: id })).data ?? []).map((row) => ({
+          creditId: row.credit_id,
+          status: row.status,
+          missedOn: row.missed_on,
+          expiresOn: row.expires_on,
+          serviceName: row.service_name,
+          bookingId: row.booking_id,
+          bookedStartsAt: row.booked_starts_at,
+          usedOn: row.used_on,
+        }))
+      : []
+
   const sectionBlocks: Record<string, { label: string; show: boolean; node: React.ReactNode }> = {
+    makeups: {
+      label: 'Отработки',
+      show: (isAdmin || isRegistrar) && makeupRows.length > 0,
+      node: (
+        <Card>
+          <CardHeader>
+            <CardTitle>Отработки</CardTitle>
+            <CardDescription>Пропуски с отработкой: до какого числа, куда записан, что использовано.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MakeupsPanel studentId={id} rows={makeupRows} timeZone={subscriptionsSection?.timeZone ?? 'Asia/Bishkek'} />
+          </CardContent>
+        </Card>
+      ),
+    },
     subscriptions: {
       label: 'Абонементы',
       show: Boolean(subscriptionsSection || subscriptionBadge),
@@ -1398,7 +1429,7 @@ export default async function StudentPage({
     ? ['goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'subscriptions', 'payer', 'data']
     : isParent
       ? ['report', 'goals', 'homework', 'notes', 'subscriptions', 'data', 'payer']
-      : ['subscriptions', 'payer', 'data', 'goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'history']
+      : ['subscriptions', 'makeups', 'payer', 'data', 'goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'history']
   const printOrder = ['diagnostics', 'goals', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting']
   // 0104: без модуля «Клиника» её разделов нет ни в карточке, ни в печати —
   // и у владельца тоже (данные остаются в базе и в выгрузке центра).
@@ -1412,7 +1443,7 @@ export default async function StudentPage({
   // разложены по смыслу. Первая вкладка — та, ради которой роль открывает
   // карточку: администратору деньги, специалисту и родителю занятия.
   const tabGroups: { key: string; label: string; ids: string[] }[] = [
-    { key: 'money', label: 'Абонементы', ids: ['subscriptions'] },
+    { key: 'money', label: 'Абонементы', ids: ['subscriptions', 'makeups'] },
     { key: 'work', label: 'Занятия', ids: ['goals', 'homework', 'notes', 'report'] },
     { key: 'exam', label: 'Обследование', ids: ['diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting'] },
     { key: 'profile', label: 'Данные', ids: ['data', 'payer'] },

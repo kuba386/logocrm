@@ -109,3 +109,19 @@ test('Долги → «Продать абонемент» открывает к
   await page.getByRole('button', { name: 'Продать абонемент', exact: true }).click()
   await expect(page.locator('dialog[open] select#typeId')).toBeVisible()
 })
+
+// 0105: отработки включает владелец — срок и лимит; право дают статусы с флагом.
+test('Отработки: включить и выключить в настройках', async ({ page }) => {
+  await page.goto('/app/settings/makeups')
+  await expect(page.getByRole('heading', { name: 'Отработки', level: 1 })).toBeVisible()
+  await expect(page.getByText('«Пропуск с отработкой»')).toBeVisible()
+
+  await page.locator('#validDays').fill('21')
+  await page.locator('#limit').fill('2')
+  await page.getByRole('button', { name: 'Включить отработки' }).click()
+  await expect(page.getByText('Отработки включены', { exact: true })).toBeVisible()
+  await expect(page.getByText('Включены', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Выключить отработки' }).click()
+  await expect(page.getByText(/^Отработки выключены\./)).toBeVisible()
+})

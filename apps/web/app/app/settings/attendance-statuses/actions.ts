@@ -57,13 +57,22 @@ export async function saveAttendanceStatus(
     pays_teacher: flag(formData, 'paysTeacher'),
     counts_absence: flag(formData, 'countsAbsence'),
     notify_parent: flag(formData, 'notifyParent'),
+    grants_makeup: flag(formData, 'grantsMakeup'),
     sort,
+  }
+
+  // 0105: отработка — за оплаченный пропуск; check в базе, текст — здесь по-русски.
+  if (payload.grants_makeup && !payload.deducts_lesson) {
+    return { message: 'Право на отработку даёт только статус, который списывает занятие' }
   }
 
   const { error } = id
     ? await supabase.from('attendance_statuses').update(payload).eq('id', id)
     : await supabase.from('attendance_statuses').insert({ ...payload, is_default: isDefault })
 
+  if (error?.code === '23514') {
+    return { message: 'Право на отработку не может давать статус «пришёл» — только оплаченный пропуск' }
+  }
   if (error) return toAppError(error, 'Не удалось сохранить статус')
 
   revalidatePath('/app/settings/attendance-statuses')

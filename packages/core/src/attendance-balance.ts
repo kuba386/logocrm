@@ -15,6 +15,7 @@ export type AttendanceBalanceKind =
   | 'free'
   | 'debt'
   | 'covered'
+  | 'makeup'
 
 export type AttendanceBalanceRow = {
   kind: string | null
@@ -71,6 +72,9 @@ export function attendanceBalanceLabel(row: AttendanceBalanceRow, numbers: boole
       return { text: 'отмечено без абонемента', tone: 'danger' }
     case 'covered':
       return { text: 'долг покрыт абонементом', tone: 'muted' }
+    case 'makeup':
+      // 0105: отработка не списывает с абонемента.
+      return { text: 'отработка — без списания', tone: 'muted' }
     default:
       return { text: '—', tone: 'muted' }
   }

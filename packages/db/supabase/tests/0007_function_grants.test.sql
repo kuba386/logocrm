@@ -183,6 +183,16 @@ from unnest(array[
   'public.centers_seed_modules()',
   'public.centers_kind_guard()',
   'public.centers_kind_changed()',
+  -- 0105: отработки — помощники и триггеры без грантов.
+  'public.makeup_policy_live(uuid)',
+  'public.attendance_makeup_sync()',
+  'public.attendance_makeup_delete_guard()',
+  'public.makeup_bookings_guard()',
+  'public.makeup_bookings_rebuild()',
+  'public.lessons_makeup_sync()',
+  'public.students_makeup_archive()',
+  'public.makeup_credits_cancel()',
+  'public.group_students_makeup_close()',
   -- 0103: выбор абонемента отметки — одна копия для триггера и метки панели.
   'public.attendance_subscription_candidates_unchecked(uuid,uuid,uuid,date)',
   'public.attendance_pick_subscription_unchecked(uuid,uuid,uuid,date)'
@@ -514,6 +524,12 @@ select set_eq(
     ('module_visible(text)'),
     ('set_center_module(text,boolean)'),
     ('set_center_kind(text)'),
+    -- 0105: отработки.
+    ('set_makeup_policy(integer,integer)'),
+    ('book_makeup(uuid,uuid)'),
+    ('cancel_makeup_booking(uuid)'),
+    ('makeup_lesson_options(uuid)'),
+    ('student_makeups(uuid)'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,
