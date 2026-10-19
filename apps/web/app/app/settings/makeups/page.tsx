@@ -38,7 +38,9 @@ export default async function MakeupsSettingsPage() {
           <div className="space-y-1.5">
             <CardTitle>Правила</CardTitle>
             <CardDescription>
-              Право дают статусы: {grantingNames || 'ни один — отметьте флаг в «Статусах посещения»'}.
+              {enabled
+                ? `Право дают статусы: ${grantingNames || 'ни один — отметьте флаг в «Статусах посещения»'}.`
+                : 'После включения в отметке появится статус «Пропуск с отработкой»: занятие списывается, взамен — право на отработку.'}
             </CardDescription>
           </div>
           <StatusBadge tone={enabled ? 'success' : 'neutral'}>{enabled ? 'Включены' : 'Выключены'}</StatusBadge>

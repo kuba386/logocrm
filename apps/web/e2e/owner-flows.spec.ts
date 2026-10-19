@@ -114,13 +114,15 @@ test('Долги → «Продать абонемент» открывает к
 test('Отработки: включить и выключить в настройках', async ({ page }) => {
   await page.goto('/app/settings/makeups')
   await expect(page.getByRole('heading', { name: 'Отработки', level: 1 })).toBeVisible()
-  await expect(page.getByText('«Пропуск с отработкой»')).toBeVisible()
+  // До включения статус в архиве (0105 Р15) — страница говорит, что он появится.
+  await expect(page.getByText(/появится статус «Пропуск с отработкой»/)).toBeVisible()
 
   await page.locator('#validDays').fill('21')
   await page.locator('#limit').fill('2')
   await page.getByRole('button', { name: 'Включить отработки' }).click()
   await expect(page.getByText('Отработки включены', { exact: true })).toBeVisible()
   await expect(page.getByText('Включены', { exact: true })).toBeVisible()
+  await expect(page.getByText('Право дают статусы: «Пропуск с отработкой».')).toBeVisible()
 
   await page.getByRole('button', { name: 'Выключить отработки' }).click()
   await expect(page.getByText(/^Отработки выключены\./)).toBeVisible()
