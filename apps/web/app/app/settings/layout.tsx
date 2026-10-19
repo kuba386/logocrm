@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
+import { centerTerms } from '@logocrm/core'
 import { isFinance } from '@/lib/roles'
+import { getCenterProfile } from '@/lib/center-profile'
 import { SettingsNav, type SettingsSection } from './settings-nav'
 
 const ADMIN_SECTIONS: SettingsSection[] = [
@@ -29,12 +31,20 @@ const FINANCE_SECTIONS = new Set([
  */
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
-  const { data: role } = await supabase.rpc('my_role')
+  const [{ data: role }, profile] = await Promise.all([supabase.rpc('my_role'), getCenterProfile()])
   const isAdmin = role === 'owner' || role === 'admin'
+  const terms = centerTerms(profile.kind)
+  // Слова по типу центра (0104); «Модули» — только владельцу: включает их он.
+  const adminSections = [
+    ...ADMIN_SECTIONS.map((section) =>
+      section.href === '/app/settings/rooms' ? { ...section, label: terms.rooms } : section,
+    ),
+    ...(role === 'owner' ? [{ href: '/app/settings/modules', label: 'Тип и модули' }] : []),
+  ]
   // Бухгалтеру — справочники денег и ставки (can_finance): способы оплаты,
   // статьи расходов (0027/0028) и ставки специалистов.
   const sections = isAdmin
-    ? ADMIN_SECTIONS
+    ? adminSections
     : ADMIN_SECTIONS.filter((section) => FINANCE_SECTIONS.has(section.href) && isFinance(role))
 
   return (

@@ -724,11 +724,45 @@ export type Database = {
           },
         ]
       }
+      center_modules: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          disabled_at: string | null
+          disabled_by: string | null
+          id: string
+          module_code: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
+          id?: string
+          module_code: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
+          id?: string
+          module_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       centers: {
         Row: {
           created_at: string
           deleted_at: string | null
           deletion_source: string | null
+          kind: string
           id: string
           name: string
           plan: string
@@ -742,6 +776,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deletion_source?: string | null
+          kind?: string
           id?: string
           name: string
           plan?: string
@@ -755,6 +790,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deletion_source?: string | null
+          kind?: string
           id?: string
           name?: string
           plan?: string
@@ -5886,7 +5922,7 @@ export type Database = {
       }
       create_bot_parent_user: { Args: { p_full_name: string }; Returns: string }
       create_center: {
-        Args: { p_city?: string; p_name: string }
+        Args: { p_city?: string; p_kind?: string; p_name: string }
         Returns: string
       }
       create_goal: {
@@ -6215,6 +6251,7 @@ export type Database = {
         }[]
       }
       has_feature: { Args: { p_feature: string }; Returns: boolean }
+      has_module: { Args: { p_code: string }; Returns: boolean }
       installment_plans_cancel_live: {
         Args: { p_subscription_id: string }
         Returns: number
@@ -7063,6 +7100,11 @@ export type Database = {
         }[]
       }
       set_booking_enabled: { Args: { p_enabled: boolean }; Returns: undefined }
+      set_center_kind: { Args: { p_kind: string }; Returns: undefined }
+      set_center_module: {
+        Args: { p_code: string; p_enabled: boolean }
+        Returns: undefined
+      }
       set_default_attendance_status: {
         Args: { p_id: string }
         Returns: undefined

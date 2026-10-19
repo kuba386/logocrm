@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { AddStudentDialog } from './add-student-dialog'
 import { StudentsTable, type StudentRowView } from './students-table'
+import { getCenterProfile, hasClinic } from '@/lib/center-profile'
 
 export const metadata = { title: 'Ученики — LogoCRM' }
 
@@ -119,7 +120,8 @@ export default async function StudentsPage() {
   // бы по неполным данным. Бухгалтеру не запрашиваем вовсе (0031 Р2).
   const conclusionByStudent = new Map<string, { code: string; name: string }>()
   let conclusionsError: string | null = null
-  if (!isFinance) {
+  // 0104: без «Клиники» колонки заключений нет — как и вкладки в карточке.
+  if (!isFinance && hasClinic(await getCenterProfile())) {
     const { data: conclusionRows, error } = await supabase.rpc('student_conclusions')
     if (error) {
       // Отказ RPC — не «ни у кого нет диагнозов»: показываем, а не прочерки.

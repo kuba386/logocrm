@@ -40,6 +40,8 @@ export const centerCreatedSchema = z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
     city: z.string().min(1).nullable().default(null),
+    // 0104: тип центра; в событиях до 0104 его нет.
+    kind: z.enum(['speech', 'education']).optional(),
   }),
 })
 export type CenterCreated = z.infer<typeof centerCreatedSchema>
@@ -1161,6 +1163,24 @@ export const payerTelegramLinkCreatedSchema = z.object({
   }),
 })
 
+/** 0104: владелец сменил тип центра (логопедический / учебный). */
+export const centerKindChangedSchema = z.object({
+  type: z.literal('center.kind_changed'),
+  payload: centerRef.extend({
+    from: z.string(),
+    to: z.string(),
+  }),
+})
+
+/** 0104: владелец включил или выключил модуль центра. */
+export const centerModuleChangedSchema = z.object({
+  type: z.literal('center.module_changed'),
+  payload: centerRef.extend({
+    module: z.string(),
+    enabled: z.boolean(),
+  }),
+})
+
 /** Все известные события системы. */
 export const appEventSchema = z.discriminatedUnion('type', [
   centerCreatedSchema,
@@ -1262,6 +1282,8 @@ export const appEventSchema = z.discriminatedUnion('type', [
   attendanceStatusChangedSchema,
   teacherScheduleSchema,
   payerTelegramLinkCreatedSchema,
+  centerKindChangedSchema,
+  centerModuleChangedSchema,
 ])
 export type AppEvent = z.infer<typeof appEventSchema>
 

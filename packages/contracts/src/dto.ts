@@ -38,6 +38,8 @@ export type EmailCodeInput = z.infer<typeof emailCodeSchema>
 export const createCenterSchema = z.object({
   name: z.string().trim().min(2, 'Название не короче 2 символов').max(120, 'Слишком длинное название'),
   city: z.string().trim().min(2, 'Укажите город').max(80, 'Слишком длинное название города'),
+  // 0104: тип центра — стартовый набор модулей и словарь интерфейса.
+  kind: z.enum(['speech', 'education'], { message: 'Выберите тип центра' }).default('speech'),
 })
 export type CreateCenterInput = z.infer<typeof createCenterSchema>
 

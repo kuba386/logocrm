@@ -75,6 +75,7 @@ from unnest(array[
   'public.center_readonly_guard()',
   'public.readonly_guard_exempt_tables()',
   'public.apply_readonly_guard(text, boolean)',
+  'public.apply_module_guard(text, text, boolean)',
   'public.center_writable(uuid)',
   'public.emit_event_platform(text,jsonb,uuid)',
   'public.notification_platform_targets(text)',
@@ -175,6 +176,13 @@ from unnest(array[
   'public.cash_after_count(timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone)',
   'public.cash_count_diffs_unchecked(uuid,uuid,date,date)',
   'public.cash_balances_unchecked(uuid,date)',
+  -- 0104: тип центра и модули — помощники и триггеры без грантов.
+  'public.center_has_module(uuid,text)',
+  'public.module_guarded_tables()',
+  'public.module_guard()',
+  'public.centers_seed_modules()',
+  'public.centers_kind_guard()',
+  'public.centers_kind_changed()',
   -- 0103: выбор абонемента отметки — одна копия для триггера и метки панели.
   'public.attendance_subscription_candidates_unchecked(uuid,uuid,uuid,date)',
   'public.attendance_pick_subscription_unchecked(uuid,uuid,uuid,date)'
@@ -277,7 +285,7 @@ select set_eq(
     ('center_timezone(uuid)'),
     ('change_member_role(uuid,text)'),
     ('close_month(date)'),
-    ('create_center(text,text)'),
+    ('create_center(text,text,text)'),
     ('create_invitation(text,text,text,text,uuid,uuid)'),
     ('create_lesson_series(jsonb)'),
     ('create_lesson_series_preview(jsonb)'),
@@ -401,7 +409,7 @@ select set_eq(
     ('platform_open_payments()'),
     ('platform_centers()'),
     ('platform_summary()'),
-    ('platform_create_center(text,text,text)'),
+    ('platform_create_center(text,text,text,text)'),
     ('record_diagnostic(uuid,text,jsonb,jsonb,date,uuid,text,text[],jsonb)'),
     ('update_diagnostic(uuid,text,jsonb,jsonb,date,text,text[],jsonb)'),
     ('archive_diagnostic(uuid)'),
@@ -501,6 +509,11 @@ select set_eq(
     ('cancel_cash_count(uuid,text)'),
     ('cash_counts_list(date)'),
     ('cash_report(date)'),
+    -- 0104: тип центра и модули.
+    ('has_module(text)'),
+    ('module_visible(text)'),
+    ('set_center_module(text,boolean)'),
+    ('set_center_kind(text)'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { Select } from '@/components/ui/select'
+import { useTerms } from '@/components/center/terms-provider'
 
 export function ScheduleFilters({
   week,
@@ -18,6 +19,7 @@ export function ScheduleFilters({
   selectedRoom: string
   showTeacherFilter: boolean
 }) {
+  const terms = useTerms()
   const router = useRouter()
 
   function go(next: { teacher?: string; room?: string }) {
@@ -38,7 +40,7 @@ export function ScheduleFilters({
           onChange={(event) => go({ teacher: event.target.value })}
           className="sm:h-9 max-w-[220px]"
         >
-          <option value="">Все специалисты</option>
+          <option value="">{terms.allTeachers}</option>
           {teachers.map((teacher) => (
             <option key={teacher.id} value={teacher.id}>
               {teacher.fullName}
@@ -53,7 +55,7 @@ export function ScheduleFilters({
         onChange={(event) => go({ room: event.target.value })}
         className="sm:h-9 max-w-[200px]"
       >
-        <option value="">Все кабинеты</option>
+        <option value="">{terms.allRooms}</option>
         {/* Кабинет необязателен, поэтому нужен явный пункт: иначе занятия
             без кабинета молча пропадут из вида. */}
         <option value="none">Без кабинета</option>

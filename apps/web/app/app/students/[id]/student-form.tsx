@@ -12,6 +12,7 @@ import { ConfirmSubmit } from '@/components/ui/confirm-submit'
 import { t } from '@/lib/messages'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { useTerms } from '@/components/center/terms-provider'
 
 const initialState: StudentState = {}
 
@@ -44,6 +45,7 @@ export function StudentForm({
   teachers: { id: string; fullName: string }[]
   canEdit: boolean
 }) {
+  const terms = useTerms()
   const [state, formAction] = useActionState(updateStudent, initialState)
   const keep = useKeepValuesOnError(state, Boolean(state.error))
   const [archiveState, archiveAction] = useActionState(archiveStudent, initialState)
@@ -94,7 +96,7 @@ export function StudentForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="primaryTeacherId">Специалист</Label>
+            <Label htmlFor="primaryTeacherId">{terms.teacher}</Label>
             <Select
               id="primaryTeacherId"
               name="primaryTeacherId"

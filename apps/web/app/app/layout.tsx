@@ -14,6 +14,8 @@ import { PlanBanner } from '@/app/app/plan-banner'
 import { GlobalSearch } from '@/app/app/global-search'
 import { parseCenterLimits } from '@/lib/plan'
 import { centerTimeZone } from '@/lib/timezone'
+import { getCenterProfile } from '@/lib/center-profile'
+import { CenterTermsProvider } from '@/components/center/terms-provider'
 
 /**
  * Оболочка приложения. Server component: здесь и только здесь решается,
@@ -58,7 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // приходит из базы: registrar/finance режут политики 0028, не эти флаги.
   const isAdmin = role === 'owner' || role === 'admin'
 
-  const [{ data: center }, { count: centersCount }, { data: limitsJson }] = await Promise.all([
+  const [{ data: center }, { count: centersCount }, { data: limitsJson }, profile] = await Promise.all([
     supabase.from('centers').select('name, plan, settings').eq('id', centerId).maybeSingle(),
     // Только свои членства: владельцу по RLS видны и чужие строки его центра,
     // из-за чего счётчик показывал «Сменить центр» при единственном центре.
@@ -69,6 +71,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Баннер тарифа — только тем, кто может оплатить: center_limits() закрыт
     // для parent, а специалисту «оплатите» читать не нужно (0050 Р9).
     isAdmin ? supabase.rpc('center_limits') : Promise.resolve({ data: null }),
+    // Тип центра и модули (0104) — слова интерфейса и видимость клиники.
+    getCenterProfile(),
   ])
   const limits = isAdmin ? parseCenterLimits(limitsJson) : null
   const frontDesk = isFrontDesk(role)
@@ -211,7 +215,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           tabIndex={-1}
           className={cn('container flex-1 py-6 outline-none sm:py-8 print:max-w-none print:p-0', bottomTabs ? 'pb-20 sm:pb-8' : '')}
         >
-          {children}
+          <CenterTermsProvider kind={profile.kind}>{children}</CenterTermsProvider>
         </main>
 
         {bottomTabs ? (

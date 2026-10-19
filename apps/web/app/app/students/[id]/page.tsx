@@ -37,8 +37,12 @@ import { NotesPanel, type NoteEntry, type NoteSoap } from './notes-panel'
 import { StudentSummary } from './student-summary'
 import { PageNoticeProvider } from '@/components/ui/page-notice'
 import { CardTabs, type CardTab } from './card-tabs'
+import { getCenterProfile, hasClinic } from '@/lib/center-profile'
 
 export const metadata = { title: 'Карточка ученика — LogoCRM' }
+
+/** Разделы карточки модуля «Клиника» (0104, ADR-013): скрыты, когда модуль выключен. */
+const CLINIC_SECTIONS = new Set(['goals', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting'])
 
 export default async function StudentPage({
   params,
@@ -1396,7 +1400,11 @@ export default async function StudentPage({
       ? ['report', 'goals', 'homework', 'notes', 'subscriptions', 'data', 'payer']
       : ['subscriptions', 'payer', 'data', 'goals', 'homework', 'notes', 'report', 'diagnostics', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting', 'history']
   const printOrder = ['diagnostics', 'goals', 'anamnesis', 'articulation', 'syllables', 'prosody', 'readingWriting']
+  // 0104: без модуля «Клиника» её разделов нет ни в карточке, ни в печати —
+  // и у владельца тоже (данные остаются в базе и в выгрузке центра).
+  const clinicOn = hasClinic(await getCenterProfile())
   const sections = (printMode ? printOrder : sectionOrder)
+    .filter((key) => clinicOn || !CLINIC_SECTIONS.has(key))
     .map((key) => ({ id: key, ...sectionBlocks[key]! }))
     .filter((section) => section.show)
 
@@ -1459,7 +1467,7 @@ export default async function StudentPage({
         <PageHeader
           back={{ href: '/app/students', label: 'Все ученики' }}
           actions={
-            canWriteClinical ? (
+            canWriteClinical && clinicOn ? (
               <Link href={`/app/students/${id}?print=1`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                 Речевая карта: печать / PDF
               </Link>

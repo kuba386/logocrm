@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { STUDENT_STATUS_TONES, statusLabel, studentAge } from '@/lib/students'
 import { formatKgPhone, formatSom, normalizeKgPhone } from '@logocrm/core'
 import { cn } from '@/lib/utils'
+import { useTerms } from '@/components/center/terms-provider'
 
 export type StudentRowView = {
   id: string
@@ -75,6 +76,7 @@ export function StudentsTable({
   teachers: { id: string; fullName: string }[]
   canSeeContacts: boolean
 }) {
+  const terms = useTerms()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
   const [teacherId, setTeacherId] = useState('')
@@ -136,7 +138,7 @@ export function StudentsTable({
             onChange={(event) => setTeacherId(event.target.value)}
             className="max-w-[220px]"
           >
-            <option value="">Все специалисты</option>
+            <option value="">{terms.allTeachers}</option>
             {teachers.map((teacher) => (
               <option key={teacher.id} value={teacher.id}>
                 {teacher.fullName}
@@ -185,7 +187,7 @@ export function StudentsTable({
             <TableRow>
               <TableHead>ФИО</TableHead>
               <TableHead className="hidden md:table-cell">Возраст</TableHead>
-              <TableHead className="hidden sm:table-cell">Специалист</TableHead>
+              <TableHead className="hidden sm:table-cell">{terms.teacher}</TableHead>
               <TableHead className="hidden lg:table-cell">Плательщик</TableHead>
               <TableHead>Статус</TableHead>
               {withMoney ? <TableHead className="hidden sm:table-cell">Абонемент и долг</TableHead> : null}

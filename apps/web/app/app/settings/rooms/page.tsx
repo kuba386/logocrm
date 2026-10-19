@@ -8,14 +8,19 @@ import { CatalogRow } from '@/components/ui/catalog-row'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { saveRoom } from '../services/actions'
+import { centerTerms } from '@logocrm/core'
+import { getCenterProfile } from '@/lib/center-profile'
 
-export const metadata = { title: 'Кабинеты — LogoCRM' }
+export async function generateMetadata() {
+  return { title: `${centerTerms((await getCenterProfile()).kind).rooms} — LogoCRM` }
+}
 
 export default async function RoomsPage() {
   const supabase = await createClient()
 
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
+  const terms = centerTerms((await getCenterProfile()).kind)
 
   const { data: rooms } = await supabase
     .from('rooms')
@@ -26,7 +31,7 @@ export default async function RoomsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title">Кабинеты</h1>
+        <h1 className="page-title">{terms.rooms}</h1>
         <p className="text-sm text-muted-foreground">
           Два занятия в одном кабинете одновременно поставить нельзя — проверяет база.
         </p>
@@ -41,7 +46,7 @@ export default async function RoomsPage() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1 sm:col-span-2">
                 <Label htmlFor="name">Название</Label>
-                <Input id="name" name="name" placeholder="Кабинет 1" required />
+                <Input id="name" name="name" placeholder={terms.roomPlaceholder} required />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="capacity">Мест</Label>
@@ -96,7 +101,7 @@ export default async function RoomsPage() {
             </CatalogRow>
           ))}
           </ul>
-          {(rooms ?? []).length === 0 ? <EmptyState title="Кабинетов пока нет" description="Добавьте первый — форма выше." /> : null}
+          {(rooms ?? []).length === 0 ? <EmptyState title={terms.noRooms} description="Добавьте первый — форма выше." /> : null}
         </CardContent>
       </Card>
     </div>

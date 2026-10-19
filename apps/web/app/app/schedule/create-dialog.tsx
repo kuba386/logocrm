@@ -14,6 +14,7 @@ import { conflictLabel } from '@/lib/errors'
 import { calendarDay } from '@/lib/timezone'
 import { WEEKDAY_LABELS } from '@/lib/schedule'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
+import { useTerms } from '@/components/center/terms-provider'
 
 const initial: ScheduleState = { message: '' }
 
@@ -45,6 +46,7 @@ export function CreateLessonDialog({
   students: StudentOption[]
   groups: GroupOption[]
 }) {
+  const terms = useTerms()
   const [open, setOpen] = useState(false)
   const [state, formAction] = useActionState(createSeries, initial)
   const keep = useKeepValuesOnError(state, Boolean(state.message || state.conflicts?.length))
@@ -137,7 +139,7 @@ export function CreateLessonDialog({
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="teacherId">Специалист</Label>
+              <Label htmlFor="teacherId">{terms.teacher}</Label>
               <Select
                 id="teacherId"
                 name="teacherId"
@@ -215,7 +217,7 @@ export function CreateLessonDialog({
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="roomId">Кабинет</Label>
+            <Label htmlFor="roomId">{terms.room}</Label>
             <Select
               id="roomId"
               name="roomId"
