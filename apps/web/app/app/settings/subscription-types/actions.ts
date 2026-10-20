@@ -45,6 +45,12 @@ export async function saveSubscriptionType(
     return { message: 'Для периодного абонемента укажите срок в днях' }
   }
 
+  // 0106: услуги — набор галочек; пусто — «любая услуга».
+  const serviceIds = formData
+    .getAll('serviceIds')
+    .map((v) => String(v).trim())
+    .filter(Boolean)
+
   const supabase = await createClient()
   const payload = {
     name,
@@ -52,15 +58,42 @@ export async function saveSubscriptionType(
     lessons_count: kind === 'lessons' ? lessonsCount : null,
     period_days: kind === 'period' ? periodDays : null,
     price_tiyin: priceTiyin,
-    service_id: text(formData, 'serviceId') || null,
     is_active: formData.get('isActive') === 'on',
   }
 
-  const { error } = id
-    ? await supabase.from('subscription_types').update(payload).eq('id', id)
-    : await supabase.from('subscription_types').insert(payload)
+  // Новый тип несёт основную услугу в той же строке: если запись набора
+  // ниже сорвётся, покрытие сузится до одной услуги, а не расширится до
+  // «любой» (ревью 0106 п.3). Набор целиком пишет одна RPC под блокировкой
+  // типа — у существующего типа service_id в PATCH не уходит.
+  let typeId = id
+  if (id) {
+    const { error } = await supabase.from('subscription_types').update(payload).eq('id', id)
+    if (error) return toAppError(error, 'Не удалось сохранить тип абонемента')
+  } else {
+    const { data, error } = await supabase
+      .from('subscription_types')
+      .insert({ ...payload, service_id: serviceIds[0] ?? null })
+      .select('id')
+      .single()
+    if (error) return toAppError(error, 'Не удалось сохранить тип абонемента')
+    typeId = data.id
+  }
 
-  if (error) return toAppError(error, 'Не удалось сохранить тип абонемента')
+  const { error: servicesError } = await supabase.rpc('set_subscription_type_services', {
+    p_type_id: typeId,
+    p_service_ids: serviceIds,
+  })
+  if (servicesError) {
+    // Тип уже записан: обновляем список, чтобы повторное «Добавить» не
+    // создало второй тип с тем же названием (ревью 0106 п.2).
+    revalidatePath('/app/settings/subscription-types')
+    const failed = toAppError(servicesError, 'Услуги не записались')
+    return {
+      message: id
+        ? failed.message
+        : `Тип создан, но услуги не записались: ${failed.message}. Откройте его в списке и отметьте услуги.`,
+    }
+  }
 
   revalidatePath('/app/settings/subscription-types')
   // Форма продажи на карточке ученика читает этот список.

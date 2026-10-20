@@ -20,6 +20,8 @@ type TypeRow = {
   id: string
   name: string
   service_id: string | null
+  /** 0106: основная + дополнительные — набор галочек. */
+  serviceIds: string[]
   kind: string
   lessons_count: number | null
   period_days: number | null
@@ -28,7 +30,12 @@ type TypeRow = {
   deleted_at: string | null
 }
 
-type ServiceOption = { id: string; name: string }
+type ServiceOption = { id: string; name: string; live: boolean }
+
+/** Живые услуги + услуги этого типа, даже архивные. */
+function servicesFor(services: ServiceOption[], type?: TypeRow): ServiceOption[] {
+  return services.filter((s) => s.live || (type?.serviceIds.includes(s.id) ?? false))
+}
 
 const KIND_LABELS: Record<string, string> = {
   lessons: 'Пакет занятий',
@@ -51,28 +58,31 @@ function TypeFields({
         <Label htmlFor={`name-${idSuffix}`}>Название</Label>
         <Input id={`name-${idSuffix}`} name="name" defaultValue={type?.name ?? ''} placeholder="Стандарт 8" required />
       </div>
-      <div className="space-y-1 sm:col-span-3">
-        <Label htmlFor={`service-${idSuffix}`}>Услуга</Label>
-        <Select
-          id={`service-${idSuffix}`}
-          name="serviceId"
-          defaultValue={type?.service_id ?? ''}
-          aria-describedby={type ? undefined : `service-hint-${idSuffix}`}
-        >
-          <option value="">Любая услуга</option>
-          {services.map((s) => (
-            <option key={s.id} value={s.id}>
+      <fieldset className="space-y-1 sm:col-span-3" aria-describedby={type ? undefined : `service-hint-${idSuffix}`}>
+        <legend className="text-sm font-medium">Услуги</legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {/* Услуги типа показываем и архивные — иначе сохранение молча сняло бы их. */}
+          {servicesFor(services, type).map((s) => (
+            <label key={s.id} className="flex min-h-9 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="serviceIds"
+                value={s.id}
+                defaultChecked={type?.serviceIds.includes(s.id) ?? false}
+                className="size-4"
+              />
               {s.name}
-            </option>
+            </label>
           ))}
-        </Select>
+        </div>
         {/* Подсказка — только в форме нового типа: в списке она повторялась бы у каждой строки. */}
         {type ? null : (
           <p id={`service-hint-${idSuffix}`} className="text-xs text-muted-foreground">
-            С выбранной услугой абонемент списывается только с её занятий — занятия других услуг без своего абонемента уйдут в долг. «Любая услуга» — со всех занятий.
+            Абонемент списывается только с занятий отмеченных услуг — можно отметить несколько, например логопеда и СМК.
+            Ничего не отмечено — с занятий любой услуги. После первой продажи набор услуг не меняется.
           </p>
         )}
-      </div>
+      </fieldset>
 
       <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`kind-${idSuffix}`}>Вид</Label>
@@ -136,18 +146,31 @@ export default async function SubscriptionTypesPage() {
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
 
-  const [{ data: types, error: loadError }, { data: services }] = await Promise.all([
+  const [{ data: types, error: loadError }, { data: services }, { data: extras }] = await Promise.all([
     supabase
       .from('subscription_types')
       .select('id, name, service_id, kind, lessons_count, period_days, price_tiyin, is_active, deleted_at')
       .order('name'),
-    supabase.from('services').select('id, name').is('deleted_at', null).eq('is_active', true).order('name'),
+    supabase.from('services').select('id, name, deleted_at, is_active').order('name'),
+    supabase.from('subscription_type_extra_services').select('type_id, service_id').is('deleted_at', null),
   ])
 
-  const allRows = (types ?? []) as TypeRow[]
+  const extrasByType = new Map<string, string[]>()
+  for (const row of extras ?? []) {
+    extrasByType.set(row.type_id, [...(extrasByType.get(row.type_id) ?? []), row.service_id])
+  }
+  const allRows: TypeRow[] = (types ?? []).map((t) => ({
+    ...t,
+    serviceIds: t.service_id ? [t.service_id, ...(extrasByType.get(t.id) ?? [])] : [],
+  }))
   const rows = allRows.filter((t) => !t.deleted_at)
   const archived = allRows.filter((t) => t.deleted_at)
-  const serviceOptions: ServiceOption[] = (services ?? []).map((s) => ({ id: s.id, name: s.name }))
+  const serviceOptions: ServiceOption[] = (services ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    live: !s.deleted_at && s.is_active,
+  }))
+  const serviceName = new Map(serviceOptions.map((s) => [s.id, s.name]))
 
   return (
     <div className="space-y-6">
@@ -182,6 +205,9 @@ export default async function SubscriptionTypesPage() {
                 title={type.name}
                 meta={[
                   KIND_LABELS[type.kind] ?? type.kind,
+                  type.serviceIds.length > 0
+                    ? type.serviceIds.map((sid) => serviceName.get(sid) ?? 'услуга').join(' + ')
+                    : 'любая услуга',
                   type.kind === 'lessons' && type.lessons_count ? `${type.lessons_count} занятий` : null,
                   type.kind === 'period' && type.period_days ? `${type.period_days} дней` : null,
                 ]

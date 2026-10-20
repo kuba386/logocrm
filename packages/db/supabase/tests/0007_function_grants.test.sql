@@ -193,6 +193,12 @@ from unnest(array[
   'public.students_makeup_archive()',
   'public.makeup_credits_cancel()',
   'public.group_students_makeup_close()',
+  -- 0106: несколько услуг у типа — помощники и триггеры без грантов.
+  'public.subscription_type_covers(uuid,uuid)',
+  'public.subscription_type_breadth(uuid)',
+  'public.subscription_type_extra_services_guard()',
+  'public.subscription_types_primary_guard()',
+  'public.subscriptions_lock_type()',
   -- 0103: выбор абонемента отметки — одна копия для триггера и метки панели.
   'public.attendance_subscription_candidates_unchecked(uuid,uuid,uuid,date)',
   'public.attendance_pick_subscription_unchecked(uuid,uuid,uuid,date)'
@@ -530,6 +536,8 @@ select set_eq(
     ('cancel_makeup_booking(uuid)'),
     ('makeup_lesson_options(uuid)'),
     ('student_makeups(uuid)'),
+    -- 0106: набор услуг типа абонемента.
+    ('set_subscription_type_services(uuid,uuid[])'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,
