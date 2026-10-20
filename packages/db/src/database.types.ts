@@ -179,6 +179,10 @@ export type Database = {
       }
       attendance: {
         Row: {
+          fee_cancel_reason: string | null
+          fee_cancelled_by: string | null
+          fee_cancelled_at: string | null
+          fee_tiyin: number
           center_id: string
           comment: string | null
           counts_absence: boolean
@@ -199,6 +203,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          fee_cancel_reason?: string | null
+          fee_cancelled_by?: string | null
+          fee_cancelled_at?: string | null
+          fee_tiyin?: number
           center_id?: string
           comment?: string | null
           counts_absence?: boolean
@@ -219,6 +227,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          fee_cancel_reason?: string | null
+          fee_cancelled_by?: string | null
+          fee_cancelled_at?: string | null
+          fee_tiyin?: number
           center_id?: string
           comment?: string | null
           counts_absence?: boolean
@@ -299,6 +311,7 @@ export type Database = {
       }
       attendance_statuses: {
         Row: {
+          fee_percent: number | null
           center_id: string
           code: string
           color: string
@@ -318,6 +331,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          fee_percent?: number | null
           center_id?: string
           code: string
           color?: string
@@ -337,6 +351,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          fee_percent?: number | null
           center_id?: string
           code?: string
           color?: string
@@ -6070,6 +6085,10 @@ export type Database = {
         Args: { p_subscription_id: string }
         Returns: number
       }
+      cancel_attendance_fee: {
+        Args: { p_attendance_id: string; p_reason: string }
+        Returns: undefined
+      }
       cancel_lesson: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
@@ -7366,6 +7385,7 @@ export type Database = {
           should_send: boolean
         }[]
       }
+      restore_attendance_fee: { Args: { p_attendance_id: string }; Returns: undefined }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
       restore_discount_reason: { Args: { p_id: string }; Returns: undefined }
       restore_expense_category: { Args: { p_id: string }; Returns: undefined }

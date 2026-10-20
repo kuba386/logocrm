@@ -6,6 +6,8 @@ import {
   getAttendancePanelData,
   markAttendance,
   markAttendanceAllPresent,
+  cancelAttendanceFee,
+  restoreAttendanceFee,
   type AttendanceParticipant,
   type AttendancePanelData,
   type AttendanceStatusOption,
@@ -48,16 +50,63 @@ function StatusButton({ statusCode, color, active, name }: { statusCode: string;
   )
 }
 
+function CancelFeeForm({ attendanceId, onDone }: { attendanceId: string; onDone: () => void }) {
+  const [state, action] = useActionState(cancelAttendanceFee, initial)
+  useEffect(() => {
+    if (state.notice) onDone()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="attendanceId" value={attendanceId} />
+      <label htmlFor={`fee-reason-${attendanceId}`} className="sr-only">
+        Причина отмены штрафа
+      </label>
+      <input
+        id={`fee-reason-${attendanceId}`}
+        name="reason"
+        required
+        maxLength={500}
+        placeholder="Причина отмены штрафа"
+        className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+      />
+      <SubmitButton size="sm" variant="outline">
+        Отменить штраф
+      </SubmitButton>
+      <FormError message={state.message} />
+    </form>
+  )
+}
+
+function RestoreFeeForm({ attendanceId, onDone }: { attendanceId: string; onDone: () => void }) {
+  const [state, action] = useActionState(restoreAttendanceFee, initial)
+  useEffect(() => {
+    if (state.notice) onDone()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="attendanceId" value={attendanceId} />
+      <SubmitButton size="sm" variant="outline">
+        Вернуть штраф
+      </SubmitButton>
+      <FormError message={state.message} />
+    </form>
+  )
+}
+
 function AttendanceRow({
   lessonId,
   participant,
   statuses,
   onMarked,
+  canCancelFee,
 }: {
   lessonId: string
   participant: AttendanceParticipant
   statuses: AttendanceStatusOption[]
   onMarked: () => void
+  canCancelFee: boolean
 }) {
   const [state, formAction] = useActionState(markAttendance, initial)
 
@@ -103,6 +152,13 @@ function AttendanceRow({
         ))}
       </div>
       {state.message ? <FormError message={state.message} /> : null}
+      {canCancelFee && participant.feeAttendanceId ? (
+        participant.feeCancelled ? (
+          <RestoreFeeForm attendanceId={participant.feeAttendanceId} onDone={onMarked} />
+        ) : (
+          <CancelFeeForm attendanceId={participant.feeAttendanceId} onDone={onMarked} />
+        )
+      ) : null}
     </li>
   )
 }
@@ -167,6 +223,7 @@ export function AttendancePanel({ lessonId }: { lessonId: string }) {
             participant={participant}
             statuses={data.statuses}
             onMarked={refresh}
+            canCancelFee={Boolean(data.canCancelFee)}
           />
         ))}
       </ul>

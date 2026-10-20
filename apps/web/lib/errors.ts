@@ -60,6 +60,10 @@ const CHECK_MESSAGES: Record<string, string> = {
   subscriptions_lesson_price_consistent: 'Цена занятия не соответствует цене абонемента',
   subscription_freezes_no_overlap: 'Заморозки пересекаются',
   attendance_statuses_default_not_deleted: 'Архивный статус не может быть по умолчанию',
+  // 0105/0107: отработка и штраф — только за пропуск, не за «пришёл».
+  attendance_statuses_grants_makeup_check: 'Право на отработку даёт только статус, который списывает занятие, без присутствия',
+  attendance_statuses_fee_percent_check:
+    'Штраф ставится только у статуса без списания, без присутствия и права на отработку, не по умолчанию; от 1 до 100%',
   payments_sign_matches_kind: 'Сумма не соответствует типу операции',
   payments_subscription_needs_student: 'Платёж на абонемент обязан быть привязан к ученику',
   subscriptions_paid_not_negative: 'Возврат превышает оплаченную по абонементу сумму',

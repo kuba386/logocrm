@@ -222,11 +222,16 @@ export type AttendanceParticipant = {
   /** Метка остатка с учётом услуги занятия (0103); числа — только стойке. */
   balance: string
   balanceTone: AttendanceBalanceLabel['tone']
+  /** 0107: отметка со штрафом — владелец может его отменить или вернуть отменённый. */
+  feeAttendanceId: string | null
+  feeCancelled: boolean
 }
 
 export type AttendancePanelData = {
   participants: AttendanceParticipant[]
   statuses: AttendanceStatusOption[]
+  /** Отменяет штраф только владелец — cancel_attendance_fee проверяет то же в SQL. */
+  canCancelFee?: boolean
 } & Partial<AppError>
 
 /**
@@ -245,7 +250,7 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
 
   const supabase = await createClient()
 
-  const [{ data: balanceRows, error: balanceError }, { data: statusRows, error: statusError }] =
+  const [{ data: balanceRows, error: balanceError }, { data: statusRows, error: statusError }, { data: role }] =
     await Promise.all([
       supabase.rpc('lesson_attendance_balances', { p_lesson_id: lessonId }),
       supabase
@@ -253,6 +258,7 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
         .select('id, code, name, color, is_default')
         .is('deleted_at', null)
         .order('sort'),
+      supabase.rpc('my_role'),
     ])
 
   if (balanceError) return { ...empty, ...toAppError(balanceError, 'Не удалось загрузить участников') }
@@ -275,7 +281,7 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
   // отказывает, а панель отметки ему не рендерится.
   const [{ data: students }, { data: attendanceRows }] = await Promise.all([
     supabase.from('students').select('id, full_name').in('id', studentIds),
-    supabase.from('attendance').select('student_id, status_id, comment').eq('lesson_id', lessonId),
+    supabase.from('attendance').select('id, student_id, status_id, comment').eq('lesson_id', lessonId),
   ])
 
   const nameById = new Map((students ?? []).map((s) => [s.id, s.full_name]))
@@ -300,11 +306,41 @@ export async function getAttendancePanelData(lessonId: string): Promise<Attendan
         comment: mark?.comment ?? null,
         balance: label.text,
         balanceTone: label.tone,
+        feeAttendanceId: (row.kind === 'fee' || row.kind === 'fee_cancelled') && mark ? mark.id : null,
+        feeCancelled: row.kind === 'fee_cancelled',
       }
     })
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'))
 
-  return { participants, statuses }
+  return { participants, statuses, canCancelFee: role === 'owner' }
+}
+
+/** Отмена штрафа за пропуск — cancel_attendance_fee (0107): только владелец, с причиной. */
+export async function cancelAttendanceFee(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const attendanceId = String(formData.get('attendanceId') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!attendanceId) return { message: 'Отметка не найдена' }
+  if (!reason) return { message: 'Укажите причину отмены штрафа' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('cancel_attendance_fee', { p_attendance_id: attendanceId, p_reason: reason })
+  if (error) return toAppError(error, 'Не удалось отменить штраф')
+
+  revalidatePath('/app/schedule')
+  return { message: '', notice: 'Штраф отменён' }
+}
+
+/** Вернуть ошибочно отменённый штраф — restore_attendance_fee (0107): только владелец. */
+export async function restoreAttendanceFee(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
+  const attendanceId = String(formData.get('attendanceId') ?? '')
+  if (!attendanceId) return { message: 'Отметка не найдена' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('restore_attendance_fee', { p_attendance_id: attendanceId })
+  if (error) return toAppError(error, 'Не удалось вернуть штраф')
+
+  revalidatePath('/app/schedule')
+  return { message: '', notice: 'Штраф возвращён' }
 }
 
 export async function markAttendance(_prev: ScheduleState, formData: FormData): Promise<ScheduleState> {
