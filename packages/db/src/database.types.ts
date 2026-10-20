@@ -4897,8 +4897,8 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           id?: string
-          service_id?: string
-          type_id?: string
+          service_id: string
+          type_id: string
           updated_at?: string
         }
         Update: {
@@ -4911,7 +4911,29 @@ export type Database = {
           type_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "subscription_type_extra_services_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_type_extra_services_service_fk"
+            columns: ["service_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "subscription_type_extra_services_type_fk"
+            columns: ["type_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_types"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
       }
       subscription_types: {
         Row: {
@@ -7518,10 +7540,6 @@ export type Database = {
         Args: { p_id: string; p_status: string }
         Returns: undefined
       }
-      set_subscription_type_services: {
-        Args: { p_service_ids: string[]; p_type_id: string }
-        Returns: undefined
-      }
       set_makeup_policy: {
         Args: { p_limit?: number; p_valid_days: number }
         Returns: undefined
@@ -7541,6 +7559,10 @@ export type Database = {
           p_student_id: string
         }
         Returns: string
+      }
+      set_subscription_type_services: {
+        Args: { p_service_ids: string[]; p_type_id: string }
+        Returns: undefined
       }
       slugify: { Args: { p_text: string }; Returns: string }
       student_alive: { Args: { p_student_id: string }; Returns: boolean }
@@ -7833,6 +7855,11 @@ export type Database = {
           state: string
           worked_tiyin: number
         }[]
+      }
+      subscription_type_breadth: { Args: { p_type: string }; Returns: number }
+      subscription_type_covers: {
+        Args: { p_service: string; p_type: string }
+        Returns: boolean
       }
       subscription_visible_to_caller: {
         Args: { p_subscription_id: string }
