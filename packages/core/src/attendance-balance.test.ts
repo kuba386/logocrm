@@ -43,6 +43,18 @@ describe('attendanceBalanceLabel', () => {
     expect(attendanceBalanceLabel(row('makeup', 3, 50_000), true)).toEqual({ text: 'отработка — без списания', tone: 'muted' })
   })
 
+  it('штраф: сумма стойке, специалисту — без суммы', () => {
+    expect(attendanceBalanceLabel(row('fee', null, 25_000), true)).toEqual({ text: `штраф ${formatSom(25_000)}`, tone: 'warn' })
+    expect(attendanceBalanceLabel(row('fee', null, null), false).text).toBe('штраф за пропуск')
+    // Даже если сумма пришла, без признака стойки её не показываем.
+    expect(attendanceBalanceLabel(row('fee', null, 25_000), false).text).toBe('штраф за пропуск')
+    expect(attendanceBalanceLabel(row('fee_cancelled', null, 25_000), true)).toEqual({
+      text: `штраф ${formatSom(25_000)} отменён`,
+      tone: 'muted',
+    })
+    expect(attendanceBalanceLabel(row('fee_cancelled', null, 25_000), false).text).toBe('штраф отменён')
+  })
+
   it('неизвестный вид — прочерк, не падение', () => {
     expect(attendanceBalanceLabel(row('что-то новое'), true).text).toBe('—')
   })

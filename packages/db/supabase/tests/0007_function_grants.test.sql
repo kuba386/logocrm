@@ -538,6 +538,9 @@ select set_eq(
     ('student_makeups(uuid)'),
     -- 0106: набор услуг типа абонемента.
     ('set_subscription_type_services(uuid,uuid[])'),
+    -- 0107: отмена и возврат штрафа за пропуск.
+    ('cancel_attendance_fee(uuid,text)'),
+    ('restore_attendance_fee(uuid)'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,

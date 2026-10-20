@@ -49,6 +49,12 @@ export async function saveAttendanceStatus(
   // держит отложенный констрейнт-триггер, менять флаг умеет только
   // set_default_attendance_status. При создании нового статуса колонка
   // ещё доступна через insert, поэтому isDefault учитываем только там.
+  const feeRaw = text(formData, 'feePercent')
+  const feePercent = feeRaw === '' ? null : Number(feeRaw)
+  if (feePercent !== null && (!Number.isInteger(feePercent) || feePercent < 1 || feePercent > 100)) {
+    return { message: 'Штраф — от 1 до 100% или пусто' }
+  }
+
   const payload = {
     code,
     name,
@@ -58,7 +64,13 @@ export async function saveAttendanceStatus(
     counts_absence: flag(formData, 'countsAbsence'),
     notify_parent: flag(formData, 'notifyParent'),
     grants_makeup: flag(formData, 'grantsMakeup'),
+    fee_percent: feePercent,
     sort,
+  }
+
+  // 0107: штраф — только у статуса без списания и без права на отработку.
+  if (feePercent !== null && (payload.deducts_lesson || payload.grants_makeup)) {
+    return { message: 'Штраф ставится только у статуса, который не списывает занятие и не даёт отработку' }
   }
 
   // 0105: отработка — за оплаченный пропуск; check в базе, текст — здесь по-русски.
@@ -70,9 +82,6 @@ export async function saveAttendanceStatus(
     ? await supabase.from('attendance_statuses').update(payload).eq('id', id)
     : await supabase.from('attendance_statuses').insert({ ...payload, is_default: isDefault })
 
-  if (error?.code === '23514') {
-    return { message: 'Право на отработку не может давать статус «пришёл» — только оплаченный пропуск' }
-  }
   if (error) return toAppError(error, 'Не удалось сохранить статус')
 
   revalidatePath('/app/settings/attendance-statuses')

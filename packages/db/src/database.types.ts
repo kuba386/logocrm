@@ -184,6 +184,10 @@ export type Database = {
           counts_absence: boolean
           created_at: string
           deducted: boolean
+          fee_cancel_reason: string | null
+          fee_cancelled_at: string | null
+          fee_cancelled_by: string | null
+          fee_tiyin: number
           id: string
           is_present: boolean
           lesson_id: string
@@ -204,6 +208,10 @@ export type Database = {
           counts_absence?: boolean
           created_at?: string
           deducted?: boolean
+          fee_cancel_reason?: string | null
+          fee_cancelled_at?: string | null
+          fee_cancelled_by?: string | null
+          fee_tiyin?: number
           id?: string
           is_present?: boolean
           lesson_id: string
@@ -224,6 +232,10 @@ export type Database = {
           counts_absence?: boolean
           created_at?: string
           deducted?: boolean
+          fee_cancel_reason?: string | null
+          fee_cancelled_at?: string | null
+          fee_cancelled_by?: string | null
+          fee_tiyin?: number
           id?: string
           is_present?: boolean
           lesson_id?: string
@@ -307,6 +319,7 @@ export type Database = {
           created_by: string | null
           deducts_lesson: boolean
           deleted_at: string | null
+          fee_percent: number | null
           grants_makeup: boolean
           id: string
           is_default: boolean
@@ -326,6 +339,7 @@ export type Database = {
           created_by?: string | null
           deducts_lesson?: boolean
           deleted_at?: string | null
+          fee_percent?: number | null
           grants_makeup?: boolean
           id?: string
           is_default?: boolean
@@ -345,6 +359,7 @@ export type Database = {
           created_by?: string | null
           deducts_lesson?: boolean
           deleted_at?: string | null
+          fee_percent?: number | null
           grants_makeup?: boolean
           id?: string
           is_default?: boolean
@@ -6061,6 +6076,10 @@ export type Database = {
       can_finance: { Args: { p_center_id?: string }; Returns: boolean }
       can_front_desk: { Args: { p_center_id?: string }; Returns: boolean }
       can_payments: { Args: { p_center_id?: string }; Returns: boolean }
+      cancel_attendance_fee: {
+        Args: { p_attendance_id: string; p_reason: string }
+        Returns: undefined
+      }
       cancel_cash_count: {
         Args: { p_count_id: string; p_reason: string }
         Returns: undefined
@@ -7365,6 +7384,10 @@ export type Database = {
           message_text: string
           should_send: boolean
         }[]
+      }
+      restore_attendance_fee: {
+        Args: { p_attendance_id: string }
+        Returns: undefined
       }
       restore_attendance_status: { Args: { p_id: string }; Returns: undefined }
       restore_discount_reason: { Args: { p_id: string }; Returns: undefined }

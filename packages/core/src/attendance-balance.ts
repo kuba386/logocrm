@@ -16,6 +16,8 @@ export type AttendanceBalanceKind =
   | 'debt'
   | 'covered'
   | 'makeup'
+  | 'fee'
+  | 'fee_cancelled'
 
 export type AttendanceBalanceRow = {
   kind: string | null
@@ -72,6 +74,17 @@ export function attendanceBalanceLabel(row: AttendanceBalanceRow, numbers: boole
       return { text: 'отмечено без абонемента', tone: 'danger' }
     case 'covered':
       return { text: 'долг покрыт абонементом', tone: 'muted' }
+    case 'fee':
+      // 0107: штраф за пропуск — сумма только стойке.
+      return {
+        text: numbers && row.priceTiyin != null ? `штраф ${formatSom(row.priceTiyin)}` : 'штраф за пропуск',
+        tone: 'warn',
+      }
+    case 'fee_cancelled':
+      return {
+        text: numbers && row.priceTiyin != null ? `штраф ${formatSom(row.priceTiyin)} отменён` : 'штраф отменён',
+        tone: 'muted',
+      }
     case 'makeup':
       // 0105: отработка не списывает с абонемента.
       return { text: 'отработка — без списания', tone: 'muted' }

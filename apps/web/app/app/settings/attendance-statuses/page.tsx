@@ -29,6 +29,7 @@ type StatusRow = {
   pays_teacher: boolean
   counts_absence: boolean
   grants_makeup: boolean
+  fee_percent: number | null
   notify_parent: boolean
   is_default: boolean
   sort: number
@@ -81,6 +82,22 @@ function StatusFields({ status, idSuffix }: { status?: StatusRow; idSuffix: stri
         <Label htmlFor={`sort-${idSuffix}`}>Порядок</Label>
         <Input id={`sort-${idSuffix}`} name="sort" type="number" defaultValue={status?.sort ?? 100} />
       </div>
+      <div className="space-y-1 sm:col-span-2">
+        <Label htmlFor={`fee-${idSuffix}`}>Штраф, % цены занятия</Label>
+        <Input
+          id={`fee-${idSuffix}`}
+          name="feePercent"
+          type="number"
+          min={1}
+          max={100}
+          defaultValue={status?.fee_percent ?? ''}
+          placeholder="без штрафа"
+          aria-describedby={`fee-hint-${idSuffix}`}
+        />
+        <p id={`fee-hint-${idSuffix}`} className="text-xs text-muted-foreground">
+          Только у статуса без списания: абонемент не трогается, доля цены занятия — в долг семьи.
+        </p>
+      </div>
 
       <div className="grid gap-2 sm:col-span-6 sm:grid-cols-2">
         {FLAGS.map((f) => (
@@ -116,7 +133,7 @@ export default async function AttendanceStatusesPage() {
 
   const { data: statuses } = await supabase
     .from('attendance_statuses')
-    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, grants_makeup, is_default, sort, deleted_at')
+    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, grants_makeup, fee_percent, is_default, sort, deleted_at')
     .order('sort')
 
   const allRows = (statuses ?? []) as StatusRow[]
