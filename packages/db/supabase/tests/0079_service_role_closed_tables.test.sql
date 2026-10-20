@@ -43,9 +43,9 @@ select is_empty(
                       'public.subscription_period_reminders_sent'::regclass,
                       'public.payer_telegram_invites'::regclass, 'public.bot_accounts'::regclass,
                       'public.makeup_policies'::regclass, 'public.makeup_credits'::regclass,
-                      'public.makeup_bookings'::regclass)
+                      'public.makeup_bookings'::regclass, 'public.subscription_type_extra_services'::regclass)
         and a.grantee = 'service_role'::regrole $$,
-  'Служебные таблицы планировщиков (0032, 0052, 0097) и отработки (0105, пишут только функции) — у service_role ни одной привилегии');
+  'Служебные таблицы планировщиков (0032, 0052, 0097), отработки (0105) и дополнительные услуги типов (0106) — пишут только функции; у service_role ни одной привилегии');
 
 select is_empty(
   $$ select c.oid::regclass::text || ' ' || a.grantee::regrole::text || ' ' || a.privilege_type

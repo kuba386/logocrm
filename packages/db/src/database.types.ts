@@ -4880,6 +4880,39 @@ export type Database = {
           },
         ]
       }
+      subscription_type_extra_services: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          service_id: string
+          type_id: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          service_id?: string
+          type_id?: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          service_id?: string
+          type_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       subscription_types: {
         Row: {
           center_id: string
@@ -7483,6 +7516,10 @@ export type Database = {
       }
       set_goal_status: {
         Args: { p_id: string; p_status: string }
+        Returns: undefined
+      }
+      set_subscription_type_services: {
+        Args: { p_service_ids: string[]; p_type_id: string }
         Returns: undefined
       }
       set_makeup_policy: {
