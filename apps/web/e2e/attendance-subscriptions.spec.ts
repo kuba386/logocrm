@@ -108,7 +108,7 @@ test('Этап 4, п.1: продать абонемент 8 занятий за 
   // не было ни одного e2e-сценария.
   await page.goto('/app/settings/subscription-types')
   await page.getByLabel('Название').fill(TYPE_NAME)
-  await page.getByLabel('Вид').selectOption({ label: 'Пакет занятий' })
+  await page.getByLabel('Вид', { exact: true }).selectOption({ label: 'Пакет занятий' })
   await page.getByLabel('Занятий').fill('8')
   await page.getByLabel('Цена, сом').fill('4000')
   await actAndAwait(page, 'Добавить', 'Сохранено')
