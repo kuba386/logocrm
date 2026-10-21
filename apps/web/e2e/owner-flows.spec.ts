@@ -76,7 +76,9 @@ test('Онлайн-запись: открыть запись → заявка р
   await parent.locator('#time').fill('07:15')
   await parent.locator('#childName').fill(child)
   await parent.locator('#parentName').fill('Родитель записи')
-  await parent.locator('#parentPhone').fill('0700 55 66 77')
+  // Номер — свой на каждый прогон: живая заявка с номера одна (0109 Р5), и
+  // повтор теста после сбоя иначе упёрся бы в свою же неразобранную заявку.
+  await parent.locator('#parentPhone').fill(`0700${String(Date.now()).slice(-6)}`)
   await parent.getByRole('button', { name: 'Отправить заявку' }).click()
   await expect(parent.getByText('Заявка отправлена!')).toBeVisible({ timeout: 20_000 })
   await guest.close()
@@ -94,6 +96,43 @@ test('Онлайн-запись: открыть запись → заявка р
   await expect(page.locator('tr', { hasText: child })).toHaveCount(0, { timeout: 20_000 })
   await page.goto('/app/students')
   await expect(page.getByRole('link', { name: child })).toBeVisible()
+})
+
+test('Лист ожидания: родитель встаёт в очередь → стойка видит и закрывает запись', async ({ page, browser }) => {
+  test.skip(!process.env.SUPABASE_BOOKING_JWT, 'нет SUPABASE_BOOKING_JWT — витрина записи не работает')
+
+  await page.goto('/app/settings/plan')
+  const booking = page.locator('#booking')
+  const open = booking.getByRole('button', { name: 'Открыть запись' })
+  if (await open.isVisible()) await open.click()
+  await expect(booking.getByRole('button', { name: 'Закрыть запись' })).toBeVisible()
+
+  const child = `Ожидание e2e ${Date.now()}`
+  const guest = await guestContext(browser)
+  const parent = await guest.newPage()
+  await parent.goto('/book/centr-e2e')
+  await parent.getByRole('button', { name: 'Нет подходящего времени? Встать в лист ожидания' }).click()
+  await parent.locator('#wl-childName').fill(child)
+  await parent.locator('#wl-childBirthDate').fill(isoDayFromNow(-2000))
+  // Чекбокс дня — под визуальной кнопкой (sr-only), кликаем подпись.
+  await parent.locator('label', { hasText: /^Ср$/ }).click()
+  await parent.locator('#wl-parentName').fill('Родитель ожидания')
+  await parent.locator('#wl-parentPhone').fill(`0701${String(Date.now()).slice(-6)}`)
+  await parent.getByRole('button', { name: 'Встать в лист ожидания', exact: true }).click()
+  await expect(parent.getByText('Вы в листе ожидания.')).toBeVisible({ timeout: 20_000 })
+  await guest.close()
+
+  await page.goto('/app/bookings?tab=waitlist')
+  const item = page.locator('li', { hasText: child })
+  await expect(item).toBeVisible()
+  await expect(item).toContainText('Ср')
+  await item.getByRole('button', { name: 'Отказался' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Отказался' }).click()
+
+  // Итог, а не уведомление: запись уходит из списка вместе с диалогом.
+  await expect(page.locator('li', { hasText: child })).toHaveCount(0, { timeout: 20_000 })
 })
 
 test('Долги → «Продать абонемент» открывает карточку на вкладке абонементов', async ({ page }) => {

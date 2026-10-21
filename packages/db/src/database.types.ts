@@ -416,6 +416,24 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_modes: {
+        Row: {
+          code: string
+          sort: number
+          title: string
+        }
+        Insert: {
+          code: string
+          sort?: number
+          title: string
+        }
+        Update: {
+          code?: string
+          sort?: number
+          title?: string
+        }
+        Relationships: []
+      }
       booking_requests: {
         Row: {
           center_id: string
@@ -5315,8 +5333,63 @@ export type Database = {
           },
         ]
       }
+      teacher_work_hours: {
+        Row: {
+          center_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          ends_at: string
+          id: string
+          starts_at: string
+          teacher_id: string
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          center_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ends_at: string
+          id?: string
+          starts_at: string
+          teacher_id: string
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          center_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          ends_at?: string
+          id?: string
+          starts_at?: string
+          teacher_id?: string
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_work_hours_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_work_hours_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
       teachers: {
         Row: {
+          booking_mode: string
           center_id: string
           created_at: string
           created_by: string | null
@@ -5332,6 +5405,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booking_mode?: string
           center_id?: string
           created_at?: string
           created_by?: string | null
@@ -5347,6 +5421,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booking_mode?: string
           center_id?: string
           created_at?: string
           created_by?: string | null
@@ -5362,6 +5437,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "teachers_booking_mode_fkey"
+            columns: ["booking_mode"]
+            isOneToOne: false
+            referencedRelation: "booking_modes"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "teachers_center_id_fkey"
             columns: ["center_id"]
@@ -5416,6 +5498,165 @@ export type Database = {
           expires_at?: string
           used_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist_digest_runs: {
+        Row: {
+          center_id: string
+          day: string
+          sent_at: string
+        }
+        Insert: {
+          center_id: string
+          day: string
+          sent_at?: string
+        }
+        Update: {
+          center_id?: string
+          day?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_digest_runs_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      waitlist_entries: {
+        Row: {
+          center_id: string
+          child_birth_date: string
+          child_name: string
+          comment: string | null
+          converted_student_id: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          deleted_at: string | null
+          id: string
+          offered_at: string | null
+          parent_name: string
+          parent_phone: string
+          preferred_from: string | null
+          preferred_to: string | null
+          preferred_weekdays: number[] | null
+          service_id: string
+          status: string
+          teacher_id: string | null
+          updated_at: string
+          withdraw_reason: string | null
+        }
+        Insert: {
+          center_id: string
+          child_birth_date: string
+          child_name: string
+          comment?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          offered_at?: string | null
+          parent_name: string
+          parent_phone: string
+          preferred_from?: string | null
+          preferred_to?: string | null
+          preferred_weekdays?: number[] | null
+          service_id: string
+          status?: string
+          teacher_id?: string | null
+          updated_at?: string
+          withdraw_reason?: string | null
+        }
+        Update: {
+          center_id?: string
+          child_birth_date?: string
+          child_name?: string
+          comment?: string | null
+          converted_student_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          offered_at?: string | null
+          parent_name?: string
+          parent_phone?: string
+          preferred_from?: string | null
+          preferred_to?: string | null
+          preferred_weekdays?: number[] | null
+          service_id?: string
+          status?: string
+          teacher_id?: string | null
+          updated_at?: string
+          withdraw_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_entries_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waitlist_entries_service_fk"
+            columns: ["service_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "waitlist_entries_status_fkey"
+            columns: ["status"]
+            isOneToOne: false
+            referencedRelation: "waitlist_statuses"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "waitlist_entries_student_fk"
+            columns: ["converted_student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "waitlist_entries_student_fk"
+            columns: ["converted_student_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "students_teacher_view"
+            referencedColumns: ["id", "center_id"]
+          },
+          {
+            foreignKeyName: "waitlist_entries_teacher_fk"
+            columns: ["teacher_id", "center_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id", "center_id"]
+          },
+        ]
+      }
+      waitlist_statuses: {
+        Row: {
+          code: string
+          sort: number
+          title: string
+        }
+        Insert: {
+          code: string
+          sort?: number
+          title: string
+        }
+        Update: {
+          code?: string
+          sort?: number
+          title?: string
         }
         Relationships: []
       }
@@ -5938,10 +6179,26 @@ export type Database = {
         Args: { p_slug: string }
         Returns: {
           center_name: string
+          horizon_days: number
           is_open: boolean
           services: Json
+          step_min: number
           teachers: Json
           timezone: string
+        }[]
+      }
+      booking_free_slots: {
+        Args: {
+          p_days?: number
+          p_from?: string
+          p_service_id: string
+          p_slug: string
+          p_teacher_id: string
+        }
+        Returns: {
+          ends_at: string
+          starts_at: string
+          teacher_id: string
         }[]
       }
       booking_published: { Args: { p_center_id: string }; Returns: boolean }
@@ -5950,6 +6207,27 @@ export type Database = {
         Returns: {
           payer_id: string
           payer_name: string
+        }[]
+      }
+      booking_settings_unchecked: {
+        Args: { p_center_id: string }
+        Returns: {
+          horizon_days: number
+          step_min: number
+        }[]
+      }
+      booking_slots_unchecked: {
+        Args: {
+          p_center_id: string
+          p_from: string
+          p_service_id: string
+          p_teacher_id: string
+          p_to: string
+        }
+        Returns: {
+          ends_at: string
+          starts_at: string
+          teacher_id: string
         }[]
       }
       booking_teacher_busy: {
@@ -6437,6 +6715,10 @@ export type Database = {
         }[]
       }
       debt_reminders_at: { Args: { p_now: string }; Returns: number }
+      decline_booking_phone: {
+        Args: { p_reason?: string; p_request_id: string }
+        Returns: number
+      }
       decline_booking_request: {
         Args: { p_reason?: string; p_request_id: string }
         Returns: undefined
@@ -6470,6 +6752,10 @@ export type Database = {
       emit_event_unchecked: {
         Args: { p_center_id: string; p_payload: Json; p_type: string }
         Returns: number
+      }
+      enroll_waitlist_entry: {
+        Args: { p_entry_id: string; p_payer_id?: string }
+        Returns: string
       }
       event_messages: {
         Args: { p_event_id: number }
@@ -6904,6 +7190,7 @@ export type Database = {
           debt_reminders: number
           period_reminders: number
           teacher_schedules: number
+          waitlist_digests: number
         }[]
       }
       notification_skip: {
@@ -6928,6 +7215,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      offer_waitlist_entry: { Args: { p_entry_id: string }; Returns: undefined }
       parent_exercise_ids: { Args: never; Returns: string[] }
       parent_of_lesson: { Args: { p_lesson_id: string }; Returns: boolean }
       parent_of_student: { Args: { p_student_id: string }; Returns: boolean }
@@ -7541,6 +7829,10 @@ export type Database = {
         }[]
       }
       set_booking_enabled: { Args: { p_enabled: boolean }; Returns: undefined }
+      set_booking_settings: {
+        Args: { p_horizon_days: number; p_step_min: number }
+        Returns: undefined
+      }
       set_center_kind: { Args: { p_kind: string }; Returns: undefined }
       set_center_module: {
         Args: { p_code: string; p_enabled: boolean }
@@ -7586,6 +7878,10 @@ export type Database = {
       set_subscription_type_services: {
         Args: { p_service_ids: string[]; p_type_id: string }
         Returns: undefined
+      }
+      set_teacher_booking: {
+        Args: { p_intervals?: Json; p_mode: string; p_teacher_id: string }
+        Returns: Json
       }
       slugify: { Args: { p_text: string }; Returns: string }
       student_alive: { Args: { p_student_id: string }; Returns: boolean }
@@ -7776,6 +8072,22 @@ export type Database = {
           p_source: string
         }
         Returns: string
+      }
+      submit_waitlist_entry: {
+        Args: {
+          p_child_birth_date: string
+          p_child_name: string
+          p_comment?: string
+          p_parent_name: string
+          p_parent_phone: string
+          p_service_id: string
+          p_slug: string
+          p_teacher_id: string
+          p_time_from: string
+          p_time_to: string
+          p_weekdays: number[]
+        }
+        Returns: undefined
       }
       subscription_current_freeze: {
         Args: { p_on_date?: string; p_subscription_id: string }
@@ -8023,9 +8335,21 @@ export type Database = {
         Args: { p_payment_id: string; p_reason: string }
         Returns: string
       }
+      waitlist_digest_at: { Args: { p_now: string }; Returns: number }
+      waitlist_entry_payer_match: {
+        Args: { p_entry_id: string }
+        Returns: {
+          payer_id: string
+          payer_name: string
+        }[]
+      }
       was_access_revoked: { Args: never; Returns: boolean }
       withdraw_platform_payment: {
         Args: { p_payment_id: string }
+        Returns: undefined
+      }
+      withdraw_waitlist_entry: {
+        Args: { p_entry_id: string; p_reason?: string }
         Returns: undefined
       }
       write_lesson_note: {

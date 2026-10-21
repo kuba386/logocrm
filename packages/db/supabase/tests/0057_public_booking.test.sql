@@ -21,7 +21,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(47);
+select plan(49);
 
 
 -- 1. Заборы по каталогу (до любого tests_claims()/set role) ----------------------------------------
@@ -55,8 +55,11 @@ select set_eq(
   $$ values
     ('booking_center_info(text)'),
     ('booking_teacher_busy(text,uuid,date)'),
-    ('submit_booking_request(text,uuid,uuid,timestamp with time zone,text,text,text)') $$,
-  'public_booking исполняет только три функции витрины, ни одной больше');
+    ('submit_booking_request(text,uuid,uuid,timestamp with time zone,text,text,text)'),
+    -- 0109: свободные окна и лист ожидания.
+    ('booking_free_slots(text,uuid,uuid,date,integer)'),
+    ('submit_waitlist_entry(text,uuid,uuid,text,date,smallint[],time without time zone,time without time zone,text,text,text)') $$,
+  'public_booking исполняет только функции витрины, ни одной больше');
 
 select ok(
   exists (select 1 from pg_trigger tg
@@ -185,23 +188,14 @@ select throws_ok(
         now() + interval '2 days', 'Ребёнок', 'Родитель', '0700111003') $q$,
   '22023', null, 'Неизвестный slug — тот же общий отказ, не отдельная причина (Р4)');
 
--- Та же семья: до лимита (3/час) включительно — проходит, следующая — нет.
--- Первая заявка уже учтена выше, значит до предела осталось две.
-select lives_ok(
-  $q$ select public.submit_booking_request(
-        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
-        now() + interval '3 days', 'Ребёнок 1', 'Родитель 1', '+996 700 11-10-01') $q$,
-  'Второе написание того же номера — тот же нормализованный телефон, вторая заявка проходит');
-select lives_ok(
-  $q$ select public.submit_booking_request(
-        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
-        now() + interval '4 days', 'Ребёнок 1', 'Родитель 1', '996700111001') $q$,
-  'Третья заявка с того же номера — ровно на пределе (2 существующих < 3), ещё проходит');
-select throws_ok(
-  $q$ select public.submit_booking_request(
-        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
-        now() + interval '5 days', 'Ребёнок 1', 'Родитель 1', '0700-111-001') $q$,
-  '22023', null, 'Четвёртая заявка с того же номера за час — лимит на телефон (Р8)');
+-- 0109 Р5: живая заявка на ребёнка с номера — одна. Другое написание того же
+-- номера нормализуется в тот же телефон: повтор — тот же ответ, без строки.
+select is(
+  public.submit_booking_request(
+    'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
+    now() + interval '3 days', 'Ребёнок 1', 'Родитель 1', '+996 700 11-10-01'),
+  (select id from public.booking_requests where parent_phone = '+996700111001'),
+  'Повтор живой заявки (другое написание номера) — тот же ответ, вторая строка не создана (0109 Р5)');
 
 select throws_ok(
   $q$ select public.submit_booking_request(
@@ -219,8 +213,8 @@ select public.tests_claims(null, null);
 
 select is(
   (select count(*)::int from public.events where type = 'booking.requested'),
-  3,
-  'На каждую успешную заявку — ровно одно событие booking.requested (после трёх успешных подач)');
+  1,
+  'На успешную заявку — ровно одно событие booking.requested, отказы событий не дают');
 
 
 -- 4. Подтверждение/отклонение (стойка) ------------------------------------------------------------
@@ -269,9 +263,22 @@ select is(
   (select count(*)::int from public.lessons where student_id = (select student_id from t0057_confirm)), 1,
   'После повторной попытки урок по-прежнему один');
 
--- Вторая заявка того же родителя (starts_at = now() + interval '3 days' —
--- now() заморожен транзакцией, значение совпадает бит-в-бит со вставкой
--- выше) — теперь есть совпадение по плательщику.
+reset role;
+
+-- Первая заявка разобрана — живой с номера больше нет, вторая проходит.
+-- starts_at = now() + interval '3 days': now() заморожен транзакцией,
+-- значение совпадает бит-в-бит с выборкой ниже.
+select public.tests_claims(null, null);
+select lives_ok(
+  $q$ select public.submit_booking_request(
+        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
+        now() + interval '3 days', 'Ребёнок 1', 'Родитель 1', '+996 700 11-10-01') $q$,
+  'После подтверждения первой заявки новая с того же номера проходит (0109 Р5)');
+
+select public.tests_claims('a0570000-0000-0000-0000-000000000002','a0570000-0000-0000-0000-0000000000c1');
+set local role authenticated;
+
+-- Вторая заявка того же родителя — теперь есть совпадение по плательщику.
 create temporary table t0057_req2 as
   select id from public.booking_requests where starts_at = now() + interval '3 days';
 
@@ -290,6 +297,25 @@ select is(
   'Отклонённая заявка не создала второго ученика — students по-прежнему одна запись');
 
 reset role;
+
+-- Лимит на телефон (Р8) считает и разобранные заявки: две за час есть
+-- (подтверждённая и отклонённая), третья ещё проходит, четвёртая — нет.
+select public.tests_claims(null, null);
+select lives_ok(
+  $q$ select public.submit_booking_request(
+        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
+        now() + interval '4 days', 'Ребёнок 1', 'Родитель 1', '996700111001') $q$,
+  'Третья заявка с того же номера за час — ровно на пределе (2 существующих < 3), ещё проходит');
+select throws_ok(
+  $q$ select public.submit_booking_request(
+        'centr-a-0057', 'a0570000-0000-0000-0000-000000000020', 'a0570000-0000-0000-0000-000000000010',
+        now() + interval '5 days', 'Ребёнок 1', 'Родитель 1', '0700-111-001') $q$,
+  '22023', 'Слишком много заявок с этого номера, попробуйте позже',
+  'Четвёртая заявка с того же номера за час — лимит на телефон раньше проверки живой заявки (Р8)');
+select is(
+  (select count(*)::int from public.events where type = 'booking.requested'),
+  3,
+  'На каждую успешную заявку — ровно одно событие booking.requested (после трёх успешных подач)');
 
 
 -- 5. Доставка booking.requested: получатели, выключенный канал, межцентровый payload ----------------

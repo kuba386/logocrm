@@ -1151,6 +1151,24 @@ export const teacherScheduleSchema = z.object({
   }),
 })
 
+// --- Этап 19: лист ожидания (0109) ---------------------------------------------
+
+/** Запись в лист ожидания с витрины — стойке; текст собирается при доставке, без даты рождения и комментария. */
+export const waitlistCreatedSchema = z.object({
+  type: z.literal('waitlist.created'),
+  payload: z.object({ entry_id: z.string().uuid() }),
+})
+
+/** Дайджест листа ожидания — стойке раз в день: ждут N, подходящих окон на неделю K. */
+export const waitlistDigestSchema = z.object({
+  type: z.literal('waitlist.digest'),
+  payload: centerRef.extend({
+    day: z.string(),
+    waiting: z.number().int().nonnegative(),
+    free_slots: z.number().int().positive(),
+  }),
+})
+
 // --- Этап 12: родитель в боте по ссылке (0098) ---------------------------------
 
 /** Владелец или администратор выдал личную ссылку на бота плательщику. Кода в событии нет. */
@@ -1281,6 +1299,8 @@ export const appEventSchema = z.discriminatedUnion('type', [
   subscriptionPeriodEndingSchema,
   attendanceStatusChangedSchema,
   teacherScheduleSchema,
+  waitlistCreatedSchema,
+  waitlistDigestSchema,
   payerTelegramLinkCreatedSchema,
   centerKindChangedSchema,
   centerModuleChangedSchema,

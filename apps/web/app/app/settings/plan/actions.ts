@@ -153,5 +153,6 @@ export async function setBookingEnabled(enabled: boolean, _prev: PlanState): Pro
   if (error) return toAppError(error, t('bookingQueue', 'actionFailed'))
 
   revalidatePath('/app/settings/plan')
+  revalidatePath('/app/settings/booking')
   return { notice: enabled ? t('bookingQueue', 'publishOn') : t('bookingQueue', 'publishOff') }
 }

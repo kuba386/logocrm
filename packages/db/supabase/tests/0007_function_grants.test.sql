@@ -199,6 +199,12 @@ from unnest(array[
   'public.subscription_type_extra_services_guard()',
   'public.subscription_types_primary_guard()',
   'public.subscriptions_lock_type()',
+  -- 0109: онлайн-запись — генератор окон, читатель настроек, триггеры, дайджест.
+  'public.centers_validate_booking_settings()',
+  'public.booking_settings_unchecked(uuid)',
+  'public.booking_slots_unchecked(uuid,uuid,uuid,date,date)',
+  'public.waitlist_entries_transition()',
+  'public.waitlist_digest_at(timestamptz)',
   -- 0103: выбор абонемента отметки — одна копия для триггера и метки панели.
   'public.attendance_subscription_candidates_unchecked(uuid,uuid,uuid,date)',
   'public.attendance_pick_subscription_unchecked(uuid,uuid,uuid,date)'
@@ -541,6 +547,14 @@ select set_eq(
     -- 0107: отмена и возврат штрафа за пропуск.
     ('cancel_attendance_fee(uuid,text)'),
     ('restore_attendance_fee(uuid)'),
+    -- 0109: онлайн-запись и лист ожидания.
+    ('set_booking_settings(integer,integer)'),
+    ('set_teacher_booking(uuid,text,jsonb)'),
+    ('offer_waitlist_entry(uuid)'),
+    ('withdraw_waitlist_entry(uuid,text)'),
+    ('waitlist_entry_payer_match(uuid)'),
+    ('enroll_waitlist_entry(uuid,uuid)'),
+    ('decline_booking_phone(uuid,text)'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,
