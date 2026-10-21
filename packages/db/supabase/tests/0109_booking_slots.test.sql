@@ -155,8 +155,8 @@ create or replace function public.t0109_at(p_center uuid, p_days integer, p_time
 $$;
 
 create or replace function public.t0109_slots(p_slug text, p_service uuid, p_teacher uuid, p_from date, p_days integer)
-  returns setof timestamptz language sql stable as $$
-  select s.starts_at from public.booking_free_slots(p_slug, p_service, p_teacher, p_from, p_days) s;
+  returns table (s timestamptz) language sql stable as $$
+  select f.starts_at from public.booking_free_slots(p_slug, p_service, p_teacher, p_from, p_days) f;
 $$;
 
 
