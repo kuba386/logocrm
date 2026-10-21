@@ -10,17 +10,10 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { saveBookingSettings, saveTeacherBooking, type BookingSettingsState } from './actions'
+import { MODE_LABELS, type BookingMode, type WorkInterval } from './booking-modes'
 
 const initialState: BookingSettingsState = {}
 
-export type BookingMode = 'any' | 'hours' | 'closed'
-export type WorkInterval = { weekday: number; starts_at: string; ends_at: string }
-
-export const MODE_LABELS: Record<BookingMode, string> = {
-  any: 'Любое время',
-  hours: 'По рабочим часам',
-  closed: 'Запись закрыта',
-}
 
 const MODE_HINTS: Record<BookingMode, string> = {
   hours: 'Родитель выбирает из свободных окон в рабочие часы — занятия и чужие заявки уже вычтены.',

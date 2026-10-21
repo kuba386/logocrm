@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { localDayInZone, localTimeInZone, parseWeekdays } from '@logocrm/core'
+import { formatKgPhone, localDayInZone, localTimeInZone, parseWeekdays } from '@logocrm/core'
 import { createBookingClient } from '@/lib/supabase/booking'
 import { toAppError } from '@/lib/errors'
 import { t } from '@/lib/messages'
@@ -176,5 +176,5 @@ export async function submitWaitlist(_prev: WaitlistState, formData: FormData): 
     return { message: toAppError(error, t('booking', 'waitlistFailed')).message }
   }
 
-  return { notice: t('booking', 'waitlistSuccess', { phone: v.parentPhone }) }
+  return { notice: t('booking', 'waitlistSuccess', { phone: formatKgPhone(v.parentPhone) }) }
 }

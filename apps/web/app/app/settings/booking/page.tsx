@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CopyButton } from '@/components/ui/copy-button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { BookingToggleForm } from '../plan/booking-panel'
-import { BookingSettingsForm, MODE_LABELS, TeacherBookingDialog, type BookingMode, type WorkInterval } from './booking-forms'
+import { BookingSettingsForm, TeacherBookingDialog } from './booking-forms'
+import { MODE_LABELS, type BookingMode, type WorkInterval } from './booking-modes'
 
 export const metadata = { title: 'Онлайн-запись — LogoCRM' }
 
