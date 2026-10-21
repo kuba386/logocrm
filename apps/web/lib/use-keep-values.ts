@@ -59,6 +59,9 @@ export function restoreFormValues(form: HTMLFormElement, data: FormData) {
     if (element instanceof HTMLInputElement) {
       if (!element.name || element.disabled) continue
       if (['file', 'hidden', 'password', 'submit', 'button', 'reset'].includes(element.type)) continue
+      // Токен капчи одноразовый (TurnstileField): вернуть погашенный — значит
+      // отправить повтор с ним и получить отказ проверки.
+      if (element.name === 'captcha_token') continue
       if (element.type === 'checkbox' || element.type === 'radio') {
         element.checked = data.getAll(element.name).includes(element.value)
         continue

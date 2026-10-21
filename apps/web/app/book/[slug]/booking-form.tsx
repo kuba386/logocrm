@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
+import { TurnstileField } from '@/components/turnstile-field'
 import { calendarDay, timeInZone } from '@/lib/timezone'
 import { formatKgPhone, groupSlotsByDay, type SlotDay } from '@logocrm/core'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
@@ -294,6 +295,8 @@ export function BookingForm({
           <Label htmlFor="parentPhone">{t('booking', 'phoneLabel')}</Label>
           <Input id="parentPhone" name="parentPhone" type="tel" placeholder="0700 12 34 56" required />
         </div>
+
+        <TurnstileField />
 
         <FormError message={state.message} />
 

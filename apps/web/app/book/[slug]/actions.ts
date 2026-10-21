@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { formatKgPhone, localDayInZone, localTimeInZone, parseWeekdays } from '@logocrm/core'
 import { createBookingClient } from '@/lib/supabase/booking'
 import { toAppError } from '@/lib/errors'
+import { verifyTurnstile } from '@/lib/turnstile'
 import { t } from '@/lib/messages'
 import { zonedDateTimeToIso } from '@/lib/timezone'
 
@@ -69,6 +70,10 @@ export async function submitBooking(_prev: BookingState, formData: FormData): Pr
   }
 
   const { slug, serviceId, teacherId, childName, parentName, parentPhone } = base
+
+  if (!(await verifyTurnstile(formData.get('captcha_token')))) {
+    return { message: t('booking', 'captchaFailed') }
+  }
 
   const supabase = createBookingClient()
   const { error } = await supabase.rpc('submit_booking_request', {
@@ -154,6 +159,10 @@ export async function submitWaitlist(_prev: WaitlistState, formData: FormData): 
     weekdays = parseWeekdays(formData.getAll('weekdays').map(String))
   } catch {
     return { message: t('booking', 'waitlistFill') }
+  }
+
+  if (!(await verifyTurnstile(formData.get('captcha_token')))) {
+    return { message: t('booking', 'captchaFailed') }
   }
 
   const v = parsed.data
