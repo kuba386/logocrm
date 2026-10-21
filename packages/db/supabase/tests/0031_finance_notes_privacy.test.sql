@@ -47,7 +47,9 @@ select set_eq(
     ('installment_plans:tenant_finance_select'), ('installments:tenant_finance_select'),
     -- 0101: причины скидок — стойка читает (форма продажи), бухгалтер ведёт справочник.
     ('discount_reasons:tenant_registrar_select'),
-    ('discount_reasons:tenant_finance_select'), ('discount_reasons:tenant_finance_insert'), ('discount_reasons:tenant_finance_update')
+    ('discount_reasons:tenant_finance_select'), ('discount_reasons:tenant_finance_insert'), ('discount_reasons:tenant_finance_update'),
+    -- 0109: лист ожидания — стойка читает, пишут только RPC.
+    ('waitlist_entries:tenant_registrar_select')
   $$,
   'Политики новых ролей — ровно ожидаемый набор: у finance нет students/lessons/attendance/payers (0031), остальное как в 0028'
 );

@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { createBookingClient } from '@/lib/supabase/booking'
 import { t } from '@/lib/messages'
 import { isoDayInZone } from '@/lib/timezone'
-import { BookingForm } from './booking-form'
+import { BookingForm, type BookingService, type BookingTeacher } from './booking-form'
 
 export const metadata = { title: 'Запись на занятие — LogoCRM' }
 
@@ -12,9 +12,6 @@ export const metadata = { title: 'Запись на занятие — LogoCRM' 
 // (проявилось на проде: включили запись у центра, /book всё равно
 // показывал «недоступна», пока не отключили кэш этой страницы).
 export const dynamic = 'force-dynamic'
-
-type BookingService = { id: string; name: string; duration_min: number }
-type BookingTeacher = { id: string; full_name: string }
 
 export default async function BookPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -40,6 +37,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
   const teachers = (info.teachers ?? []) as BookingTeacher[]
   const timezone = info.timezone ?? 'Asia/Bishkek'
   const minDate = isoDayInZone(new Date(), timezone)
+  const horizonDays = info.horizon_days ?? 14
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
@@ -52,7 +50,14 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
           {services.length === 0 || teachers.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('booking', 'noServices')}</p>
           ) : (
-            <BookingForm slug={slug} services={services} teachers={teachers} minDate={minDate} timezone={timezone} />
+            <BookingForm
+              slug={slug}
+              services={services}
+              teachers={teachers}
+              minDate={minDate}
+              timezone={timezone}
+              horizonDays={horizonDays}
+            />
           )}
         </CardContent>
       </Card>

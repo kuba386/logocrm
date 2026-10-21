@@ -10,6 +10,7 @@ const ADMIN_SECTIONS: SettingsSection[] = [
   { href: '/app/settings/services', label: 'Услуги' },
   { href: '/app/settings/attendance-statuses', label: 'Статусы посещения' },
   { href: '/app/settings/makeups', label: 'Отработки' },
+  { href: '/app/settings/booking', label: 'Онлайн-запись' },
   { href: '/app/settings/subscription-types', label: 'Типы абонементов' },
   { href: '/app/settings/payment-sources', label: 'Способы оплаты' },
   { href: '/app/settings/expense-categories', label: 'Статьи расходов' },

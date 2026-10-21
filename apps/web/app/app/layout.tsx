@@ -60,7 +60,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // приходит из базы: registrar/finance режут политики 0028, не эти флаги.
   const isAdmin = role === 'owner' || role === 'admin'
 
-  const [{ data: center }, { count: centersCount }, { data: limitsJson }, profile] = await Promise.all([
+  const frontDeskRole = isFrontDesk(role)
+  const [{ data: center }, { count: centersCount }, { data: limitsJson }, profile, { count: newRequests }, { count: waiting }] = await Promise.all([
     supabase.from('centers').select('name, plan, settings').eq('id', centerId).maybeSingle(),
     // Только свои членства: владельцу по RLS видны и чужие строки его центра,
     // из-за чего счётчик показывал «Сменить центр» при единственном центре.
@@ -73,9 +74,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isAdmin ? supabase.rpc('center_limits') : Promise.resolve({ data: null }),
     // Тип центра и модули (0104) — слова интерфейса и видимость клиники.
     getCenterProfile(),
+    // Счётчик «Заявки» (0109): новые заявки и ждущие в листе ожидания.
+    frontDeskRole
+      ? supabase.from('booking_requests').select('id', { count: 'exact', head: true }).eq('status', 'new')
+      : Promise.resolve({ count: 0 }),
+    frontDeskRole
+      ? supabase.from('waitlist_entries').select('id', { count: 'exact', head: true }).eq('status', 'waiting')
+      : Promise.resolve({ count: 0 }),
   ])
   const limits = isAdmin ? parseCenterLimits(limitsJson) : null
-  const frontDesk = isFrontDesk(role)
+  const frontDesk = frontDeskRole
   const finance = isFinance(role)
   const payments = canPayments(role)
   // Поиск (0062): бухгалтеру не показывается — под RLS у роли нет строк
@@ -95,7 +103,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: '/app/schedule', label: 'Расписание', show: role !== 'finance' },
         { href: '/app/students', label: 'Ученики', show: true },
         { href: '/app/groups', label: 'Группы', show: isAdmin },
-        { href: '/app/bookings', label: 'Заявки', show: frontDesk },
+        { href: '/app/bookings', label: 'Заявки', show: frontDesk, count: (newRequests ?? 0) + (waiting ?? 0) },
         { href: '/app/library', label: 'Библиотека', show: role === 'teacher' || isAdmin },
       ],
     },

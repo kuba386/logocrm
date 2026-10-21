@@ -102,6 +102,10 @@ export function BookingQueueRow({ requestId }: { requestId: string }) {
             <Label htmlFor={reasonId}>{t('bookingQueue', 'declineReasonLabel')}</Label>
             <Textarea id={reasonId} name="reason" rows={2} />
           </div>
+          <label className="flex min-h-11 items-start gap-2 text-sm">
+            <input type="checkbox" name="allFromPhone" className="mt-1 size-4" />
+            {t('bookingQueue', 'declineAll')}
+          </label>
           <FormError message={declineState.message} />
           <SubmitButton variant="outline">{t('bookingQueue', 'declineButton')}</SubmitButton>
         </form>

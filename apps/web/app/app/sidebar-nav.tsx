@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ICONS } from './nav-icons'
 
-export type NavLink = { href: string; label: string }
+export type NavLink = { href: string; label: string; count?: number }
 export type NavGroup = { label?: string; links: NavLink[] }
 
 export function isActiveLink(pathname: string, href: string): boolean {
@@ -45,7 +45,13 @@ export function NavGroups({ groups, onNavigate }: { groups: NavGroup[]; onNaviga
               >
                 {Icon ? <Icon className="size-4 shrink-0" /> : null}
                 {link.label}
-                <LinkPending className="ml-auto" />
+                {link.count ? (
+                  <span className="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-xs tabular-nums text-primary-foreground">
+                    <span className="sr-only">новых: </span>
+                    {link.count}
+                  </span>
+                ) : null}
+                <LinkPending className={link.count ? 'ml-1' : 'ml-auto'} />
               </Link>
             )
           })}

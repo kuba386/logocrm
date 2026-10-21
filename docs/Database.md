@@ -668,8 +668,10 @@ n8n открывал бы карточки детей всех центров м
 ### Роль `public_booking`
 
 Та же схема, что у `bot_worker`, для публичной витрины записи `/book/[slug]`
-(0057): ни одного табличного гранта, только `execute` на три функции
-(`booking_center_info`, `booking_teacher_busy`, `submit_booking_request`).
+(0057): ни одного табличного гранта, только `execute` на функции витрины
+(`booking_center_info`, `booking_teacher_busy`, `submit_booking_request`; с
+0109 — `booking_free_slots`, `submit_waitlist_entry`). `statement_timeout`
+роли — 5 секунд (0109).
 Не `anon` — анонимный ключ Supabase лежит в браузерном бандле, а параметры
 RPC были бы под контролем атакующего (rate limit по count(*) не устоял бы);
 не `service_role` — тот же довод, что у `bot_worker`. JWT без `sub` заводит
@@ -2064,3 +2066,37 @@ error)` берёт ставку из `ai_model_rates()` (VALUES, тыйыны з
   pick (без блокировки; у безлимита 0 — штрафа нет, как при исправлении
   «Пришёл → штраф»), а без абонемента — цена услуги. Старые «Болел» до 0107
   несут цену услуги, пересчёта нет.
+
+## Онлайн-запись по окнам и лист ожидания (0109, этап 19)
+
+- **Режим специалиста** — `teachers.booking_mode` → `booking_modes` (`any` —
+  форма 0057, `hours` — свободные окна, `closed` — на витрине нет). Режим
+  явный: очистка часов не возвращает «любое время». Меняет только
+  `set_teacher_booking(teacher, mode, intervals jsonb)` (owner/admin; часы —
+  полная неделя, `null` — не трогать).
+- **Часы** — `teacher_work_hours` (isodow 1..7, время центра), EXCLUDE
+  пересечений по живым строкам. Видят стойка и сам специалист.
+- **Настройки витрины** — `settings.booking_horizon_days` (7..31, 14) и
+  `settings.booking_step_min` (15/30/60, 30). Пишет `set_booking_settings`,
+  допустимые значения держит триггер `centers_validate_booking_settings` и при
+  прямом PATCH; читает только `booking_settings_unchecked`.
+- **Одна копия правила окна** — `booking_slots_unchecked` (invoker, без
+  грантов, отказ при живой сессии): окно целиком в интервале, шаг от начала
+  интервала, длительность услуги, только individual, [now+30 мин; сегодня +
+  горизонт]; занятость — занятия в форме предиката EXCLUDE lessons и заявки
+  моложе 24 часов. Витрина (`booking_free_slots`), подача заявки в режиме
+  `hours` и дайджест зовут только его.
+- **Заявка** держит окно 24 часа. Живая заявка — одна на (центр, телефон,
+  ребёнок); повтор — тот же успешный ответ без строки. Замки подачи —
+  `pg_advisory_xact_lock(1090001, телефон:центр)`, затем `(1090002,
+  специалист)`; `set_teacher_booking` и `decline_booking_phone` берут те же.
+- **Лист ожидания** — `waitlist_entries`, статусы `waitlist_statuses`
+  (waiting → offered | withdrawn | enrolled, offered → withdrawn | enrolled;
+  конечные неизменны — триггер, кроме каскада `decided_by → null`). Пишут
+  только RPC, читает только стойка. Повтор живой записи — тот же ответ без
+  строки (иначе ответ раскрыл бы факт обращения). Запись в ученики —
+  `enroll_waitlist_entry(id, payer_id)`: захват `for update`, плательщик —
+  явный выбор стойки (`waitlist_entry_payer_match`).
+- **Уведомления стойке**: `waitlist.created`; дайджест `waitlist.digest`
+  (`waitlist_digest_at`, раз в день с 10 до 20 по часам центра,
+  `waitlist_digest_runs`) — в `notification_schedules()`.
