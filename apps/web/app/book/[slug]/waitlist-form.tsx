@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormError, FormNotice } from '@/components/ui/alert'
 import { t } from '@/lib/messages'
+import { TurnstileField } from '@/components/turnstile-field'
 import { useKeepValuesOnError } from '@/lib/use-keep-values'
 import { submitWaitlist, type WaitlistState } from './actions'
 import type { BookingService, BookingTeacher } from './booking-form'
@@ -139,6 +140,8 @@ export function WaitlistForm({
         <Textarea id="wl-comment" name="comment" maxLength={500} aria-describedby="wl-comment-hint" />
         <p id="wl-comment-hint" className="text-xs text-muted-foreground">{t('booking', 'commentHint')}</p>
       </div>
+
+      <TurnstileField />
 
       <FormError message={state.message} />
 
