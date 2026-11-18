@@ -6071,6 +6071,10 @@ export type Database = {
         Args: { p: Json; p_event_id: number }
         Returns: Json
       }
+      apply_status_pay_to_marks: {
+        Args: { p_dry_run?: boolean; p_from: string; p_status_id: string }
+        Returns: Json
+      }
       approve_lesson_note: { Args: { p_id: string }; Returns: undefined }
       approve_salary: {
         Args: { p_month: string; p_teacher_id: string }
