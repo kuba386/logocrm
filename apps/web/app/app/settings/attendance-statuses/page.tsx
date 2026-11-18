@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { CatalogAction } from '@/components/ui/catalog-action'
 import { cn } from '@/lib/utils'
+import { centerTimeZone, isoDayInZone } from '@/lib/timezone'
 import { ATTENDANCE_COLORS, attendanceStatusClasses } from '@/lib/attendance'
 import {
   saveAttendanceStatus,
@@ -17,6 +18,7 @@ import {
   restoreAttendanceStatus,
   setDefaultAttendanceStatus,
 } from './actions'
+import { PayToMarksForm } from './pay-to-marks-form'
 
 export const metadata = { title: 'Статусы посещения — LogoCRM' }
 
@@ -38,7 +40,7 @@ type StatusRow = {
 
 const FLAGS: { name: string; key: keyof StatusRow; label: string; hint: string }[] = [
   { name: 'deductsLesson', key: 'deducts_lesson', label: 'Списывает занятие', hint: 'с абонемента уходит одно занятие' },
-  { name: 'paysTeacher', key: 'pays_teacher', label: 'Оплачивается специалисту', hint: 'понадобится расчёту зарплат' },
+  { name: 'paysTeacher', key: 'pays_teacher', label: 'Оплачивается специалисту', hint: 'специалисту начисляется зарплата за такое занятие' },
   { name: 'countsAbsence', key: 'counts_absence', label: 'Считается пропуском', hint: 'два подряд — родителю уходит сообщение' },
   { name: 'notifyParent', key: 'notify_parent', label: 'Уведомлять родителя', hint: 'сообщение после отметки — текст в «Уведомлениях»' },
   {
@@ -131,10 +133,20 @@ export default async function AttendanceStatusesPage() {
   const { data: role } = await supabase.rpc('my_role')
   if (role !== 'owner' && role !== 'admin') redirect('/app')
 
-  const { data: statuses } = await supabase
-    .from('attendance_statuses')
-    .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, grants_makeup, fee_percent, is_default, sort, deleted_at')
-    .order('sort')
+  const [{ data: statuses }, { data: center }] = await Promise.all([
+    supabase
+      .from('attendance_statuses')
+      .select('id, code, name, color, deducts_lesson, pays_teacher, counts_absence, notify_parent, grants_makeup, fee_percent, is_default, sort, deleted_at')
+      .order('sort'),
+    supabase.from('centers').select('settings').maybeSingle(),
+  ])
+
+  // Пересчёт прошлых отметок — по умолчанию с первого числа прошлого месяца:
+  // зарплату за него ещё могут не утвердить, а дальше назад — уже вряд ли.
+  const today = isoDayInZone(new Date(), centerTimeZone(center?.settings))
+  const prevMonth = new Date(`${today.slice(0, 7)}-01T00:00:00Z`)
+  prevMonth.setUTCMonth(prevMonth.getUTCMonth() - 1)
+  const defaultFrom = prevMonth.toISOString().slice(0, 10)
 
   const allRows = (statuses ?? []) as StatusRow[]
   const rows = allRows.filter((s) => !s.deleted_at)
@@ -145,8 +157,9 @@ export default async function AttendanceStatusesPage() {
       <div>
         <h1 className="page-title">Статусы посещения</h1>
         <p className="text-sm text-muted-foreground">
-          Кнопки в панели отметки — отсюда. Галочки решают, что происходит с абонементом и уведомлениями;
-          уже поставленные отметки они не пересчитывают.
+          Кнопки в панели отметки — отсюда. Галочки решают, что происходит с абонементом, зарплатой и
+          уведомлениями; уже поставленные отметки они не пересчитывают. Оплату специалисту можно применить к
+          прошлым отметкам — в карточке статуса.
         </p>
       </div>
 
@@ -183,6 +196,7 @@ export default async function AttendanceStatusesPage() {
                     <input type="hidden" name="id" value={status.id} />
                     <StatusFields status={status} idSuffix={status.id} />
                   </CatalogForm>
+                  <PayToMarksForm statusId={status.id} defaultFrom={defaultFrom} paysTeacher={status.pays_teacher} />
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
                     {status.is_default ? (
                       <span />

@@ -555,6 +555,8 @@ select set_eq(
     ('waitlist_entry_payer_match(uuid)'),
     ('enroll_waitlist_entry(uuid,uuid)'),
     ('decline_booking_phone(uuid,text)'),
+    -- 0112: оплата специалисту по статусу — к прошлым отметкам.
+    ('apply_status_pay_to_marks(uuid,date,boolean)'),
     -- 0103: метка панели отметки с учётом услуги занятия.
     ('lesson_attendance_balances(uuid)')
   $$,
