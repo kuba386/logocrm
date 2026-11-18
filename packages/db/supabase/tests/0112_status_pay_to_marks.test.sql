@@ -53,6 +53,8 @@ insert into public.teacher_rates (center_id, teacher_id, service_id, model, valu
 create temporary table t0112 as
 select n, (date_trunc('month', now() at time zone 'Asia/Bishkek') - make_interval(months => n))::date as month
   from generate_series(1, 4) n;
+-- Читают и под set local role authenticated.
+grant select on t0112 to authenticated;
 
 -- Как в kadamlogo: «Пришёл» отмечали, пока галочка оплаты была снята.
 update public.attendance_statuses set pays_teacher = false
