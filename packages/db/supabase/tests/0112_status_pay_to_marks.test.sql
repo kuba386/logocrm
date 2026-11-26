@@ -91,8 +91,9 @@ begin
 end;
 $$;
 
+-- definer: id статуса нужен и под сессией чужого центра, где RLS его скрывает.
 create or replace function public.tests_status(p_code text)
-  returns uuid language sql as $$
+  returns uuid language sql security definer set search_path = '' as $$
   select s.id from public.attendance_statuses s
    where s.center_id = '01120000-0000-0000-0000-0000000000c1' and s.code = p_code and s.deleted_at is null;
 $$;
