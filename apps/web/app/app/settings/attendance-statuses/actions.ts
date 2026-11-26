@@ -123,3 +123,51 @@ export async function restoreAttendanceStatus(_prev: CatalogState, formData: For
   revalidatePath('/app/settings/attendance-statuses')
   return { message: '', notice: 'Статус восстановлен' }
 }
+
+// 0112: галочка «Оплачивается специалисту» действует на новые отметки;
+// прошлые переводит только явная команда — с даты, с предпросмотром.
+export type PayToMarksState = CatalogState & { preview?: boolean }
+
+type PayToMarksResult = {
+  updated: number
+  skipped_salary: number
+  skipped_paid: number
+  skipped_period: number
+  pays_teacher: boolean
+}
+
+export async function applyStatusPayToMarks(_prev: PayToMarksState, formData: FormData): Promise<PayToMarksState> {
+  const id = text(formData, 'id')
+  const from = text(formData, 'from')
+  const dryRun = formData.get('mode') !== 'apply'
+  if (!id) return { message: 'Статус не найден' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return { message: 'Укажите дату, с которой пересчитать отметки' }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('apply_status_pay_to_marks', {
+    p_status_id: id,
+    p_from: from,
+    p_dry_run: dryRun,
+  })
+  if (error) return toAppError(error, 'Не удалось пересчитать отметки')
+
+  const r = data as unknown as PayToMarksResult
+  const will = r.pays_teacher ? 'начнут оплачиваться специалисту' : 'перестанут оплачиваться специалисту'
+  const done = r.pays_teacher ? 'теперь оплачиваются специалисту' : 'больше не оплачиваются специалисту'
+  const skipped = [
+    r.skipped_salary > 0 ? `${r.skipped_salary} — зарплата за месяц уже утверждена` : '',
+    r.skipped_paid > 0 ? `${r.skipped_paid} — за месяц уже выплачивали зарплату` : '',
+    r.skipped_period > 0 ? `${r.skipped_period} — месяц закрыт` : '',
+  ].filter(Boolean)
+  const tail = skipped.length > 0 ? ` Не трогаем: ${skipped.join(', ')}.` : ''
+
+  if (dryRun) {
+    if (r.updated === 0) return { message: '', notice: `Менять нечего: отметки с этой даты уже совпадают со статусом.${tail}` }
+    return { message: '', preview: true, notice: `Отметок: ${r.updated} — ${will}.${tail}` }
+  }
+
+  revalidatePath('/app/settings/attendance-statuses')
+  revalidatePath('/app/salary')
+  revalidatePath('/app/my-salary')
+  return { message: '', notice: `Готово. Отметок: ${r.updated} — ${done}.${tail}` }
+}
